@@ -25,6 +25,13 @@ const navGroups: { title: string | null; items: NavItem[] }[] = [
       { to: '/vendor/sof', label: 'SOF', icon: '📑', end: false },
     ],
   },
+  {
+    title: 'Finance',
+    items: [
+      { to: '/pcm', label: 'PCM · Cost', icon: '🧮', end: false },
+      { to: '/purser', label: 'Purser · Pay', icon: '💸', end: false },
+    ],
+  },
   { title: 'Account', items: [{ to: '/subscription', label: 'Subscription', icon: '💳', end: false }] },
 ]
 
@@ -102,11 +109,11 @@ export default function Layout() {
             <span className="eco-dot starboard" /> Vendor Dock
             <em>supply</em>
           </div>
-          <div className="eco-item" title="Cost layer — separate product">
+          <div className="eco-item active">
             <span className="eco-dot neutral" /> PCM
             <em>cost</em>
           </div>
-          <div className="eco-item" title="Payment layer — separate product">
+          <div className="eco-item active">
             <span className="eco-dot amber" /> Purser
             <em>pay</em>
           </div>

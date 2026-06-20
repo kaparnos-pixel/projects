@@ -826,3 +826,10 @@ h3 {
 .module-live-green {
   color: var(--starboard-green);
 }
+
+.module-live-blue {
+  color: var(--sky-500);
+}
+.module-live-amber {
+  color: var(--amber-600);
+}

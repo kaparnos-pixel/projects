@@ -15,6 +15,8 @@ import Marketplace from './pages/vendor/Marketplace'
 import Offers from './pages/vendor/Offers'
 import DATracking from './pages/vendor/DATracking'
 import SOF from './pages/vendor/SOF'
+import PCM from './pages/finance/PCM'
+import Purser from './pages/finance/Purser'
 
 export default function App() {
   return (
@@ -39,6 +41,8 @@ export default function App() {
         <Route path="vendor/offers" element={<Offers />} />
         <Route path="vendor/da" element={<DATracking />} />
         <Route path="vendor/sof" element={<SOF />} />
+        <Route path="pcm" element={<PCM />} />
+        <Route path="purser" element={<Purser />} />
         <Route path="subscription" element={<Subscription />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

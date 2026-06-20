@@ -215,7 +215,11 @@ export default function Subscription() {
         </Card>
       </div>
 
-      <p className="audit-foot">* Annual billing applies a 15% discount versus the monthly rate.</p>
+      <p className="audit-foot">
+        * Annual billing applies a 15% discount. Agent Hub is priced per managed port call; PCM, Vendor
+        Dock and Purser are billed separately, and Purser additionally carries a take-rate on settled
+        payment volume.
+      </p>
     </div>
   )
 }

@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Badge, Card, PageHeader, Stars } from '../components/ui'
 import { agents } from '../data/mock'
+import type { AgentType } from '../data/types'
 
 const allServices = Array.from(new Set(agents.flatMap((a) => a.services))).sort()
+const typeOptions: (AgentType | 'All types')[] = ['All types', 'Port Agent', 'Husbandry Provider']
 
 export default function Discovery() {
   const [query, setQuery] = useState('')
+  const [type, setType] = useState<AgentType | 'All types'>('All types')
   const [service, setService] = useState('All services')
   const [verifiedOnly, setVerifiedOnly] = useState(false)
   const [shortlist, setShortlist] = useState<string[]>([])
@@ -19,11 +22,12 @@ export default function Discovery() {
         a.company.toLowerCase().includes(q) ||
         a.port.toLowerCase().includes(q) ||
         a.country.toLowerCase().includes(q)
+      const matchesType = type === 'All types' || a.type === type
       const matchesService = service === 'All services' || a.services.includes(service)
       const matchesVerified = !verifiedOnly || a.verified
-      return matchesQuery && matchesService && matchesVerified
+      return matchesQuery && matchesType && matchesService && matchesVerified
     })
-  }, [query, service, verifiedOnly])
+  }, [query, type, service, verifiedOnly])
 
   function toggleShortlist(id: string) {
     setShortlist((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
@@ -46,6 +50,11 @@ export default function Discovery() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+        <select value={type} onChange={(e) => setType(e.target.value as AgentType | 'All types')}>
+          {typeOptions.map((t) => (
+            <option key={t}>{t}</option>
+          ))}
+        </select>
         <select value={service} onChange={(e) => setService(e.target.value)}>
           <option>All services</option>
           {allServices.map((s) => (
@@ -73,6 +82,9 @@ export default function Discovery() {
                 <strong>{a.company}</strong>
                 <span>
                   {a.name} · {a.port}, {a.country}
+                </span>
+                <span className={`agent-type type-${a.type === 'Port Agent' ? 'port' : 'husbandry'}`}>
+                  {a.type}
                 </span>
               </div>
               <Badge label={a.status} />

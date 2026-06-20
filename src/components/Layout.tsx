@@ -45,6 +45,7 @@ export default function Layout() {
             <strong>BEACON</strong>
             <span>Agent Hub</span>
           </div>
+          <span className="portside-dot" title="Port-side product" aria-hidden />
         </div>
 
         <nav className="nav">
@@ -62,6 +63,26 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+
+        <div className="ecosystem">
+          <span className="ecosystem-title">BEACON ecosystem</span>
+          <div className="eco-item active">
+            <span className="eco-dot port" /> Agent Hub
+            <em>appointment</em>
+          </div>
+          <div className="eco-item" title="Supply side — separate product">
+            <span className="eco-dot starboard" /> Vendor Dock
+            <em>supply</em>
+          </div>
+          <div className="eco-item" title="Cost layer — separate product">
+            <span className="eco-dot neutral" /> PCM
+            <em>cost</em>
+          </div>
+          <div className="eco-item" title="Payment layer — separate product">
+            <span className="eco-dot amber" /> Purser
+            <em>pay</em>
+          </div>
+        </div>
 
         <div className="sidebar-foot">
           <div className="layer-chip">Appointment layer</div>

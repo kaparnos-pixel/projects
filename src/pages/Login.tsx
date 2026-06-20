@@ -37,7 +37,7 @@ export default function Login() {
         </div>
 
         <h1 className="login-title">Sign in</h1>
-        <p className="login-sub">Appointment layer · agent discovery, onboarding & secure comms.</p>
+        <p className="login-sub">Agent Hub — the appointment side of the operating system for global port calls.</p>
 
         <form onSubmit={submit} className="login-form">
           <label>

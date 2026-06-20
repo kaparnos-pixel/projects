@@ -15,7 +15,7 @@ export default function Dashboard() {
     <div className="stack">
       <PageHeader
         title="Agent Hub overview"
-        subtitle="Appointment layer · agent discovery, onboarding, secure chat, contract negotiation & storage, port-call coordination and auditable comms."
+        subtitle="The appointment side of the operating system for global port calls — discover, onboard, negotiate with and manage UAE port agents & husbandry providers, on one auditable record."
       />
 
       <section>

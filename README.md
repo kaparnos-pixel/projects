@@ -1,10 +1,17 @@
 # BEACON · Agent Hub
 
+*The appointment side of the operating system for global port calls.*
+
 The **Agent Hub** portal is the *Appointment* layer of the BEACON maritime
-ecosystem. It gives operators, charterers, fleet managers and port-ops teams a
-single place to discover agents, onboard them compliantly, communicate
-securely, negotiate and store contracts, coordinate port calls, and keep an
-auditable record of every interaction.
+ecosystem — the **port-side (red)** product, alongside Vendor Dock (starboard),
+PCM and Purser. It gives operators, charterers, fleet managers and port-ops
+teams a single place to discover and appoint **port agents and husbandry
+providers**, onboard them compliantly (KYC + sanctions screening), communicate
+securely, negotiate and store **compliance pre-audited** contracts, coordinate
+port calls, and keep an auditable record of every interaction.
+
+The demo is seeded around BEACON's **UAE launch beachhead** — Fujairah, Jebel
+Ali, Khorfakkan, Hamriyah, Port Khalid (Sharjah) and Khalifa Port (Abu Dhabi).
 
 ## The flow
 

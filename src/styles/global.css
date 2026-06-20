@@ -6,6 +6,9 @@
   --sky-100: #e6f2fb;
   --amber-500: #f5b301;
   --amber-600: #d99a00;
+  --port-red: #c8102e;
+  --port-red-bg: #fceaed;
+  --starboard-green: #1f9d6b;
   --slate-50: #f5f8fb;
   --slate-100: #eef3f8;
   --slate-200: #dde6ef;
@@ -94,6 +97,67 @@ button {
   letter-spacing: 1.5px;
   text-transform: uppercase;
 }
+.portside-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--port-red);
+  box-shadow: 0 0 0 3px rgba(200, 16, 46, 0.25);
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+/* BEACON ecosystem block */
+.ecosystem {
+  margin-top: auto;
+  padding: 0 8px;
+}
+.ecosystem-title {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #7f99ad;
+  margin-bottom: 8px;
+}
+.eco-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #8fa9bd;
+  padding: 5px 0;
+}
+.eco-item.active {
+  color: #fff;
+  font-weight: 600;
+}
+.eco-item em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6f889c;
+}
+.eco-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.eco-dot.port {
+  background: var(--port-red);
+}
+.eco-dot.starboard {
+  background: var(--starboard-green);
+}
+.eco-dot.neutral {
+  background: var(--sky-500);
+}
+.eco-dot.amber {
+  background: var(--amber-500);
+}
 
 .nav {
   display: flex;
@@ -118,18 +182,19 @@ button {
 .nav-link.active {
   background: var(--sky-500);
   color: #fff;
-  box-shadow: inset 3px 0 0 var(--amber-500);
+  box-shadow: inset 3px 0 0 var(--port-red);
 }
 .nav-icon {
   font-size: 16px;
 }
 
 .sidebar-foot {
-  margin-top: auto;
+  margin-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 14px 8px 0;
   font-size: 11px;
   color: #8fa9bd;
   line-height: 1.5;
-  padding: 0 8px;
 }
 .layer-chip {
   display: inline-block;
@@ -615,6 +680,24 @@ button {
   font-size: 12px;
   color: var(--muted);
 }
+.agent-type {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 10.5px !important;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.type-port {
+  background: var(--port-red-bg);
+  color: var(--port-red);
+}
+.type-husbandry {
+  background: #eaf4ef;
+  color: var(--starboard-green);
+}
 .agent-about {
   margin: 0;
   font-size: 13px;
@@ -970,6 +1053,26 @@ button {
 .cd-head h2 {
   font-size: 18px;
 }
+.compliance-flag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 10px 13px;
+  border-radius: 9px;
+  margin-bottom: 18px;
+  line-height: 1.4;
+}
+.compliance-flag.is-audited {
+  background: var(--good-bg);
+  color: #16744f;
+}
+.compliance-flag.not-audited {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
 .cd-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

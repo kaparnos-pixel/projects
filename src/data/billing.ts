@@ -1,15 +1,18 @@
 import type { Invoice, PaymentMethod, Plan, Subscription, UsageMetric } from './types'
 
+// Tiered SaaS access to Agent Hub, priced per managed port call. PCM, Purser
+// and Vendor Dock are billed separately; Purser additionally carries a
+// take-rate on settled payment volume.
 export const plans: Plan[] = [
   {
     tier: 'starter',
     name: 'Starter',
     priceMonthly: 0,
-    blurb: 'For single operators trialling agent appointment.',
+    blurb: 'For single operators trialling agent appointment in the UAE.',
     highlights: [
-      'Up to 5 verified agents',
-      '25 port calls / month',
-      'Secure chat & audit trail',
+      'Up to 5 appointed agents',
+      '25 managed port calls / month',
+      'Secure chat & auditable record',
       'Community support',
     ],
     limits: { agents: 5, portCallsPerMonth: 25, seats: 2 },
@@ -18,11 +21,11 @@ export const plans: Plan[] = [
     tier: 'pro',
     name: 'Pro',
     priceMonthly: 499,
-    blurb: 'For fleets coordinating multiple ports at scale.',
+    blurb: 'For fleets coordinating agents & husbandry across multiple ports.',
     highlights: [
-      'Up to 50 verified agents',
-      '500 port calls / month',
-      'Contract negotiation & ledger storage',
+      'Up to 50 appointed agents & husbandry providers',
+      '500 managed port calls / month',
+      'Pre-audited contract templates & ledger storage',
       'Priority support · 99.9% SLA',
     ],
     limits: { agents: 50, portCallsPerMonth: 500, seats: 15 },
@@ -31,12 +34,12 @@ export const plans: Plan[] = [
     tier: 'enterprise',
     name: 'Enterprise',
     priceMonthly: null,
-    blurb: 'For global operators needing unlimited scale & compliance.',
+    blurb: 'For global operators with heavy compliance & cross-border exposure.',
     highlights: [
-      'Unlimited agents & port calls',
-      'SSO / SAML & custom roles',
-      'Dedicated success manager',
-      'Custom data residency & DPA',
+      'Unlimited agents & managed port calls',
+      'Premium compliance & enhanced due-diligence tier',
+      'SSO / SAML, custom roles & data residency',
+      'Dedicated success manager & DPA',
     ],
     limits: { agents: null, portCallsPerMonth: null, seats: null },
   },

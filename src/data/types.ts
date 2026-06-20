@@ -8,10 +8,13 @@ export type UserRole =
 
 export type AgentStatus = 'verified' | 'onboarding' | 'invited'
 
+export type AgentType = 'Port Agent' | 'Husbandry Provider'
+
 export interface Agent {
   id: string
   name: string
   company: string
+  type: AgentType
   port: string
   country: string
   countryCode: string
@@ -78,6 +81,7 @@ export interface Contract {
   value: string
   status: ContractStatus
   updated: string
+  complianceAudited: boolean
   revisions: ContractRevision[]
 }
 

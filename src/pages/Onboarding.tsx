@@ -40,8 +40,8 @@ export default function Onboarding() {
       <Card>
         <div className="onb-head">
           <div>
-            <strong>Lagos Marine Logistics</strong>
-            <span className="muted-text"> · Lagos, Nigeria · applied 2026-06-14</span>
+            <strong>Hamriyah Port Partners</strong>
+            <span className="muted-text"> · Hamriyah, Sharjah (UAE) · applied 2026-06-14</span>
           </div>
           <div className="progress">
             <div className="progress-bar" style={{ width: `${progress}%` }} />

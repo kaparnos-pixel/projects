@@ -48,6 +48,12 @@ export default function Contracts() {
             <Badge label={active.status} />
           </div>
 
+          <div className={`compliance-flag ${active.complianceAudited ? 'is-audited' : 'not-audited'}`}>
+            {active.complianceAudited
+              ? '🛡️ Compliance pre-audited — drafted from a BEACON template vetted for financial-regulation compliance.'
+              : '⚠️ Not yet compliance pre-audited — submit for review before issuing to the agent.'}
+          </div>
+
           <div className="cd-grid">
             <div>
               <span className="cd-label">Contract value</span>

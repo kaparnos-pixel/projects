@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
 import { flowStages } from '../data/workflow'
 
 const navItems = [
@@ -26,6 +27,14 @@ function stageNav(key: string): string {
 }
 
 export default function Layout() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  function handleLogout() {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -70,12 +79,15 @@ export default function Layout() {
               🔔
             </button>
             <div className="user-pill">
-              <div className="avatar">OP</div>
+              <div className="avatar">{user?.initials ?? 'OP'}</div>
               <div className="user-meta">
-                <strong>Ops Desk</strong>
-                <span>Operator</span>
+                <strong>{user?.name ?? 'Ops Desk'}</strong>
+                <span>{user?.role ?? 'Operator'}</span>
               </div>
             </div>
+            <button className="ghost-btn logout-btn" type="button" onClick={handleLogout} title="Sign out">
+              ⎋
+            </button>
           </div>
         </header>
 

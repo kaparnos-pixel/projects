@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import RequireAuth from './auth/RequireAuth'
 import Layout from './components/Layout'
+import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Discovery from './pages/Discovery'
 import Onboarding from './pages/Onboarding'
@@ -11,7 +13,14 @@ import Audit from './pages/Audit'
 export default function App() {
   return (
     <Routes>
-      <Route element={<Layout />}>
+      <Route path="/login" element={<Login />} />
+      <Route
+        element={
+          <RequireAuth>
+            <Layout />
+          </RequireAuth>
+        }
+      >
         <Route index element={<Dashboard />} />
         <Route path="discovery" element={<Discovery />} />
         <Route path="onboarding" element={<Onboarding />} />

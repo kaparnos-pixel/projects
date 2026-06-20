@@ -1,27 +1,46 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { demoUsers, useAuth } from '../auth/AuthContext'
+import { useAuth } from '../auth/AuthContext'
+import { plans } from '../data/billing'
+import type { PlanTier } from '../data/types'
+
+type Mode = 'signup' | 'signin'
+
+const accessSummary: Record<PlanTier, string> = {
+  starter: 'Agent Hub',
+  pro: 'Agent Hub + Vendor Dock',
+  enterprise: 'Everything, incl. PCM & Purser',
+}
+
+function priceLabel(price: number | null): string {
+  if (price === null) return 'Custom'
+  if (price === 0) return 'Free'
+  return `$${price}/mo`
+}
 
 export default function Login() {
-  const { login } = useAuth()
+  const { login, register } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
+  const [mode, setMode] = useState<Mode>('signup')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [tier, setTier] = useState<PlanTier>('starter')
   const [error, setError] = useState('')
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
-    const result = login(email, password)
+    const result =
+      mode === 'signup' ? register({ name, email, password, tier }) : login(email, password)
     if (result.ok) navigate(from, { replace: true })
     else setError(result.error)
   }
 
-  function quickFill(userEmail: string) {
-    setEmail(userEmail)
-    setPassword('demo1234')
+  function switchMode(next: Mode) {
+    setMode(next)
     setError('')
   }
 
@@ -36,15 +55,31 @@ export default function Login() {
           </div>
         </div>
 
-        <h1 className="login-title">Sign in</h1>
-        <p className="login-sub">Agent Hub. The appointment side of how the world runs a port call.</p>
+        <h1 className="login-title">{mode === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
+        <p className="login-sub">
+          {mode === 'signup'
+            ? 'Pick a plan to get started. It sets which modules you can open.'
+            : 'Sign in to your BEACON workspace.'}
+        </p>
 
         <form onSubmit={submit} className="login-form">
+          {mode === 'signup' && (
+            <label>
+              Full name
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Jane Mariner"
+                autoComplete="name"
+                required
+              />
+            </label>
+          )}
           <label>
             Email
             <input
               type="email"
-              autoComplete="username"
+              autoComplete={mode === 'signup' ? 'email' : 'username'}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@company.com"
@@ -55,37 +90,67 @@ export default function Login() {
             Password
             <input
               type="password"
-              autoComplete="current-password"
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
               required
             />
           </label>
 
+          {mode === 'signup' && (
+            <fieldset className="plan-pick">
+              <legend>Choose your plan</legend>
+              {plans.map((p) => (
+                <button
+                  type="button"
+                  key={p.tier}
+                  className={`plan-pick-row${tier === p.tier ? ' selected' : ''}`}
+                  onClick={() => setTier(p.tier)}
+                  aria-pressed={tier === p.tier}
+                >
+                  <span className="ppr-radio" aria-hidden />
+                  <span className="ppr-main">
+                    <span className="ppr-top">
+                      <strong>{p.name}</strong>
+                      {p.tier === 'pro' && <span className="ppr-pop">Popular</span>}
+                    </span>
+                    <span className="ppr-access">{accessSummary[p.tier]}</span>
+                  </span>
+                  <span className="ppr-price">{priceLabel(p.priceMonthly)}</span>
+                </button>
+              ))}
+            </fieldset>
+          )}
+
           {error && <div className="login-error">{error}</div>}
 
           <button type="submit" className="btn btn-primary login-submit">
-            Sign in
+            {mode === 'signup' ? 'Create account' : 'Sign in'}
           </button>
         </form>
 
-        <div className="login-demo">
-          <span className="login-demo-label">Demo accounts. Click one to fill it in (password: demo1234)</span>
-          <div className="login-demo-grid">
-            {demoUsers.map((u) => (
-              <button key={u.email} type="button" className="login-demo-btn" onClick={() => quickFill(u.email)}>
-                <span className="login-demo-row">
-                  <strong>{u.role}</strong>
-                  <span className={`tier-badge tier-${u.tier}`}>{u.tier}</span>
-                </span>
-                <span>{u.email}</span>
+        <p className="login-switch">
+          {mode === 'signup' ? (
+            <>
+              Already have an account?{' '}
+              <button type="button" className="link-btn" onClick={() => switchMode('signin')}>
+                Sign in
               </button>
-            ))}
-          </div>
-        </div>
+            </>
+          ) : (
+            <>
+              New to BEACON?{' '}
+              <button type="button" className="link-btn" onClick={() => switchMode('signup')}>
+                Create an account
+              </button>
+            </>
+          )}
+        </p>
       </div>
-      <p className="login-foot">This is mock sign-in for the demo. There's no real backend behind it.</p>
+      <p className="login-foot">
+        This is a local demo. Accounts are stored in your browser only, with no real backend.
+      </p>
     </div>
   )
 }

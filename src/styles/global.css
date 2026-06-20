@@ -2518,3 +2518,110 @@ button {
   font-size: 9px;
   padding: 2px 7px;
 }
+
+/* =================== Login: plan picker & mode switch =================== */
+.plan-pick {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plan-pick legend {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--slate-700);
+  margin-bottom: 6px;
+  padding: 0;
+}
+.plan-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  border-radius: 11px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.plan-pick-row:hover {
+  border-color: var(--sky-500);
+}
+.plan-pick-row.selected {
+  border-color: var(--navy-800);
+  box-shadow: inset 0 0 0 1px var(--navy-800);
+  background: var(--slate-50);
+}
+.ppr-radio {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--slate-300);
+  flex-shrink: 0;
+  position: relative;
+}
+.plan-pick-row.selected .ppr-radio {
+  border-color: var(--navy-800);
+}
+.plan-pick-row.selected .ppr-radio::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--navy-800);
+}
+.ppr-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ppr-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ppr-top strong {
+  font-size: 14px;
+}
+.ppr-pop {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--navy-800);
+  background: var(--sky-100);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.ppr-access {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ppr-price {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy-900);
+  white-space: nowrap;
+}
+.login-switch {
+  text-align: center;
+  font-size: 13px;
+  color: var(--slate-500);
+  margin: 18px 0 0;
+}
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sky-500);
+  cursor: pointer;
+}
+.link-btn:hover {
+  text-decoration: underline;
+}

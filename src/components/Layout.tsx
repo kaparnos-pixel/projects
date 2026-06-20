@@ -27,6 +27,9 @@ function stageNav(key: string): string {
   }
 }
 
+// Marketing site lives one level up from the app's base (/projects/app/ → /projects/).
+const siteHome = import.meta.env.BASE_URL.replace(/app\/$/, '')
+
 export default function Layout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -97,6 +100,9 @@ export default function Layout() {
             <input placeholder="Search agents, vessels, ports, contracts…" />
           </div>
           <div className="topbar-right">
+            <a className="site-link" href={siteHome} title="Back to beacon site">
+              ↗ BEACON site
+            </a>
             <button className="ghost-btn" type="button">
               🔔
             </button>

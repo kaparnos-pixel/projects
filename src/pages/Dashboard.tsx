@@ -15,7 +15,7 @@ export default function Dashboard() {
     <div className="stack">
       <PageHeader
         title="Agent Hub overview"
-        subtitle="The appointment side of the operating system for global port calls — discover, onboard, negotiate with and manage UAE port agents & husbandry providers, on one auditable record."
+        subtitle="The appointment side of how you run a port call. Discover, onboard and manage your UAE port agents and husbandry providers, with every conversation and contract kept on one record you can actually audit."
       />
 
       <section>

@@ -37,7 +37,7 @@ export default function Login() {
         </div>
 
         <h1 className="login-title">Sign in</h1>
-        <p className="login-sub">Agent Hub — the appointment side of the operating system for global port calls.</p>
+        <p className="login-sub">Agent Hub. The appointment side of how the world runs a port call.</p>
 
         <form onSubmit={submit} className="login-form">
           <label>
@@ -71,7 +71,7 @@ export default function Login() {
         </form>
 
         <div className="login-demo">
-          <span className="login-demo-label">Demo accounts — click to fill (password: demo1234)</span>
+          <span className="login-demo-label">Demo accounts. Click one to fill it in (password: demo1234)</span>
           <div className="login-demo-grid">
             {demoUsers.map((u) => (
               <button key={u.email} type="button" className="login-demo-btn" onClick={() => quickFill(u.email)}>
@@ -82,7 +82,7 @@ export default function Login() {
           </div>
         </div>
       </div>
-      <p className="login-foot">Mock authentication for demo purposes only — no real backend.</p>
+      <p className="login-foot">This is mock sign-in for the demo. There's no real backend behind it.</p>
     </div>
   )
 }

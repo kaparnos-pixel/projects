@@ -33,7 +33,7 @@ export default function Onboarding() {
     <div className="stack">
       <PageHeader
         title="Agent onboarding"
-        subtitle="Compliant intake — KYC, sanctions screening and capability profiling before an agent goes live."
+        subtitle="A compliant way to bring an agent on board. KYC, sanctions screening and a capability profile, all before they go live."
         action={<span className="pill-count">{progress}% complete</span>}
       />
 
@@ -70,7 +70,7 @@ export default function Onboarding() {
 
         {progress === 100 && (
           <div className="banner banner-good">
-            🎉 Onboarding complete — agent published to the discovery directory.
+            🎉 All done. The agent is now published to the discovery directory.
           </div>
         )}
       </Card>

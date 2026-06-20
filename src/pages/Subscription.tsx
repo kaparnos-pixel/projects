@@ -155,8 +155,8 @@ export default function Subscription() {
         </div>
         {activeTier !== currentSubscription.tier && (
           <div className="banner banner-good plan-change-note">
-            Plan change to <strong>{currentPlan.name}</strong> staged — it would take effect on your next
-            renewal ({currentSubscription.renewsOn}). (Demo only — no charge is made.)
+            Plan change to <strong>{currentPlan.name}</strong> is staged. It would take effect at your next
+            renewal ({currentSubscription.renewsOn}). This is a demo, so nothing is charged.
           </div>
         )}
       </section>

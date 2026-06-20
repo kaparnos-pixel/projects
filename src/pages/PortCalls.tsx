@@ -50,7 +50,7 @@ export default function PortCalls() {
                   </div>
                 </Card>
               ))}
-              {byStage(s.key).length === 0 && <div className="board-empty">—</div>}
+              {byStage(s.key).length === 0 && <div className="board-empty">-</div>}
             </div>
           </div>
         ))}

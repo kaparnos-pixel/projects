@@ -7,8 +7,8 @@ import type {
   PortCall,
 } from './types'
 
-// Launch market is the UAE beachhead — Fujairah, Jebel Ali and the northern
-// Emirates / East Coast — covering both port agents and husbandry providers.
+// Launch market is the UAE beachhead, Fujairah, Jebel Ali and the northern
+// Emirates / East Coast, covering both port agents and husbandry providers.
 export const agents: Agent[] = [
   {
     id: 'ag-001',
@@ -158,7 +158,7 @@ export const conversations: Conversation[] = [
     id: 'cv-1',
     agentId: 'ag-001',
     agentName: 'Layla Haddad',
-    subject: 'MT Arabian Falcon — Jebel Ali call',
+    subject: 'MT Arabian Falcon, Jebel Ali call',
     vessel: 'MT Arabian Falcon',
     unread: 2,
     lastActivity: '4m ago',
@@ -192,7 +192,7 @@ export const conversations: Conversation[] = [
     id: 'cv-2',
     agentId: 'ag-002',
     agentName: 'Omar Al Balushi',
-    subject: 'MT Gulf Pioneer — Fujairah bunkers & survey',
+    subject: 'MT Gulf Pioneer, Fujairah bunkers & survey',
     vessel: 'MT Gulf Pioneer',
     unread: 0,
     lastActivity: '1h ago',
@@ -210,7 +210,7 @@ export const conversations: Conversation[] = [
         id: 'm2',
         author: 'Omar Al Balushi',
         role: 'Agent',
-        body: 'Barge availability is good — ~6h wait at Fujairah OPL. I will fix the slot on laycan confirmation.',
+        body: 'Barge availability is good, ~6h wait at Fujairah OPL. I will fix the slot on laycan confirmation.',
         time: '08:31',
       },
     ],
@@ -219,7 +219,7 @@ export const conversations: Conversation[] = [
     id: 'cv-3',
     agentId: 'ag-003',
     agentName: 'Rashid Al Naqbi',
-    subject: 'MV Desert Star — Khorfakkan crew change',
+    subject: 'MV Desert Star, Khorfakkan crew change',
     vessel: 'MV Desert Star',
     unread: 1,
     lastActivity: 'Yesterday',
@@ -239,7 +239,7 @@ export const conversations: Conversation[] = [
 export const contracts: Contract[] = [
   {
     id: 'ct-1001',
-    title: 'Port Agency Appointment — Jebel Ali',
+    title: 'Port Agency Appointment, Jebel Ali',
     agentName: 'Gulf Maritime Agencies LLC',
     vessel: 'MT Arabian Falcon',
     port: 'Jebel Ali',
@@ -255,7 +255,7 @@ export const contracts: Contract[] = [
   },
   {
     id: 'ct-1002',
-    title: 'Husbandry Services Agreement — Khorfakkan',
+    title: 'Husbandry Services Agreement, Khorfakkan',
     agentName: 'Khorfakkan Marine Husbandry',
     vessel: 'MV Desert Star',
     port: 'Khorfakkan',
@@ -270,7 +270,7 @@ export const contracts: Contract[] = [
   },
   {
     id: 'ct-1003',
-    title: 'Container Call Agency — Khalifa Port',
+    title: 'Container Call Agency, Khalifa Port',
     agentName: 'Khalifa Port Agency Group',
     vessel: 'MV Emirates Trader',
     port: 'Khalifa Port',
@@ -286,7 +286,7 @@ export const contracts: Contract[] = [
   },
   {
     id: 'ct-1004',
-    title: 'Bunker Call Coordination — Fujairah',
+    title: 'Bunker Call Coordination, Fujairah',
     agentName: 'Fujairah Anchorage Services',
     vessel: 'MT Gulf Pioneer',
     port: 'Fujairah',
@@ -295,7 +295,7 @@ export const contracts: Contract[] = [
     updated: '2026-06-20',
     complianceAudited: false,
     revisions: [
-      { version: 'v0.9', author: 'Fleet Manager', date: '2026-06-20', note: 'Working draft — pending compliance pre-audit.' },
+      { version: 'v0.9', author: 'Fleet Manager', date: '2026-06-20', note: 'Working draft, pending compliance pre-audit.' },
     ],
   },
 ]
@@ -311,7 +311,7 @@ export const portCalls: PortCall[] = [
     eta: '2026-06-22 06:00',
     etd: '2026-06-23 20:00',
     stage: 'pre-arrival',
-    cargo: 'Crude oil — 78,000 MT',
+    cargo: 'Crude oil, 78,000 MT',
   },
   {
     id: 'pc-2',
@@ -323,7 +323,7 @@ export const portCalls: PortCall[] = [
     eta: '2026-06-21 14:30',
     etd: '2026-06-22 09:00',
     stage: 'operations',
-    cargo: 'Containers — 4,200 TEU',
+    cargo: 'Containers, 4,200 TEU',
   },
   {
     id: 'pc-3',
@@ -335,7 +335,7 @@ export const portCalls: PortCall[] = [
     eta: '2026-06-20 22:00',
     etd: '2026-06-21 18:00',
     stage: 'alongside',
-    cargo: 'Containers — 1,100 TEU',
+    cargo: 'Containers, 1,100 TEU',
   },
   {
     id: 'pc-4',
@@ -347,7 +347,7 @@ export const portCalls: PortCall[] = [
     eta: '2026-06-25 08:00',
     etd: '2026-06-25 23:00',
     stage: 'nominated',
-    cargo: 'Bunkers-only call — 1,400 MT VLSFO',
+    cargo: 'Bunkers-only call, 1,400 MT VLSFO',
   },
   {
     id: 'pc-5',
@@ -359,7 +359,7 @@ export const portCalls: PortCall[] = [
     eta: '2026-06-18 11:00',
     etd: '2026-06-19 15:00',
     stage: 'departed',
-    cargo: 'Project cargo — 6,200 FRT',
+    cargo: 'Project cargo, 6,200 FRT',
   },
 ]
 
@@ -371,7 +371,7 @@ export const auditEntries: AuditEntry[] = [
     role: 'Port-Ops',
     category: 'chat',
     action: 'Secure message sent',
-    detail: 'MT Arabian Falcon thread — requested crew list (E2E encrypted).',
+    detail: 'MT Arabian Falcon thread, requested crew list (E2E encrypted).',
     hash: '0x8f3a…b21c',
   },
   {
@@ -381,7 +381,7 @@ export const auditEntries: AuditEntry[] = [
     role: 'Operator',
     category: 'contract',
     action: 'Contract sent for signature',
-    detail: 'CT-1001 v1.2 — Port Agency Appointment, Jebel Ali (compliance pre-audited).',
+    detail: 'CT-1001 v1.2, Port Agency Appointment, Jebel Ali (compliance pre-audited).',
     hash: '0x1d7e…9a04',
   },
   {
@@ -391,7 +391,7 @@ export const auditEntries: AuditEntry[] = [
     role: 'Fleet Manager',
     category: 'onboarding',
     action: 'Sanctions screening passed',
-    detail: 'Hamriyah Port Partners — OFAC/EU/UN clear, step 3 unlocked.',
+    detail: 'Hamriyah Port Partners, OFAC/EU/UN clear, step 3 unlocked.',
     hash: '0xc4b9…77fd',
   },
   {
@@ -401,7 +401,7 @@ export const auditEntries: AuditEntry[] = [
     role: 'Port-Ops',
     category: 'port-call',
     action: 'Berth window confirmed',
-    detail: 'MV Emirates Trader — Khalifa Port CT2, ops stage entered.',
+    detail: 'MV Emirates Trader, Khalifa Port CT2, ops stage entered.',
     hash: '0x2a55…30e1',
   },
   {

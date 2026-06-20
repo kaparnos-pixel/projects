@@ -9,7 +9,7 @@ export interface DemoUser {
   role: UserRole
 }
 
-// Demo accounts — mock only, no backend. Passwords live client-side on purpose.
+// Demo accounts, mock only, no backend. Passwords live client-side on purpose.
 export const demoUsers: DemoUser[] = [
   { email: 'ops@beacon.io', password: 'demo1234', name: 'Ops Desk', initials: 'OP', role: 'Operator' },
   { email: 'charter@beacon.io', password: 'demo1234', name: 'Mara Voss', initials: 'MV', role: 'Charterer' },

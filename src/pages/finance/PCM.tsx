@@ -66,7 +66,7 @@ export default function PCM() {
         <Card className="kpi">
           <span className="kpi-icon pcm-icon" aria-hidden>🎯</span>
           <div>
-            <div className="kpi-value">{portfolio.budget ? money(portfolio.budget) : '—'}</div>
+            <div className="kpi-value">{portfolio.budget ? money(portfolio.budget) : '-'}</div>
             <div className="kpi-label">Total budget set</div>
             <div className="kpi-sub">across accounts</div>
           </div>
@@ -121,7 +121,7 @@ export default function PCM() {
                       <input
                         className="actual-input mono"
                         type="number"
-                        placeholder="—"
+                        placeholder="-"
                         value={budgets[d.id] ?? ''}
                         onChange={(e) => setBudget(d.id, e.target.value === '' ? 0 : Number(e.target.value))}
                       />
@@ -153,7 +153,7 @@ export default function PCM() {
               })}
             </tbody>
           </table>
-          {das.length === 0 && <div className="empty">No disbursement accounts yet — create them in Vendor Dock → DA Tracking.</div>}
+          {das.length === 0 && <div className="empty">No disbursement accounts yet. You can create them in Vendor Dock → DA Tracking.</div>}
         </Card>
       ) : (
         <Benchmarking das={das} />
@@ -209,7 +209,7 @@ function Benchmarking({ das }: { das: DisbursementAccount[] }) {
               </div>
             </div>
             <div className={`bench-delta ${r.delta == null ? '' : r.delta > 0 ? 'var-up' : 'var-down'}`}>
-              {r.delta == null ? '—' : `${r.delta > 0 ? '+' : ''}${r.delta}%`}
+              {r.delta == null ? '-' : `${r.delta > 0 ? '+' : ''}${r.delta}%`}
             </div>
           </div>
         ))}

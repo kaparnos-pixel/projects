@@ -25,7 +25,7 @@ export default function Marketplace() {
     <div className="stack">
       <PageHeader
         title="Supplier marketplace"
-        subtitle="A two-sided marketplace — source and vet suppliers as a buyer, or respond to incoming RFQs as a supplier."
+        subtitle="A marketplace that works both ways. Source and vet suppliers as a buyer, or answer incoming RFQs as a supplier."
         action={
           <div className="seg-toggle">
             <button className={view === 'buyer' ? 'active' : ''} onClick={() => setView('buyer')}>
@@ -159,7 +159,7 @@ function RFQModal({
       title: title.trim(),
       vessel: vessel.trim(),
       port: port.trim(),
-      neededBy: neededBy || '—',
+      neededBy: neededBy || '-',
       note: note.trim(),
       lines: lines.filter((l) => l.description.trim()),
     })
@@ -299,7 +299,7 @@ function QuoteRow({
         <ul className="rfq-lines">
           {offer.lines.map((l, i) => (
             <li key={i}>
-              {l.qty} {l.unit} — {l.description}
+              {l.qty} {l.unit} · {l.description}
             </li>
           ))}
         </ul>

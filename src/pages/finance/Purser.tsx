@@ -53,7 +53,7 @@ export default function Purser() {
     <div className="stack">
       <PageHeader
         title="Purser"
-        subtitle="Real-time payment status and transaction visibility — closing the loop from “service delivered” to “account settled.”"
+        subtitle="See where every payment stands in real time, from “service delivered” all the way to “account settled.”"
         action={
           <label className="live-toggle">
             <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} />
@@ -203,7 +203,7 @@ function NewPaymentForm({
             </option>
             {das.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.ref} — {d.vessel}
+                {d.ref} · {d.vessel}
               </option>
             ))}
           </select>
@@ -257,11 +257,11 @@ function NewPaymentForm({
               counterparty: counterparty.trim(),
               type,
               vessel: vessel.trim(),
-              port: port.trim() || '—',
+              port: port.trim() || '-',
               amount: Number(amount),
               currency: 'USD',
               method,
-              reference: reference.trim() || '—',
+              reference: reference.trim() || '-',
             })
             onClose()
           }}

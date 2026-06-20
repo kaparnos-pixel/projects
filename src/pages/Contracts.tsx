@@ -50,8 +50,8 @@ export default function Contracts() {
 
           <div className={`compliance-flag ${active.complianceAudited ? 'is-audited' : 'not-audited'}`}>
             {active.complianceAudited
-              ? '🛡️ Compliance pre-audited — drafted from a BEACON template vetted for financial-regulation compliance.'
-              : '⚠️ Not yet compliance pre-audited — submit for review before issuing to the agent.'}
+              ? '🛡️ Compliance pre-audited. Drafted from a BEACON template that has already been vetted against financial regulations.'
+              : '⚠️ Not pre-audited yet. Send it for review before you issue it to the agent.'}
           </div>
 
           <div className="cd-grid">

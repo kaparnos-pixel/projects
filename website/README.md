@@ -1,15 +1,15 @@
 # BEACON marketing website
 
 A self-contained static marketing site for BEACON Maritime Technologies, built
-from the company business profile. No build step or dependencies — just HTML +
+from the company business profile. No build step or dependencies, just HTML +
 CSS.
 
 ## Files
 
-- `index.html` — the single-page marketing site
-- `styles.css` — all styling (maritime navy / signal-amber, port-side red &
+- `index.html`, the single-page marketing site
+- `styles.css`, all styling (maritime navy / signal-amber, port-side red &
   starboard green accents)
-- `beacon.svg` — logo / favicon
+- `beacon.svg`, logo / favicon
 
 ## View locally
 
@@ -25,11 +25,11 @@ python3 -m http.server 8000
 
 The header and call-to-action buttons link to `/`, which is where the
 **Agent Hub portal** (the Vite app in the repo root) is served. When deploying,
-host the marketing site and the app so that `/` resolves to the portal — or
+host the marketing site and the app so that `/` resolves to the portal, or
 update the `href="/"` links to wherever the app is hosted.
 
 ## Deploy
 
-Because it's plain static files, the site drops onto any static host —
+Because it's plain static files, the site drops onto any static host:
 GitHub Pages, Netlify, Vercel, Cloudflare Pages, or an S3 bucket. Point the host
 at this `website/` directory.

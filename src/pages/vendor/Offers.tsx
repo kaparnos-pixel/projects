@@ -77,7 +77,7 @@ export default function Offers() {
             <ul className="rfq-lines">
               {o.lines.map((l, i) => (
                 <li key={i}>
-                  {l.qty} {l.unit} — {l.description}
+                  {l.qty} {l.unit} · {l.description}
                 </li>
               ))}
             </ul>

@@ -1,4 +1,4 @@
-// Vendor Dock — the supply side of BEACON. Domain model for the supplier
+// Vendor Dock, the supply side of BEACON. Domain model for the supplier
 // marketplace, offers/quotations, disbursement-account tracking and SOF.
 
 export type SupplierCategory =
@@ -224,7 +224,7 @@ export const suppliers: Supplier[] = [
     leadTimeDays: 1,
     verified: true,
     featured: false,
-    about: 'Provisions and bonded stores at Singapore anchorages — expansion lane reference supplier.',
+    about: 'Provisions and bonded stores at Singapore anchorages, expansion lane reference supplier.',
   },
 ]
 
@@ -237,7 +237,7 @@ export const seedState: VendorState = {
       supplierId: 'sup-01',
       supplierName: 'Gulf Provisions Trading',
       category: 'Provisions & Stores',
-      title: 'Weekly provisions — MT Arabian Falcon',
+      title: 'Weekly provisions, MT Arabian Falcon',
       vessel: 'MT Arabian Falcon',
       port: 'Jebel Ali',
       neededBy: '2026-06-22',
@@ -256,7 +256,7 @@ export const seedState: VendorState = {
       supplierId: 'sup-02',
       supplierName: 'Fujairah Marine Spares',
       category: 'Spare Parts',
-      title: 'ME fuel pump spares — MT Gulf Pioneer',
+      title: 'ME fuel pump spares, MT Gulf Pioneer',
       vessel: 'MT Gulf Pioneer',
       port: 'Fujairah',
       neededBy: '2026-06-25',
@@ -275,7 +275,7 @@ export const seedState: VendorState = {
       supplierId: 'sup-04',
       supplierName: 'Khalifa Survey Partners',
       category: 'Surveys & Inspection',
-      title: 'Bunker survey — MV Emirates Trader',
+      title: 'Bunker survey, MV Emirates Trader',
       vessel: 'MV Emirates Trader',
       port: 'Khalifa Port',
       neededBy: '2026-06-21',
@@ -329,11 +329,11 @@ export const seedState: VendorState = {
       port: 'Khorfakkan',
       berth: 'KCT Berth 3',
       voyage: 'V.214E',
-      cargo: 'Containers — 1,100 TEU',
+      cargo: 'Containers, 1,100 TEU',
       status: 'draft',
       submittedAt: null,
       events: [
-        { id: 'e1', at: '2026-06-20 22:00', remark: 'EOSP — End of sea passage' },
+        { id: 'e1', at: '2026-06-20 22:00', remark: 'EOSP, End of sea passage' },
         { id: 'e2', at: '2026-06-20 22:30', remark: 'Pilot on board' },
         { id: 'e3', at: '2026-06-20 23:18', remark: 'All fast alongside, gangway down' },
         { id: 'e4', at: '2026-06-20 23:45', remark: 'NOR tendered and accepted' },

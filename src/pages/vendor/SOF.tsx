@@ -10,7 +10,7 @@ function buildDocument(sof: SOFType): string {
     .join('\n')
   return [
     line,
-    '          STATEMENT OF FACTS — BEACON Vendor Dock',
+    '          STATEMENT OF FACTS · BEACON Vendor Dock',
     line,
     `Reference : ${sof.ref}`,
     `Vessel    : ${sof.vessel}`,
@@ -69,7 +69,7 @@ export default function SOF() {
         />
       )}
 
-      {!active && <Card className="empty">No statements yet — create one to start logging events.</Card>}
+      {!active && <Card className="empty">No statements yet. Create one to start logging events.</Card>}
 
       {active && (
         <div className="da-shell">
@@ -161,7 +161,7 @@ function EventForm({ onAdd }: { onAdd: (e: { at: string; remark: string }) => vo
         aria-label="Event time"
       />
       <input
-        placeholder="Event remark — e.g. Commenced loading"
+        placeholder="What happened? e.g. Commenced loading"
         value={remark}
         onChange={(e) => setRemark(e.target.value)}
       />
@@ -234,9 +234,9 @@ function NewSOFForm({
               ref: ref.trim(),
               vessel: vessel.trim(),
               port: port.trim(),
-              berth: berth.trim() || '—',
-              voyage: voyage.trim() || '—',
-              cargo: cargo.trim() || '—',
+              berth: berth.trim() || '-',
+              voyage: voyage.trim() || '-',
+              cargo: cargo.trim() || '-',
             })
           }
         >

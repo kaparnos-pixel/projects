@@ -34,7 +34,7 @@ export default function DATracking() {
 
       {showNewDA && <NewDAForm onAdd={addDA} onDone={() => setShowNewDA(false)} />}
 
-      {!active && <Card className="empty">No disbursement accounts yet — create one to begin.</Card>}
+      {!active && <Card className="empty">No disbursement accounts yet. Create one to get started.</Card>}
 
       {active && (
         <div className="da-shell">
@@ -107,7 +107,7 @@ export default function DATracking() {
                         <input
                           className="actual-input mono"
                           type="number"
-                          placeholder="—"
+                          placeholder="-"
                           value={l.actual ?? ''}
                           onChange={(e) =>
                             setDAActual(active.id, l.id, e.target.value === '' ? null : Number(e.target.value))
@@ -115,7 +115,7 @@ export default function DATracking() {
                         />
                       </td>
                       <td className={`num mono ${variance == null ? '' : variance > 0 ? 'var-up' : variance < 0 ? 'var-down' : ''}`}>
-                        {variance == null ? '—' : (variance > 0 ? '+' : '') + money(variance, active.currency)}
+                        {variance == null ? '-' : (variance > 0 ? '+' : '') + money(variance, active.currency)}
                       </td>
                     </tr>
                   )
@@ -201,7 +201,7 @@ function NewDAForm({
           className="btn btn-primary"
           disabled={!valid}
           onClick={() => {
-            onAdd({ ref: ref.trim(), vessel: vessel.trim(), port: port.trim(), party: party.trim() || '—', currency: 'USD', status: 'pro-forma', lines: [] })
+            onAdd({ ref: ref.trim(), vessel: vessel.trim(), port: port.trim(), party: party.trim() || '-', currency: 'USD', status: 'pro-forma', lines: [] })
             onDone()
           }}
         >

@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { flowStages } from '../data/workflow'
 
-// Horizontal lifecycle flow used on the dashboard — clickable stages
+// Horizontal lifecycle flow used on the dashboard, clickable stages
 // that route into each Agent Hub module.
 export default function FlowStrip({ activeKey }: { activeKey?: string }) {
   const navigate = useNavigate()

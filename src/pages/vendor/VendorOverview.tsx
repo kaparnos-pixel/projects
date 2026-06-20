@@ -31,7 +31,7 @@ export default function VendorOverview() {
     <div className="stack">
       <PageHeader
         title="Vendor Dock"
-        subtitle="The supply side of the operating system for global port calls — source suppliers, manage quotations, track disbursement accounts and submit statements of fact."
+        subtitle="The supply side of the port call. Source suppliers, manage quotations, keep an eye on disbursement accounts and file your statements of fact."
         action={<span className="vd-tag">Starboard · Supply</span>}
       />
 
@@ -74,7 +74,7 @@ export default function VendorOverview() {
 
       <Card>
         <div className="banner banner-info">
-          🔗 Vendor Dock runs alongside Agent Hub — accepted quotes flow into Disbursement Accounts, and
+          🔗 Vendor Dock works hand in hand with Agent Hub. Accepted quotes flow into Disbursement Accounts, and
           port events build the SOF, so data is never re-keyed.
         </div>
       </Card>

@@ -3,14 +3,14 @@
 *The appointment side of the operating system for global port calls.*
 
 The **Agent Hub** portal is the *Appointment* layer of the BEACON maritime
-ecosystem — the **port-side (red)** product, alongside Vendor Dock (starboard),
+ecosystem, the **port-side (red)** product, alongside Vendor Dock (starboard),
 PCM and Purser. It gives operators, charterers, fleet managers and port-ops
 teams a single place to discover and appoint **port agents and husbandry
 providers**, onboard them compliantly (KYC + sanctions screening), communicate
 securely, negotiate and store **compliance pre-audited** contracts, coordinate
 port calls, and keep an auditable record of every interaction.
 
-The demo is seeded around BEACON's **UAE launch beachhead** — Fujairah, Jebel
+The demo is seeded around BEACON's **UAE launch beachhead**, Fujairah, Jebel
 Ali, Khorfakkan, Hamriyah, Port Khalid (Sharjah) and Khalifa Port (Abu Dhabi).
 
 ## The flow
@@ -36,7 +36,7 @@ Each stage is a module in the portal:
 
 - [Vite](https://vitejs.dev/) + [React 18](https://react.dev/) + TypeScript
 - [React Router](https://reactrouter.com/) for client-side routing
-- Hand-rolled CSS design system (no UI framework) — maritime navy/amber theme
+- Hand-rolled CSS design system (no UI framework), maritime navy/amber theme
 
 Data is mocked in `src/data/` so the portal runs entirely client-side. Swap
 those modules for API calls to wire it to a backend.

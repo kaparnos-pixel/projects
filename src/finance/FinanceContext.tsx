@@ -43,7 +43,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [state])
 
   // Tie: an approved (or settled) DA auto-creates a pending Purser payment
-  // to its party for the final total — created once, keyed on the DA ref.
+  // to its party for the final total, created once, keyed on the DA ref.
   useEffect(() => {
     const toCreate = das.filter(
       (d) =>
@@ -75,7 +75,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     })
   }, [das, state.payments])
 
-  // Tie: a settled payment closes its DA — flips the linked DA to settled.
+  // Tie: a settled payment closes its DA, flips the linked DA to settled.
   useEffect(() => {
     for (const p of state.payments) {
       if (p.status !== 'settled') continue

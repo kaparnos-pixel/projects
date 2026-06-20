@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
+import { getAccounts, useAuth } from '../auth/AuthContext'
+import { tierName } from '../auth/entitlements'
 import { plans } from '../data/billing'
-import type { PlanTier } from '../data/types'
+import type { PlanTier, UserRole } from '../data/types'
 
-type Mode = 'signup' | 'signin'
+type Mode = 'signup' | 'signin' | 'reset'
+
+const roles: UserRole[] = ['Operator', 'Charterer', 'Fleet Manager', 'Port-Ops']
 
 const accessSummary: Record<PlanTier, string> = {
   starter: 'Agent Hub',
@@ -19,29 +22,58 @@ function priceLabel(price: number | null): string {
 }
 
 export default function Login() {
-  const { login, register } = useAuth()
+  const { login, register, resetPassword } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from ?? '/'
 
-  const [mode, setMode] = useState<Mode>('signup')
+  const accounts = useMemo(() => getAccounts(), [])
+  const [mode, setMode] = useState<Mode>(accounts.length > 0 ? 'signin' : 'signup')
+
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState<UserRole>('Operator')
   const [tier, setTier] = useState<PlanTier>('starter')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
-    const result =
-      mode === 'signup' ? register({ name, email, password, tier }) : login(email, password)
-    if (result.ok) navigate(from, { replace: true })
-    else setError(result.error)
+    setError('')
+    if (mode === 'signup') {
+      const r = register({ name, email, password, role, tier })
+      r.ok ? navigate(from, { replace: true }) : setError(r.error)
+    } else if (mode === 'signin') {
+      const r = login(email, password)
+      r.ok ? navigate(from, { replace: true }) : setError(r.error)
+    } else {
+      const r = resetPassword(email, password)
+      if (r.ok) {
+        setMode('signin')
+        setPassword('')
+        setNotice('Password updated. You can sign in now.')
+      } else {
+        setError(r.error)
+      }
+    }
   }
 
-  function switchMode(next: Mode) {
+  function go(next: Mode) {
     setMode(next)
     setError('')
+    setNotice('')
+  }
+
+  const titles: Record<Mode, string> = {
+    signup: 'Create your account',
+    signin: 'Welcome back',
+    reset: 'Reset your password',
+  }
+  const subtitles: Record<Mode, string> = {
+    signup: 'Pick a plan to get started. It sets which modules you can open.',
+    signin: 'Sign in to your BEACON workspace.',
+    reset: 'Enter your email and a new password.',
   }
 
   return (
@@ -55,24 +87,40 @@ export default function Login() {
           </div>
         </div>
 
-        <h1 className="login-title">{mode === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
-        <p className="login-sub">
-          {mode === 'signup'
-            ? 'Pick a plan to get started. It sets which modules you can open.'
-            : 'Sign in to your BEACON workspace.'}
-        </p>
+        <h1 className="login-title">{titles[mode]}</h1>
+        <p className="login-sub">{subtitles[mode]}</p>
+
+        {mode === 'signin' && accounts.length > 0 && (
+          <div className="login-accounts">
+            <span className="login-accounts-label">Switch to an account on this device</span>
+            <div className="login-accounts-grid">
+              {accounts.map((a) => (
+                <button
+                  key={a.email}
+                  type="button"
+                  className="account-chip"
+                  onClick={() => {
+                    setEmail(a.email)
+                    setError('')
+                  }}
+                >
+                  <span className="account-avatar">{a.initials}</span>
+                  <span className="account-meta">
+                    <strong>{a.name}</strong>
+                    <span>{a.role}</span>
+                  </span>
+                  <span className={`tier-badge tier-${a.tier}`}>{tierName[a.tier]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <form onSubmit={submit} className="login-form">
           {mode === 'signup' && (
             <label>
               Full name
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Jane Mariner"
-                autoComplete="name"
-                required
-              />
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Mariner" autoComplete="name" required />
             </label>
           )}
           <label>
@@ -87,16 +135,27 @@ export default function Login() {
             />
           </label>
           <label>
-            Password
+            {mode === 'reset' ? 'New password' : 'Password'}
             <input
               type="password"
-              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
+              placeholder={mode === 'signin' ? '••••••••' : 'At least 6 characters'}
               required
             />
           </label>
+
+          {mode === 'signup' && (
+            <label>
+              Your role
+              <select value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
+                {roles.map((r) => (
+                  <option key={r}>{r}</option>
+                ))}
+              </select>
+            </label>
+          )}
 
           {mode === 'signup' && (
             <fieldset className="plan-pick">
@@ -123,25 +182,34 @@ export default function Login() {
             </fieldset>
           )}
 
+          {notice && <div className="login-notice">{notice}</div>}
           {error && <div className="login-error">{error}</div>}
 
           <button type="submit" className="btn btn-primary login-submit">
-            {mode === 'signup' ? 'Create account' : 'Sign in'}
+            {mode === 'signup' ? 'Create account' : mode === 'signin' ? 'Sign in' : 'Reset password'}
           </button>
         </form>
+
+        {mode === 'signin' && (
+          <p className="login-switch">
+            <button type="button" className="link-btn" onClick={() => go('reset')}>
+              Forgot your password?
+            </button>
+          </p>
+        )}
 
         <p className="login-switch">
           {mode === 'signup' ? (
             <>
               Already have an account?{' '}
-              <button type="button" className="link-btn" onClick={() => switchMode('signin')}>
+              <button type="button" className="link-btn" onClick={() => go('signin')}>
                 Sign in
               </button>
             </>
           ) : (
             <>
               New to BEACON?{' '}
-              <button type="button" className="link-btn" onClick={() => switchMode('signup')}>
+              <button type="button" className="link-btn" onClick={() => go('signup')}>
                 Create an account
               </button>
             </>

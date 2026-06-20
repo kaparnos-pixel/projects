@@ -17,6 +17,15 @@ export interface RegisterInput {
   name: string
   email: string
   password: string
+  role: UserRole
+  tier: PlanTier
+}
+
+export interface AccountSummary {
+  email: string
+  name: string
+  initials: string
+  role: UserRole
   tier: PlanTier
 }
 
@@ -26,6 +35,7 @@ interface AuthValue {
   user: SessionUser | null
   login: (email: string, password: string) => Result
   register: (input: RegisterInput) => Result
+  resetPassword: (email: string, newPassword: string) => Result
   logout: () => void
   setTier: (tier: PlanTier) => void
 }
@@ -86,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: true }
       },
 
-      register({ name, email, password, tier }) {
+      register({ name, email, password, role, tier }) {
         const e = email.trim().toLowerCase()
         if (!name.trim()) return { ok: false, error: 'Please enter your name.' }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return { ok: false, error: 'Please enter a valid email.' }
@@ -99,12 +109,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: email.trim(),
           name: name.trim(),
           initials: initialsOf(name),
-          role: 'Operator',
+          role,
           tier,
           password,
         }
         saveUsers([...users, newUser])
         setUser(strip(newUser))
+        return { ok: true }
+      },
+
+      resetPassword(email, newPassword) {
+        const e = email.trim().toLowerCase()
+        if (newPassword.length < 6) return { ok: false, error: 'Password must be at least 6 characters.' }
+        const users = loadUsers()
+        const idx = users.findIndex((u) => u.email.toLowerCase() === e)
+        if (idx === -1) return { ok: false, error: 'No account found for that email.' }
+        users[idx] = { ...users[idx], password: newPassword }
+        saveUsers(users)
         return { ok: true }
       },
 
@@ -134,4 +155,9 @@ export function useAuth(): AuthValue {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')
   return ctx
+}
+
+// Accounts saved in this browser, without passwords — used for quick switching.
+export function getAccounts(): AccountSummary[] {
+  return loadUsers().map(({ password: _password, ...rest }) => rest)
 }

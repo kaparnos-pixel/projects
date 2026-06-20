@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { canAccess, tierName, type Feature } from '../auth/entitlements'
@@ -62,8 +63,10 @@ const siteHome = import.meta.env.BASE_URL.replace(/app\/$/, '')
 export default function Layout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [menuOpen, setMenuOpen] = useState(false)
 
-  function handleLogout() {
+  function leave() {
+    setMenuOpen(false)
     logout()
     navigate('/login', { replace: true })
   }
@@ -165,16 +168,35 @@ export default function Layout() {
                 {tierName[user.tier]}
               </NavLink>
             )}
-            <div className="user-pill">
-              <div className="avatar">{user?.initials ?? 'OP'}</div>
-              <div className="user-meta">
-                <strong>{user?.name ?? 'Ops Desk'}</strong>
-                <span>{user?.role ?? 'Operator'}</span>
-              </div>
+            <div className="user-menu">
+              <button className="user-pill" type="button" onClick={() => setMenuOpen((v) => !v)}>
+                <div className="avatar">{user?.initials ?? 'OP'}</div>
+                <div className="user-meta">
+                  <strong>{user?.name ?? 'Ops Desk'}</strong>
+                  <span>{user?.role ?? 'Operator'}</span>
+                </div>
+                <span className="user-caret" aria-hidden>
+                  ▾
+                </span>
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />
+                  <div className="user-dropdown" role="menu">
+                    <div className="ud-head">
+                      <strong>{user?.name}</strong>
+                      <span>{user?.email}</span>
+                    </div>
+                    <button type="button" className="ud-item" onClick={leave}>
+                      🔁 Switch account
+                    </button>
+                    <button type="button" className="ud-item" onClick={leave}>
+                      ⎋ Sign out
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-            <button className="ghost-btn logout-btn" type="button" onClick={handleLogout} title="Sign out">
-              ⎋
-            </button>
           </div>
         </header>
 

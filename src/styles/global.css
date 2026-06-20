@@ -2625,3 +2625,151 @@ button {
 .link-btn:hover {
   text-decoration: underline;
 }
+
+/* =================== Login: account chips, notice, role select =================== */
+.login-accounts {
+  margin-bottom: 18px;
+}
+.login-accounts-label {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.login-accounts-grid {
+  display: grid;
+  gap: 8px;
+}
+.account-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: 11px;
+  padding: 9px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.account-chip:hover {
+  border-color: var(--sky-500);
+  background: var(--sky-100);
+}
+.account-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--navy-800);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.account-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.account-meta strong {
+  font-size: 13px;
+}
+.account-meta span {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.login-notice {
+  background: var(--good-bg);
+  color: #16744f;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 9px 12px;
+  border-radius: 8px;
+}
+.login-form select {
+  border: 1px solid var(--slate-300);
+  border-radius: 9px;
+  padding: 11px 13px;
+  font-size: 14px;
+  outline: none;
+  font-family: inherit;
+  background: #fff;
+}
+.login-form select:focus {
+  border-color: var(--sky-500);
+}
+
+/* =================== Top-bar user menu =================== */
+.user-menu {
+  position: relative;
+}
+.user-menu .user-pill {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+.user-menu .user-pill:hover {
+  background: var(--slate-100);
+}
+.user-caret {
+  font-size: 10px;
+  color: var(--muted);
+  margin-left: 2px;
+}
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.user-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 41;
+  width: 230px;
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(7, 38, 58, 0.18);
+  padding: 6px;
+}
+.ud-head {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--slate-100);
+  margin-bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ud-head strong {
+  font-size: 13.5px;
+}
+.ud-head span {
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+}
+.ud-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--slate-700);
+  cursor: pointer;
+}
+.ud-item:hover {
+  background: var(--slate-100);
+}

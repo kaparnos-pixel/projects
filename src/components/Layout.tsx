@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
+import { getOwnerEmail, useAuth } from '../auth/AuthContext'
 import { canAccess, tierName, type Feature } from '../auth/entitlements'
 import { flowStages } from '../data/workflow'
 
@@ -12,7 +12,7 @@ interface NavItem {
   feature: Feature
 }
 
-const navGroups: { title: string | null; items: NavItem[] }[] = [
+const navGroups: { title: string | null; items: NavItem[]; ownerOnly?: boolean }[] = [
   { title: null, items: [{ to: '/', label: 'Dashboard', icon: '🛰️', end: true, feature: 'agent-hub' }] },
   {
     title: 'Agent Hub · Appointment',
@@ -36,6 +36,11 @@ const navGroups: { title: string | null; items: NavItem[] }[] = [
     ],
   },
   { title: 'Account', items: [{ to: '/subscription', label: 'Subscription', icon: '💳', end: false, feature: 'account' }] },
+  {
+    title: 'Admin',
+    ownerOnly: true,
+    items: [{ to: '/admin/users', label: 'Users', icon: '👥', end: false, feature: 'account' }],
+  },
 ]
 
 function stageNav(key: string): string {
@@ -65,6 +70,10 @@ export default function Layout() {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
 
+  const ownerEmail = getOwnerEmail()
+  const isOwner = !!user && !!ownerEmail && user.email.toLowerCase() === ownerEmail.toLowerCase()
+  const visibleGroups = navGroups.filter((g) => !g.ownerOnly || isOwner)
+
   function leave() {
     setMenuOpen(false)
     logout()
@@ -91,7 +100,7 @@ export default function Layout() {
         </div>
 
         <nav className="nav">
-          {navGroups.map((group, gi) => (
+          {visibleGroups.map((group, gi) => (
             <div className="nav-group" key={group.title ?? `g${gi}`}>
               {group.title && <span className="nav-group-title">{group.title}</span>}
               {group.items.map((item) => {

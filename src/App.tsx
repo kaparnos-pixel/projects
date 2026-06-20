@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import RequireAuth from './auth/RequireAuth'
 import RequireTier from './auth/RequireTier'
+import RequireOwner from './auth/RequireOwner'
+import Users from './pages/Users'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -45,6 +47,7 @@ export default function App() {
         <Route path="pcm" element={<RequireTier feature="pcm"><PCM /></RequireTier>} />
         <Route path="purser" element={<RequireTier feature="purser"><Purser /></RequireTier>} />
         <Route path="subscription" element={<Subscription />} />
+        <Route path="admin/users" element={<RequireOwner><Users /></RequireOwner>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

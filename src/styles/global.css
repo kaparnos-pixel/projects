@@ -2773,3 +2773,61 @@ button {
 .ud-item:hover {
   background: var(--slate-100);
 }
+
+/* =================== Admin · Users =================== */
+.users-table td {
+  vertical-align: middle;
+}
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.user-cell strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+.owner-tag,
+.you-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.owner-tag {
+  background: #efe9fb;
+  color: #6a4bd0;
+}
+.you-tag {
+  background: var(--sky-100);
+  color: var(--navy-800);
+}
+.tier-select {
+  border: 1px solid var(--slate-300);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  background: #fff;
+  outline: none;
+  font-family: inherit;
+}
+.tier-select:focus {
+  border-color: var(--sky-500);
+}
+.row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.btn.danger {
+  color: #c0334a;
+  border-color: #f0c4cc;
+}
+.btn.danger:hover {
+  background: #fdeaec;
+}

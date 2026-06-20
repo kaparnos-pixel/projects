@@ -38,6 +38,10 @@ interface AuthValue {
   resetPassword: (email: string, newPassword: string) => Result
   logout: () => void
   setTier: (tier: PlanTier) => void
+  // Owner-only account management
+  adminSetTier: (email: string, tier: PlanTier) => void
+  adminSetPassword: (email: string, newPassword: string) => Result
+  adminDeleteUser: (email: string) => void
 }
 
 const SESSION_KEY = 'beacon.session'
@@ -144,6 +148,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ...u, tier }
         })
       },
+
+      adminSetTier(email, tier) {
+        const e = email.trim().toLowerCase()
+        saveUsers(loadUsers().map((su) => (su.email.toLowerCase() === e ? { ...su, tier } : su)))
+        setUser((u) => (u && u.email.toLowerCase() === e ? { ...u, tier } : u))
+      },
+
+      adminSetPassword(email, newPassword) {
+        if (newPassword.length < 6) return { ok: false, error: 'Password must be at least 6 characters.' }
+        const e = email.trim().toLowerCase()
+        const users = loadUsers()
+        const idx = users.findIndex((u) => u.email.toLowerCase() === e)
+        if (idx === -1) return { ok: false, error: 'No account found for that email.' }
+        users[idx] = { ...users[idx], password: newPassword }
+        saveUsers(users)
+        return { ok: true }
+      },
+
+      adminDeleteUser(email) {
+        const e = email.trim().toLowerCase()
+        saveUsers(loadUsers().filter((u) => u.email.toLowerCase() !== e))
+        // Deleting your own account signs you out.
+        setUser((u) => (u && u.email.toLowerCase() === e ? null : u))
+      },
     }),
     [user],
   )
@@ -161,3 +189,9 @@ export function useAuth(): AuthValue {
 export function getAccounts(): AccountSummary[] {
   return loadUsers().map(({ password: _password, ...rest }) => rest)
 }
+
+// The first account created on this device owns the workspace (admin).
+export function getOwnerEmail(): string | null {
+  return loadUsers()[0]?.email ?? null
+}
+

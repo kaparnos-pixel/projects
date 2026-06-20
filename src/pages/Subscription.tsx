@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Badge, Card, PageHeader } from '../components/ui'
+import { useAuth } from '../auth/AuthContext'
 import {
   currentSubscription,
   invoices,
@@ -20,7 +21,8 @@ function limitLabel(value: number | null): string {
 }
 
 export default function Subscription() {
-  const [activeTier, setActiveTier] = useState<PlanTier>(currentSubscription.tier)
+  const { user, setTier } = useAuth()
+  const activeTier = user?.tier ?? currentSubscription.tier
   const [cycle, setCycle] = useState(currentSubscription.billingCycle)
 
   const currentPlan = plans.find((p) => p.tier === activeTier)!
@@ -146,19 +148,17 @@ export default function Subscription() {
                 type="button"
                 className={`btn ${p.tier === activeTier ? 'btn-soft' : 'btn-primary'} plan-btn`}
                 disabled={p.tier === activeTier}
-                onClick={() => setActiveTier(p.tier)}
+                onClick={() => setTier(p.tier)}
               >
                 {changeLabel(p.tier)}
               </button>
             </Card>
           ))}
         </div>
-        {activeTier !== currentSubscription.tier && (
-          <div className="banner banner-good plan-change-note">
-            Plan change to <strong>{currentPlan.name}</strong> is staged. It would take effect at your next
-            renewal ({currentSubscription.renewsOn}). This is a demo, so nothing is charged.
-          </div>
-        )}
+        <div className="banner banner-info plan-change-note">
+          You're on the <strong>{currentPlan.name}</strong> plan. Changing it here takes effect right away in
+          this demo and unlocks or locks the matching modules in the sidebar. Nothing is charged.
+        </div>
       </section>
 
       {/* Payment + invoices */}

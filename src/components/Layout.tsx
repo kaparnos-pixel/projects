@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { canAccess, tierName, type Feature } from '../auth/entitlements'
 import { flowStages } from '../data/workflow'
 
 interface NavItem {
@@ -7,32 +8,33 @@ interface NavItem {
   label: string
   icon: string
   end: boolean
+  feature: Feature
 }
 
 const navGroups: { title: string | null; items: NavItem[] }[] = [
-  { title: null, items: [{ to: '/', label: 'Dashboard', icon: '🛰️', end: true }] },
+  { title: null, items: [{ to: '/', label: 'Dashboard', icon: '🛰️', end: true, feature: 'agent-hub' }] },
   {
     title: 'Agent Hub · Appointment',
-    items: flowStages.map((s) => ({ to: s.route, label: stageNav(s.key), icon: s.icon, end: false })),
+    items: flowStages.map((s) => ({ to: s.route, label: stageNav(s.key), icon: s.icon, end: false, feature: 'agent-hub' as Feature })),
   },
   {
     title: 'Vendor Dock · Supply',
     items: [
-      { to: '/vendor', label: 'Overview', icon: '🚢', end: true },
-      { to: '/vendor/marketplace', label: 'Marketplace', icon: '🛒', end: false },
-      { to: '/vendor/offers', label: 'Offers & Quotes', icon: '🧾', end: false },
-      { to: '/vendor/da', label: 'DA Tracking', icon: '💱', end: false },
-      { to: '/vendor/sof', label: 'SOF', icon: '📑', end: false },
+      { to: '/vendor', label: 'Overview', icon: '🚢', end: true, feature: 'vendor-dock' },
+      { to: '/vendor/marketplace', label: 'Marketplace', icon: '🛒', end: false, feature: 'vendor-dock' },
+      { to: '/vendor/offers', label: 'Offers & Quotes', icon: '🧾', end: false, feature: 'vendor-dock' },
+      { to: '/vendor/da', label: 'DA Tracking', icon: '💱', end: false, feature: 'vendor-dock' },
+      { to: '/vendor/sof', label: 'SOF', icon: '📑', end: false, feature: 'vendor-dock' },
     ],
   },
   {
     title: 'Finance',
     items: [
-      { to: '/pcm', label: 'PCM · Cost', icon: '🧮', end: false },
-      { to: '/purser', label: 'Purser · Pay', icon: '💸', end: false },
+      { to: '/pcm', label: 'PCM · Cost', icon: '🧮', end: false, feature: 'pcm' },
+      { to: '/purser', label: 'Purser · Pay', icon: '💸', end: false, feature: 'purser' },
     ],
   },
-  { title: 'Account', items: [{ to: '/subscription', label: 'Subscription', icon: '💳', end: false }] },
+  { title: 'Account', items: [{ to: '/subscription', label: 'Subscription', icon: '💳', end: false, feature: 'account' }] },
 ]
 
 function stageNav(key: string): string {
@@ -89,19 +91,29 @@ export default function Layout() {
           {navGroups.map((group, gi) => (
             <div className="nav-group" key={group.title ?? `g${gi}`}>
               {group.title && <span className="nav-group-title">{group.title}</span>}
-              {group.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
-                >
-                  <span className="nav-icon" aria-hidden>
-                    {item.icon}
-                  </span>
-                  {item.label}
-                </NavLink>
-              ))}
+              {group.items.map((item) => {
+                const locked = user ? !canAccess(user.tier, item.feature) : false
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    className={({ isActive }) =>
+                      `nav-link${isActive ? ' active' : ''}${locked ? ' locked' : ''}`
+                    }
+                  >
+                    <span className="nav-icon" aria-hidden>
+                      {item.icon}
+                    </span>
+                    {item.label}
+                    {locked && (
+                      <span className="nav-lock" aria-label="Upgrade required">
+                        🔒
+                      </span>
+                    )}
+                  </NavLink>
+                )
+              })}
             </div>
           ))}
         </nav>
@@ -148,6 +160,11 @@ export default function Layout() {
             <button className="ghost-btn" type="button">
               🔔
             </button>
+            {user && (
+              <NavLink to="/subscription" className={`tier-badge tier-${user.tier}`} title="Your plan">
+                {tierName[user.tier]}
+              </NavLink>
+            )}
             <div className="user-pill">
               <div className="avatar">{user?.initials ?? 'OP'}</div>
               <div className="user-meta">

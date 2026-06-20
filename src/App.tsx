@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import RequireAuth from './auth/RequireAuth'
+import RequireTier from './auth/RequireTier'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -36,13 +37,13 @@ export default function App() {
         <Route path="contracts" element={<Contracts />} />
         <Route path="port-calls" element={<PortCalls />} />
         <Route path="audit" element={<Audit />} />
-        <Route path="vendor" element={<VendorOverview />} />
-        <Route path="vendor/marketplace" element={<Marketplace />} />
-        <Route path="vendor/offers" element={<Offers />} />
-        <Route path="vendor/da" element={<DATracking />} />
-        <Route path="vendor/sof" element={<SOF />} />
-        <Route path="pcm" element={<PCM />} />
-        <Route path="purser" element={<Purser />} />
+        <Route path="vendor" element={<RequireTier feature="vendor-dock"><VendorOverview /></RequireTier>} />
+        <Route path="vendor/marketplace" element={<RequireTier feature="vendor-dock"><Marketplace /></RequireTier>} />
+        <Route path="vendor/offers" element={<RequireTier feature="vendor-dock"><Offers /></RequireTier>} />
+        <Route path="vendor/da" element={<RequireTier feature="vendor-dock"><DATracking /></RequireTier>} />
+        <Route path="vendor/sof" element={<RequireTier feature="vendor-dock"><SOF /></RequireTier>} />
+        <Route path="pcm" element={<RequireTier feature="pcm"><PCM /></RequireTier>} />
+        <Route path="purser" element={<RequireTier feature="purser"><Purser /></RequireTier>} />
         <Route path="subscription" element={<Subscription />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

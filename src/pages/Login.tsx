@@ -75,7 +75,10 @@ export default function Login() {
           <div className="login-demo-grid">
             {demoUsers.map((u) => (
               <button key={u.email} type="button" className="login-demo-btn" onClick={() => quickFill(u.email)}>
-                <strong>{u.role}</strong>
+                <span className="login-demo-row">
+                  <strong>{u.role}</strong>
+                  <span className={`tier-badge tier-${u.tier}`}>{u.tier}</span>
+                </span>
                 <span>{u.email}</span>
               </button>
             ))}

@@ -2374,3 +2374,147 @@ button {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
+
+/* =================== Tiers & access gating =================== */
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.tier-starter {
+  background: var(--muted-bg);
+  color: var(--slate-600, #51606f);
+}
+.tier-pro {
+  background: var(--sky-100);
+  color: var(--navy-800);
+  border-color: rgba(74, 163, 223, 0.4);
+}
+.tier-enterprise {
+  background: #efe9fb;
+  color: #6a4bd0;
+  border-color: rgba(106, 75, 208, 0.35);
+}
+
+/* locked sidebar items */
+.nav-link.locked {
+  color: #8298ac;
+}
+.nav-link.locked .nav-icon {
+  opacity: 0.55;
+}
+.nav-lock {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.8;
+}
+.nav-link.locked:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* upgrade gate */
+.gate {
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 44px 36px;
+  max-width: 620px;
+  margin: 24px auto;
+  text-align: center;
+}
+.gate-lock {
+  font-size: 40px;
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  display: grid;
+  place-items: center;
+  margin: 0 auto 18px;
+}
+.gate-kicker {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #6a4bd0;
+  background: #efe9fb;
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+.gate h1 {
+  font-size: 24px;
+  letter-spacing: -0.3px;
+  margin-bottom: 8px;
+}
+.gate-sub {
+  color: var(--slate-500);
+  font-size: 14.5px;
+  max-width: 460px;
+  margin: 0 auto 22px;
+  line-height: 1.55;
+}
+.gate-features {
+  list-style: none;
+  margin: 0 auto 26px;
+  padding: 0;
+  max-width: 380px;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+.gate-features li {
+  position: relative;
+  padding-left: 26px;
+  font-size: 14px;
+  color: var(--slate-700);
+}
+.gate-features li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--good-bg);
+  color: var(--good);
+  font-size: 11px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+.gate-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.gate-fine {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* login demo tier row */
+.login-demo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.login-demo-row .tier-badge {
+  font-size: 9px;
+  padding: 2px 7px;
+}

@@ -37,6 +37,13 @@ const toneByLabel: Record<string, string> = {
   alongside: 'warn',
   operations: 'warn',
   departed: 'good',
+  // billing
+  paid: 'good',
+  due: 'warn',
+  failed: 'bad',
+  active: 'good',
+  trialing: 'info',
+  'past-due': 'bad',
 }
 
 export function Badge({ label }: { label: string }) {

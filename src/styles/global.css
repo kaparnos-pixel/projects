@@ -350,6 +350,10 @@ button {
   background: var(--muted-bg);
   color: var(--muted);
 }
+.badge-bad {
+  background: #fdeaec;
+  color: #c0334a;
+}
 
 .stars {
   color: var(--amber-500);
@@ -1269,10 +1273,235 @@ button {
   font-size: 12px;
 }
 
+/* ---------- Subscription / billing ---------- */
+.cap {
+  text-transform: capitalize;
+}
+.cycle-toggle {
+  display: inline-flex;
+  background: var(--slate-100);
+  border-radius: 999px;
+  padding: 3px;
+}
+.cycle-toggle button {
+  border: none;
+  background: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--slate-500);
+}
+.cycle-toggle button.active {
+  background: #fff;
+  color: var(--navy-800);
+  box-shadow: var(--shadow-sm);
+}
+.save-tag {
+  color: var(--good);
+  font-size: 11px;
+  margin-left: 2px;
+}
+
+.sub-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.sub-plan-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0;
+}
+.sub-plan-row h2 {
+  font-size: 22px;
+}
+.sub-summary-meta {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+}
+.sub-summary-meta strong {
+  font-size: 16px;
+}
+.sub-summary-meta small {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.usage-top {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  color: var(--slate-500);
+}
+.usage-top strong {
+  font-size: 17px;
+  color: var(--ink);
+}
+.usage-limit {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.usage-bar {
+  height: 8px;
+  background: var(--slate-200);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.usage-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+.usage-ok {
+  background: var(--good);
+}
+.usage-warn {
+  background: var(--amber-500);
+}
+.usage-over {
+  background: #d6455d;
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+}
+.plan-card.is-featured {
+  border-color: var(--sky-500);
+  box-shadow: 0 0 0 1px var(--sky-500), var(--shadow);
+}
+.plan-card.is-current {
+  border-color: var(--navy-800);
+  box-shadow: inset 0 0 0 1px var(--navy-800);
+}
+.plan-ribbon {
+  position: absolute;
+  top: -10px;
+  right: 16px;
+  background: var(--sky-500);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.plan-card h3 {
+  font-size: 16px;
+}
+.plan-price {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--navy-900);
+}
+.plan-price span {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.plan-blurb {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--slate-500);
+  min-height: 34px;
+}
+.plan-features {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+}
+.plan-features li {
+  font-size: 13px;
+  color: var(--slate-700);
+  padding-left: 22px;
+  position: relative;
+}
+.plan-features li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: var(--good);
+  font-weight: 700;
+}
+.plan-limits {
+  color: var(--muted);
+  border-top: 1px solid var(--slate-100);
+  padding-top: 10px;
+}
+.plan-btn {
+  width: 100%;
+  margin-top: 4px;
+}
+.plan-btn:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+.plan-change-note {
+  margin-top: 14px;
+}
+
+.pay-card-visual {
+  background: linear-gradient(135deg, var(--navy-800), var(--navy-900));
+  color: #fff;
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 340px;
+}
+.pay-brand {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.pay-number {
+  font-size: 17px;
+  letter-spacing: 2px;
+}
+.pay-foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #b8cbdb;
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1080px) {
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .usage-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .plans-grid {
+    grid-template-columns: 1fr;
   }
   .two-col {
     grid-template-columns: 1fr;

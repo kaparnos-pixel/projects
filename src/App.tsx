@@ -9,6 +9,7 @@ import Chat from './pages/Chat'
 import Contracts from './pages/Contracts'
 import PortCalls from './pages/PortCalls'
 import Audit from './pages/Audit'
+import Subscription from './pages/Subscription'
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="contracts" element={<Contracts />} />
         <Route path="port-calls" element={<PortCalls />} />
         <Route path="audit" element={<Audit />} />
+        <Route path="subscription" element={<Subscription />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

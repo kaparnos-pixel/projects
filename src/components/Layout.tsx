@@ -5,6 +5,7 @@ import { flowStages } from '../data/workflow'
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '🛰️', end: true },
   ...flowStages.map((s) => ({ to: s.route, label: stageNav(s.key), icon: s.icon, end: false })),
+  { to: '/subscription', label: 'Subscription', icon: '💳', end: false },
 ]
 
 function stageNav(key: string): string {

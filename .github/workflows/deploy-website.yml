@@ -1,6 +1,7 @@
 name: Deploy website to GitHub Pages
 
-# Publishes the static marketing site in website/ to GitHub Pages.
+# Publishes the static marketing site (website/) at the Pages root and the
+# Agent Hub portal (built from the repo root) under /app/.
 # Requires repo Settings → Pages → Source = "GitHub Actions" (one-time).
 
 on:
@@ -10,6 +11,12 @@ on:
       - claude/quirky-curie-3no1al
     paths:
       - 'website/**'
+      - 'src/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'tsconfig.json'
       - '.github/workflows/deploy-website.yml'
   workflow_dispatch:
 
@@ -33,18 +40,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Agent Hub portal
+        run: npm run build
+
+      - name: Assemble site (marketing at root, app under /app)
+        run: |
+          rm -rf _site
+          mkdir -p _site/app
+          cp -r website/* _site/
+          cp -r dist/* _site/app/
+          # SPA fallback so deep links / refresh work on GitHub Pages
+          cp _site/app/index.html _site/app/404.html
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
-          # Auto-enable Pages (GitHub Actions source) if it isn't set up yet,
-          # so no manual Settings → Pages step is required.
+          # Auto-enable Pages (GitHub Actions source) if it isn't set up yet.
           enablement: true
 
-      - name: Upload website artifact
+      - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: website
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+

@@ -5,9 +5,13 @@ import App from './App'
 import { AuthProvider } from './auth/AuthContext'
 import './styles/global.css'
 
+// In production the app is hosted under a sub-path (e.g. /projects/app/);
+// BASE_URL carries that so router paths resolve correctly. Empty in dev.
+const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={basename || undefined}>
       <AuthProvider>
         <App />
       </AuthProvider>

@@ -66,6 +66,13 @@ export default function Layout() {
     navigate('/login', { replace: true })
   }
 
+  function resetDemo() {
+    if (!window.confirm('Reset all Vendor Dock and Finance demo data to defaults?')) return
+    localStorage.removeItem('beacon.vendor.v1')
+    localStorage.removeItem('beacon.finance.v1')
+    window.location.reload()
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -122,6 +129,9 @@ export default function Layout() {
         <div className="sidebar-foot">
           <div className="layer-chip">Appointment + Supply</div>
           <p>Operators · Charterers · Agents · Suppliers · Port-ops</p>
+          <button className="reset-demo" type="button" onClick={resetDemo}>
+            ↺ Reset demo data
+          </button>
         </div>
       </aside>
 

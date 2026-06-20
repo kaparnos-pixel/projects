@@ -13,8 +13,10 @@ const tabs: { key: OfferStatus | 'all'; label: string }[] = [
 ]
 
 export default function Offers() {
-  const { offers, setOfferStatus } = useVendor()
+  const { offers, setOfferStatus, das } = useVendor()
   const [filter, setFilter] = useState<OfferStatus | 'all'>('all')
+
+  const inDA = (title: string) => das.some((d) => d.lines.some((l) => l.description === title))
 
   const list = useMemo(
     () => (filter === 'all' ? offers : offers.filter((o) => o.status === filter)),
@@ -107,7 +109,9 @@ export default function Offers() {
                     Cancel RFQ
                   </button>
                 )}
-                {o.status === 'accepted' && <span className="ok-tag">✓ Awarded</span>}
+                {o.status === 'accepted' && (
+                  <span className="ok-tag">✓ Awarded{inDA(o.title) ? ' · in DA' : ''}</span>
+                )}
                 {o.status === 'declined' && (
                   <button className="btn btn-ghost btn-sm" onClick={() => setOfferStatus(o.id, 'requested')}>
                     Reopen

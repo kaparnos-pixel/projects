@@ -109,10 +109,32 @@ export function VendorProvider({ children }: { children: ReactNode }) {
       },
 
       setOfferStatus(offerId, status) {
-        setState((s) => ({
-          ...s,
-          offers: s.offers.map((o) => (o.id === offerId ? { ...o, status } : o)),
-        }))
+        setState((s) => {
+          const offer = s.offers.find((o) => o.id === offerId)
+          let das = s.das
+          // Tie: accepting a quoted offer pushes its cost into the matching
+          // vessel's disbursement account (no re-keying), once.
+          if (offer && status === 'accepted' && offer.quoteAmount != null) {
+            const idx = s.das.findIndex((d) => d.vessel === offer.vessel)
+            if (idx >= 0 && !s.das[idx].lines.some((l) => l.description === offer.title)) {
+              const line = {
+                id: uid('l'),
+                category: offer.category,
+                description: offer.title,
+                proforma: offer.quoteAmount,
+                actual: offer.quoteAmount,
+              }
+              das = s.das.map((d, i) =>
+                i === idx ? { ...d, updatedAt: today(), lines: [...d.lines, line] } : d,
+              )
+            }
+          }
+          return {
+            ...s,
+            das,
+            offers: s.offers.map((o) => (o.id === offerId ? { ...o, status } : o)),
+          }
+        })
       },
 
       addDA(da) {

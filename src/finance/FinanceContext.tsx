@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { pcmSeed, paymentFlow, type Payment, type PaymentStatus, type PcmState } from '../data/finance'
+import { useVendor } from '../vendor/VendorContext'
 
 const STORAGE_KEY = 'beacon.finance.v1'
 
@@ -35,10 +36,53 @@ function load(): PcmState {
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PcmState>(load)
+  const { das, setDAStatus } = useVendor()
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
+
+  // Tie: an approved (or settled) DA auto-creates a pending Purser payment
+  // to its party for the final total — created once, keyed on the DA ref.
+  useEffect(() => {
+    const toCreate = das.filter(
+      (d) =>
+        (d.status === 'approved' || d.status === 'settled') &&
+        !state.payments.some((p) => p.reference === d.ref),
+    )
+    if (toCreate.length === 0) return
+    setState((s) => {
+      const existing = new Set(s.payments.map((p) => p.reference))
+      const created: Payment[] = toCreate
+        .filter((d) => !existing.has(d.ref))
+        .map((d) => ({
+          id: uid('pay'),
+          ref: `PAY-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+          counterparty: d.party,
+          type: 'Agent',
+          vessel: d.vessel,
+          port: d.port,
+          amount: d.lines.reduce((sum, l) => sum + (l.actual ?? l.proforma), 0),
+          currency: d.currency,
+          method: 'SWIFT',
+          status: 'pending',
+          reference: d.ref,
+          createdAt: stamp(),
+          updatedAt: stamp(),
+        }))
+      if (created.length === 0) return s
+      return { ...s, payments: [...created, ...s.payments] }
+    })
+  }, [das, state.payments])
+
+  // Tie: a settled payment closes its DA — flips the linked DA to settled.
+  useEffect(() => {
+    for (const p of state.payments) {
+      if (p.status !== 'settled') continue
+      const da = das.find((d) => d.ref === p.reference)
+      if (da && da.status !== 'settled') setDAStatus(da.id, 'settled')
+    }
+  }, [state.payments, das, setDAStatus])
 
   const value = useMemo<FinanceValue>(() => {
     return {

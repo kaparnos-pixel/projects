@@ -2356,3 +2356,21 @@ button {
     grid-template-columns: 100px 1fr 50px;
   }
 }
+
+.reset-demo {
+  margin-top: 12px;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8cbdb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.reset-demo:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}

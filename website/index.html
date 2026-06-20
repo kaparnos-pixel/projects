@@ -9,6 +9,13 @@
       content="BEACON unifies the entire port call — discover, communicate, contract, procure, cost-control, pay and audit — into one auditable platform. Agent Hub appoints agents; Vendor Dock sources suppliers; PCM and Purser close the money loop."
     />
     <link rel="icon" type="image/svg+xml" href="beacon.svg" />
+    <meta name="theme-color" content="#07263a" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -24,26 +31,43 @@
         <a href="#market">Market</a>
         <a href="#pricing">Pricing</a>
       </nav>
-      <a class="btn btn-primary" href="/projects/app/">Launch app →</a>
+      <a class="btn btn-primary header-cta" href="/projects/app/">Launch app →</a>
     </header>
 
     <main id="top">
       <!-- Hero -->
       <section class="hero">
+        <div class="hero-glow" aria-hidden></div>
         <div class="hero-inner">
-          <span class="eyebrow">BEACON Maritime Technologies</span>
-          <h1>The operating system for<br /><span class="hl">global port calls.</span></h1>
+          <span class="eyebrow">
+            <span class="eyebrow-dot"></span> BEACON Maritime Technologies
+          </span>
+          <h1>The operating system for<br /><span class="hl">global port&nbsp;calls.</span></h1>
           <p class="lede">
             Today a single port call is run across email, PDFs, chat apps and spreadsheets — with no
             shared, auditable record. BEACON unifies the entire chain into one platform, from agent
             appointment to final settlement.
           </p>
           <div class="hero-cta">
-            <a class="btn btn-primary btn-lg" href="/projects/app/">Launch Agent Hub →</a>
-            <a class="btn btn-ghost btn-lg" href="#ecosystem">Explore the ecosystem</a>
+            <a class="btn btn-amber btn-lg" href="/projects/app/">Launch Agent Hub →</a>
+            <a class="btn btn-glass btn-lg" href="#ecosystem">Explore the ecosystem</a>
           </div>
           <div class="chain">
             <span>Discover</span><i>→</i><span>Communicate</span><i>→</i><span>Contract</span><i>→</i><span>Procure</span><i>→</i><span>Cost-control</span><i>→</i><span>Pay</span><i>→</i><span>Audit</span>
+          </div>
+          <div class="hero-stats">
+            <div class="hero-stat">
+              <strong>7-step</strong>
+              <span>port call unified end to end</span>
+            </div>
+            <div class="hero-stat">
+              <strong>4 modules</strong>
+              <span>Agent Hub · Vendor Dock · PCM · Purser</span>
+            </div>
+            <div class="hero-stat">
+              <strong>Auditable</strong>
+              <span>every action on the record</span>
+            </div>
           </div>
         </div>
       </section>
@@ -218,23 +242,81 @@
         </div>
       </section>
 
-      <!-- Pricing / business model -->
+      <!-- Pricing tiers -->
       <section id="pricing" class="section">
-        <div class="section-head">
-          <h2>Land with low-friction subscriptions, expand on transactions</h2>
-          <p>BEACON monetises on multiple reinforcing layers.</p>
+        <div class="section-head center">
+          <span class="eyebrow-pill">Pricing</span>
+          <h2>Start free. Scale per port call.</h2>
+          <p>
+            Agent Hub subscription tiers. PCM, Vendor Dock and Purser are billed separately; Purser adds
+            a take-rate on settled payment volume. Every plan includes the auditable record, secure chat
+            and the verified directory.
+          </p>
         </div>
-        <div class="grid-3 revenue">
-          <article class="card"><span class="rev-n">01</span><h3>SaaS subscription</h3><p>Tiered access to Agent Hub, Vendor Dock and PCM — priced per seat, per vessel, or per managed port call.</p></article>
-          <article class="card"><span class="rev-n">02</span><h3>Purser take-rate</h3><p>A margin on payment volume settled through the platform — the highest-leverage long-term revenue line.</p></article>
-          <article class="card"><span class="rev-n">03</span><h3>Marketplace fees</h3><p>Featured listings, verified-supplier status and placement fees on Vendor Dock.</p></article>
-          <article class="card"><span class="rev-n">04</span><h3>Premium compliance</h3><p>Pre-audited contract templates and enhanced due-diligence for customers with heavy regulatory exposure.</p></article>
-          <article class="card"><span class="rev-n">05</span><h3>Data &amp; benchmarking</h3><p>Anonymised port-cost benchmarking and analytics as a premium PCM module.</p></article>
-          <article class="card cta-card">
-            <h3>See Agent Hub in action</h3>
-            <p>Explore the live appointment workspace.</p>
-            <a class="btn btn-primary" href="/projects/app/">Launch app →</a>
+
+        <div class="pricing-grid">
+          <article class="plan">
+            <div class="plan-head">
+              <span class="plan-name">Starter</span>
+              <p class="plan-desc">For single operators trialling agent appointment in the UAE.</p>
+            </div>
+            <div class="plan-price"><span class="plan-cur">$</span>0<span class="plan-period">/mo</span></div>
+            <a class="btn btn-outline plan-cta" href="/projects/app/">Get started</a>
+            <ul class="plan-features">
+              <li>Up to 5 appointed agents</li>
+              <li>25 managed port calls / month</li>
+              <li>Secure chat &amp; auditable record</li>
+              <li>Community support</li>
+            </ul>
           </article>
+
+          <article class="plan plan-featured">
+            <span class="plan-badge">Most popular</span>
+            <div class="plan-head">
+              <span class="plan-name">Pro</span>
+              <p class="plan-desc">For fleets coordinating agents &amp; husbandry across multiple ports.</p>
+            </div>
+            <div class="plan-price"><span class="plan-cur">$</span>499<span class="plan-period">/mo</span></div>
+            <a class="btn btn-amber plan-cta" href="/projects/app/">Launch Agent Hub →</a>
+            <ul class="plan-features">
+              <li>Up to 50 agents &amp; husbandry providers</li>
+              <li>500 managed port calls / month</li>
+              <li>Pre-audited contract templates &amp; ledger storage</li>
+              <li>Priority support · 99.9% SLA</li>
+            </ul>
+          </article>
+
+          <article class="plan">
+            <div class="plan-head">
+              <span class="plan-name">Enterprise</span>
+              <p class="plan-desc">For global operators with heavy compliance &amp; cross-border exposure.</p>
+            </div>
+            <div class="plan-price plan-price-custom">Custom</div>
+            <a class="btn btn-outline plan-cta" href="mailto:hello@beacon.io">Talk to sales</a>
+            <ul class="plan-features">
+              <li>Unlimited agents &amp; managed port calls</li>
+              <li>Premium compliance &amp; enhanced due-diligence</li>
+              <li>SSO / SAML, custom roles &amp; data residency</li>
+              <li>Dedicated success manager &amp; DPA</li>
+            </ul>
+          </article>
+        </div>
+        <p class="pricing-note">Annual billing saves 15%. No card required for Starter.</p>
+      </section>
+
+      <!-- Business model -->
+      <section id="model" class="section section-alt">
+        <div class="section-head center">
+          <span class="eyebrow-pill">Business model</span>
+          <h2>Land with low-friction subscriptions, expand on transactions</h2>
+          <p>Beyond subscriptions, BEACON monetises on multiple reinforcing layers.</p>
+        </div>
+        <div class="revenue-grid">
+          <article class="rev-card"><span class="rev-n">01</span><h3>SaaS subscription</h3><p>Tiered access to Agent Hub, Vendor Dock and PCM — per seat, per vessel, or per managed port call.</p></article>
+          <article class="rev-card"><span class="rev-n">02</span><h3>Purser take-rate</h3><p>A margin on payment volume settled through the platform — the highest-leverage long-term line.</p></article>
+          <article class="rev-card"><span class="rev-n">03</span><h3>Marketplace fees</h3><p>Featured listings, verified-supplier status and placement fees on Vendor Dock.</p></article>
+          <article class="rev-card"><span class="rev-n">04</span><h3>Premium compliance</h3><p>Pre-audited contract templates and enhanced due-diligence for regulated customers.</p></article>
+          <article class="rev-card"><span class="rev-n">05</span><h3>Data &amp; benchmarking</h3><p>Anonymised port-cost benchmarking and analytics as a premium PCM module.</p></article>
         </div>
       </section>
 

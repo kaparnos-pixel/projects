@@ -10,6 +10,11 @@ import Contracts from './pages/Contracts'
 import PortCalls from './pages/PortCalls'
 import Audit from './pages/Audit'
 import Subscription from './pages/Subscription'
+import VendorOverview from './pages/vendor/VendorOverview'
+import Marketplace from './pages/vendor/Marketplace'
+import Offers from './pages/vendor/Offers'
+import DATracking from './pages/vendor/DATracking'
+import SOF from './pages/vendor/SOF'
 
 export default function App() {
   return (
@@ -29,6 +34,11 @@ export default function App() {
         <Route path="contracts" element={<Contracts />} />
         <Route path="port-calls" element={<PortCalls />} />
         <Route path="audit" element={<Audit />} />
+        <Route path="vendor" element={<VendorOverview />} />
+        <Route path="vendor/marketplace" element={<Marketplace />} />
+        <Route path="vendor/offers" element={<Offers />} />
+        <Route path="vendor/da" element={<DATracking />} />
+        <Route path="vendor/sof" element={<SOF />} />
         <Route path="subscription" element={<Subscription />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

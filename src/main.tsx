@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './auth/AuthContext'
+import { VendorProvider } from './vendor/VendorContext'
 import './styles/global.css'
 
 // In production the app is hosted under a sub-path (e.g. /projects/app/);
@@ -13,7 +14,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter basename={basename || undefined}>
       <AuthProvider>
-        <App />
+        <VendorProvider>
+          <App />
+        </VendorProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,

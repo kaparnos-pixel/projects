@@ -2,10 +2,30 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { flowStages } from '../data/workflow'
 
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: '🛰️', end: true },
-  ...flowStages.map((s) => ({ to: s.route, label: stageNav(s.key), icon: s.icon, end: false })),
-  { to: '/subscription', label: 'Subscription', icon: '💳', end: false },
+interface NavItem {
+  to: string
+  label: string
+  icon: string
+  end: boolean
+}
+
+const navGroups: { title: string | null; items: NavItem[] }[] = [
+  { title: null, items: [{ to: '/', label: 'Dashboard', icon: '🛰️', end: true }] },
+  {
+    title: 'Agent Hub · Appointment',
+    items: flowStages.map((s) => ({ to: s.route, label: stageNav(s.key), icon: s.icon, end: false })),
+  },
+  {
+    title: 'Vendor Dock · Supply',
+    items: [
+      { to: '/vendor', label: 'Overview', icon: '🚢', end: true },
+      { to: '/vendor/marketplace', label: 'Marketplace', icon: '🛒', end: false },
+      { to: '/vendor/offers', label: 'Offers & Quotes', icon: '🧾', end: false },
+      { to: '/vendor/da', label: 'DA Tracking', icon: '💱', end: false },
+      { to: '/vendor/sof', label: 'SOF', icon: '📑', end: false },
+    ],
+  },
+  { title: 'Account', items: [{ to: '/subscription', label: 'Subscription', icon: '💳', end: false }] },
 ]
 
 function stageNav(key: string): string {
@@ -52,18 +72,23 @@ export default function Layout() {
         </div>
 
         <nav className="nav">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
-            >
-              <span className="nav-icon" aria-hidden>
-                {item.icon}
-              </span>
-              {item.label}
-            </NavLink>
+          {navGroups.map((group, gi) => (
+            <div className="nav-group" key={group.title ?? `g${gi}`}>
+              {group.title && <span className="nav-group-title">{group.title}</span>}
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+                >
+                  <span className="nav-icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 
@@ -73,7 +98,7 @@ export default function Layout() {
             <span className="eco-dot port" /> Agent Hub
             <em>appointment</em>
           </div>
-          <div className="eco-item" title="Supply side — separate product">
+          <div className="eco-item active">
             <span className="eco-dot starboard" /> Vendor Dock
             <em>supply</em>
           </div>
@@ -88,8 +113,8 @@ export default function Layout() {
         </div>
 
         <div className="sidebar-foot">
-          <div className="layer-chip">Appointment layer</div>
-          <p>Operators · Charterers · Fleet managers · Port-ops</p>
+          <div className="layer-chip">Appointment + Supply</div>
+          <p>Operators · Charterers · Agents · Suppliers · Port-ops</p>
         </div>
       </aside>
 

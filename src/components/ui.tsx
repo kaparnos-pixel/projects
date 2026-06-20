@@ -44,6 +44,16 @@ const toneByLabel: Record<string, string> = {
   active: 'good',
   trialing: 'info',
   'past-due': 'bad',
+  // vendor — offers
+  requested: 'muted',
+  quoted: 'info',
+  accepted: 'good',
+  declined: 'bad',
+  // vendor — disbursement accounts
+  'pro-forma': 'muted',
+  submitted: 'info',
+  approved: 'warn',
+  settled: 'good',
 }
 
 export function Badge({ label }: { label: string }) {

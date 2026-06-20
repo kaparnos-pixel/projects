@@ -822,3 +822,7 @@ h3 {
     padding: 70px 6vw;
   }
 }
+
+.module-live-green {
+  color: var(--starboard-green);
+}

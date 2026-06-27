@@ -8,6 +8,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "build:site": "tsc --noEmit && vite build && node scripts/assemble-site.mjs",
+    "serve:site": "node scripts/serve-site.mjs",
+    "start:site": "npm run build:site && node scripts/serve-site.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },

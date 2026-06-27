@@ -1,43 +1,37 @@
-import { useMemo, useState } from 'react'
-import { Card, PageHeader } from '../components/ui'
-import { auditEntries } from '../data/mock'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { usePlatform } from '../platform/PlatformContext'
+import { Badge, Card, PageHeader } from '../components/ui'
 import type { AuditCategory } from '../data/types'
 
-const categories: { key: AuditCategory | 'all'; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'discovery', label: 'Discovery' },
-  { key: 'onboarding', label: 'Onboarding' },
-  { key: 'chat', label: 'Chat' },
-  { key: 'contract', label: 'Contracts' },
-  { key: 'port-call', label: 'Port calls' },
-  { key: 'security', label: 'Security' },
+const CATEGORIES: (AuditCategory | 'all')[] = [
+  'all',
+  'appointment',
+  'pda',
+  'funding',
+  'execution',
+  'fda',
+  'settlement',
+  'network',
 ]
 
 export default function Audit() {
-  const [filter, setFilter] = useState<AuditCategory | 'all'>('all')
+  const platform = usePlatform()
+  const [cat, setCat] = useState<AuditCategory | 'all'>('all')
 
-  const entries = useMemo(
-    () => (filter === 'all' ? auditEntries : auditEntries.filter((e) => e.category === filter)),
-    [filter],
-  )
+  const entries = platform.audit.filter((e) => cat === 'all' || e.category === cat)
 
   return (
     <div className="stack">
       <PageHeader
-        title="Auditable comms"
-        subtitle="An immutable, hash-chained record of every action taken in the Agent Hub."
-        action={<button className="btn btn-ghost">⬇ Export trail (CSV)</button>}
+        title="Audit Trail"
+        subtitle="Every input across the appointment, disbursement, funding and settlement lifecycle is recorded with an actor, timestamp and hash, giving all three parties a single transparent financial record."
       />
 
       <div className="tabs">
-        {categories.map((c) => (
-          <button
-            key={c.key}
-            type="button"
-            className={`tab${filter === c.key ? ' active' : ''}`}
-            onClick={() => setFilter(c.key)}
-          >
-            {c.label}
+        {CATEGORIES.map((c) => (
+          <button key={c} className={`tab${cat === c ? ' active' : ''}`} onClick={() => setCat(c)}>
+            {c === 'all' ? 'All' : c.charAt(0).toUpperCase() + c.slice(1)}
           </button>
         ))}
       </div>
@@ -50,35 +44,36 @@ export default function Audit() {
               <th>Actor</th>
               <th>Action</th>
               <th>Detail</th>
+              <th>Voyage</th>
               <th>Hash</th>
             </tr>
           </thead>
           <tbody>
             {entries.map((e) => (
               <tr key={e.id}>
-                <td className="mono nowrap">{e.time}</td>
+                <td className="audit-foot mono nowrap">{e.at}</td>
                 <td>
                   <div className="audit-actor">
-                    <span className={`dot dot-${e.category}`} aria-hidden />
                     <div>
                       <strong>{e.actor}</strong>
-                      <span className="mini-meta">{e.role}</span>
+                      <Badge label={e.role} tone="info" />
                     </div>
                   </div>
                 </td>
-                <td>{e.action}</td>
+                <td><strong>{e.action}</strong><div><Badge label={e.category} /></div></td>
                 <td className="audit-detail">{e.detail}</td>
-                <td className="mono nowrap">{e.hash}</td>
+                <td className="mono">
+                  {e.voyageId ? <Link className="link" to={`/voyages/${e.voyageId}`}>{e.voyageId}</Link> : '—'}
+                </td>
+                <td className="audit-foot mono">{e.hash}</td>
               </tr>
             ))}
+            {entries.length === 0 && (
+              <tr><td colSpan={6} className="empty">No entries in this category.</td></tr>
+            )}
           </tbody>
         </table>
       </Card>
-
-      <p className="audit-foot">
-        🔒 {entries.length} record{entries.length === 1 ? '' : 's'} · each entry is SHA-256 chained to
-        the previous; tampering breaks the chain.
-      </p>
     </div>
   )
 }

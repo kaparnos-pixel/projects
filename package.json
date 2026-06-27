@@ -1,9 +1,9 @@
 {
-  "name": "beacon-agent-hub",
+  "name": "ausglobal-ship-agency-hub",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "BEACON ecosystem — Agent Hub portal for maritime agent discovery, onboarding, secure chat, contract negotiation & storage, port-call coordination and auditable comms.",
+  "description": "AusGlobal Ship Agency Hub — the HUB-agent operating platform: sub-agent network, port-call appointments, PDA/FDA disbursement, pre-funding control, Statement of Facts, line-by-line audit and a Voyage-ID document repository.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

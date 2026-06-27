@@ -1,19 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { getAccounts, useAuth } from '../auth/AuthContext'
-import { tierName } from '../auth/entitlements'
+import { planAccess, tierName } from '../auth/entitlements'
 import { plans } from '../data/billing'
 import type { PlanTier, UserRole } from '../data/types'
 
 type Mode = 'signup' | 'signin' | 'reset'
 
-const roles: UserRole[] = ['Operator', 'Charterer', 'Fleet Manager', 'Port-Ops']
+const roles: UserRole[] = ['Hub Manager', 'Principal', 'Sub-Agent']
 
-const accessSummary: Record<PlanTier, string> = {
-  starter: 'Agent Hub',
-  pro: 'Agent Hub + Vendor Dock',
-  enterprise: 'Everything, incl. PCM & Purser',
-}
+const accessSummary: Record<PlanTier, string> = planAccess
 
 function priceLabel(price: number | null): string {
   if (price === null) return 'Custom'
@@ -33,7 +29,7 @@ export default function Login() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<UserRole>('Operator')
+  const [role, setRole] = useState<UserRole>('Hub Manager')
   const [tier, setTier] = useState<PlanTier>('starter')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -71,8 +67,8 @@ export default function Login() {
     reset: 'Reset your password',
   }
   const subtitles: Record<Mode, string> = {
-    signup: 'Pick a plan to get started. It sets which modules you can open.',
-    signin: 'Sign in to your BEACON workspace.',
+    signup: 'Pick your role and plan to get started on the AusGlobal hub.',
+    signin: 'Sign in to your AusGlobal workspace.',
     reset: 'Enter your email and a new password.',
   }
 
@@ -80,10 +76,10 @@ export default function Login() {
     <div className="login-screen">
       <div className="login-card">
         <div className="login-brand">
-          <img src="/beacon.svg" alt="BEACON" width={44} height={44} />
+          <img src="/ausglobal.svg" alt="AusGlobal" width={44} height={44} />
           <div>
-            <strong>BEACON</strong>
-            <span>Agent Hub</span>
+            <strong>AusGlobal</strong>
+            <span>Ship Agency Hub</span>
           </div>
         </div>
 
@@ -208,7 +204,7 @@ export default function Login() {
             </>
           ) : (
             <>
-              New to BEACON?{' '}
+              New to AusGlobal?{' '}
               <button type="button" className="link-btn" onClick={() => go('signup')}>
                 Create an account
               </button>

@@ -1,0 +1,13 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AusGlobal">
+  <circle cx="32" cy="32" r="30" fill="#07263a"/>
+  <circle cx="32" cy="32" r="21" fill="none" stroke="#4aa3df" stroke-width="2"/>
+  <!-- meridians / parallels (globe) -->
+  <ellipse cx="32" cy="32" rx="9" ry="21" fill="none" stroke="#1c5777" stroke-width="1.6"/>
+  <line x1="11" y1="32" x2="53" y2="32" stroke="#1c5777" stroke-width="1.6"/>
+  <path d="M14 23 H50" stroke="#1c5777" stroke-width="1.3"/>
+  <path d="M14 41 H50" stroke="#1c5777" stroke-width="1.3"/>
+  <!-- bearing / compass needle in amber -->
+  <path d="M32 12 L38 34 L32 30 L26 34 Z" fill="#f5b301"/>
+  <path d="M32 52 L26 30 L32 34 L38 30 Z" fill="#cfe0ec"/>
+  <circle cx="32" cy="32" r="3.2" fill="#f5b301" stroke="#07263a" stroke-width="1.4"/>
+</svg>

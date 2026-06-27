@@ -1,7 +1,7 @@
 name: Deploy website to GitHub Pages
 
 # Publishes the static marketing site (website/) at the Pages root and the
-# Agent Hub portal (built from the repo root) under /app/.
+# AusGlobal platform (built from the repo root) under /app/.
 # Requires repo Settings → Pages → Source = "GitHub Actions" (one-time).
 
 on:
@@ -49,7 +49,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Agent Hub portal
+      - name: Build AusGlobal platform
         run: npm run build
 
       - name: Assemble site (marketing at root, app under /app)

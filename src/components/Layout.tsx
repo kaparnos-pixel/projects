@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { getOwnerEmail, useAuth } from '../auth/AuthContext'
-import { tierName } from '../auth/entitlements'
 import { usePlatform } from '../platform/PlatformContext'
 import type { UserRole } from '../data/types'
 
@@ -39,7 +38,6 @@ const navGroups: NavGroup[] = [
       { to: '/services', label: 'Services portfolio', icon: '🧰' },
     ],
   },
-  { title: 'Account', items: [{ to: '/subscription', label: 'Subscription', icon: '💳' }] },
   {
     title: 'Admin',
     ownerOnly: true,
@@ -147,11 +145,6 @@ export default function Layout() {
             <button className="ghost-btn" type="button">
               🔔
             </button>
-            {user && (
-              <NavLink to="/subscription" className={`tier-badge tier-${user.tier}`} title="Your plan">
-                {tierName[user.tier]}
-              </NavLink>
-            )}
             <div className="user-menu">
               <button className="user-pill" type="button" onClick={() => setMenuOpen((v) => !v)}>
                 <div className="avatar">{user?.initials ?? 'HM'}</div>

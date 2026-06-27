@@ -1,21 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { getAccounts, useAuth } from '../auth/AuthContext'
-import { planAccess, tierName } from '../auth/entitlements'
-import { plans } from '../data/billing'
-import type { PlanTier, UserRole } from '../data/types'
+import type { UserRole } from '../data/types'
 
 type Mode = 'signup' | 'signin' | 'reset'
 
 const roles: UserRole[] = ['Hub Manager', 'Principal', 'Sub-Agent']
-
-const accessSummary: Record<PlanTier, string> = planAccess
-
-function priceLabel(price: number | null): string {
-  if (price === null) return 'Custom'
-  if (price === 0) return 'Free'
-  return `$${price}/mo`
-}
 
 export default function Login() {
   const { login, register, resetPassword } = useAuth()
@@ -30,7 +20,6 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<UserRole>('Hub Manager')
-  const [tier, setTier] = useState<PlanTier>('starter')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
@@ -38,7 +27,7 @@ export default function Login() {
     e.preventDefault()
     setError('')
     if (mode === 'signup') {
-      const r = register({ name, email, password, role, tier })
+      const r = register({ name, email, password, role })
       r.ok ? navigate(from, { replace: true }) : setError(r.error)
     } else if (mode === 'signin') {
       const r = login(email, password)
@@ -67,7 +56,7 @@ export default function Login() {
     reset: 'Reset your password',
   }
   const subtitles: Record<Mode, string> = {
-    signup: 'Pick your role and plan to get started on the AusGlobal hub.',
+    signup: 'Pick your role to get started on the AusGlobal hub.',
     signin: 'Sign in to your AusGlobal workspace.',
     reset: 'Enter your email and a new password.',
   }
@@ -105,7 +94,6 @@ export default function Login() {
                     <strong>{a.name}</strong>
                     <span>{a.role}</span>
                   </span>
-                  <span className={`tier-badge tier-${a.tier}`}>{tierName[a.tier]}</span>
                 </button>
               ))}
             </div>
@@ -151,31 +139,6 @@ export default function Login() {
                 ))}
               </select>
             </label>
-          )}
-
-          {mode === 'signup' && (
-            <fieldset className="plan-pick">
-              <legend>Choose your plan</legend>
-              {plans.map((p) => (
-                <button
-                  type="button"
-                  key={p.tier}
-                  className={`plan-pick-row${tier === p.tier ? ' selected' : ''}`}
-                  onClick={() => setTier(p.tier)}
-                  aria-pressed={tier === p.tier}
-                >
-                  <span className="ppr-radio" aria-hidden />
-                  <span className="ppr-main">
-                    <span className="ppr-top">
-                      <strong>{p.name}</strong>
-                      {p.tier === 'pro' && <span className="ppr-pop">Popular</span>}
-                    </span>
-                    <span className="ppr-access">{accessSummary[p.tier]}</span>
-                  </span>
-                  <span className="ppr-price">{priceLabel(p.priceMonthly)}</span>
-                </button>
-              ))}
-            </fieldset>
           )}
 
           {notice && <div className="login-notice">{notice}</div>}

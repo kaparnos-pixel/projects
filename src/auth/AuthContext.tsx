@@ -1,12 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { PlanTier, UserRole } from '../data/types'
+import type { UserRole } from '../data/types'
 
 export interface SessionUser {
   email: string
   name: string
   initials: string
   role: UserRole
-  tier: PlanTier
 }
 
 interface StoredUser extends SessionUser {
@@ -18,7 +17,6 @@ export interface RegisterInput {
   email: string
   password: string
   role: UserRole
-  tier: PlanTier
 }
 
 export interface AccountSummary {
@@ -26,7 +24,6 @@ export interface AccountSummary {
   name: string
   initials: string
   role: UserRole
-  tier: PlanTier
 }
 
 type Result = { ok: true } | { ok: false; error: string }
@@ -37,9 +34,7 @@ interface AuthValue {
   register: (input: RegisterInput) => Result
   resetPassword: (email: string, newPassword: string) => Result
   logout: () => void
-  setTier: (tier: PlanTier) => void
   // Owner-only account management
-  adminSetTier: (email: string, tier: PlanTier) => void
   adminSetPassword: (email: string, newPassword: string) => Result
   adminDeleteUser: (email: string) => void
 }
@@ -76,8 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem(SESSION_KEY)
       if (!raw) return null
-      const parsed = JSON.parse(raw) as SessionUser
-      return { ...parsed, tier: parsed.tier ?? 'starter' }
+      return JSON.parse(raw) as SessionUser
     } catch {
       return null
     }
@@ -100,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: true }
       },
 
-      register({ name, email, password, role, tier }) {
+      register({ name, email, password, role }) {
         const e = email.trim().toLowerCase()
         if (!name.trim()) return { ok: false, error: 'Please enter your name.' }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return { ok: false, error: 'Please enter a valid email.' }
@@ -114,7 +108,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name: name.trim(),
           initials: initialsOf(name),
           role,
-          tier,
           password,
         }
         saveUsers([...users, newUser])
@@ -135,24 +128,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       logout() {
         setUser(null)
-      },
-
-      setTier(tier) {
-        setUser((u) => {
-          if (!u) return u
-          // Persist the tier on the stored account too, so it sticks on next sign-in.
-          const users = loadUsers().map((su) =>
-            su.email.toLowerCase() === u.email.toLowerCase() ? { ...su, tier } : su,
-          )
-          saveUsers(users)
-          return { ...u, tier }
-        })
-      },
-
-      adminSetTier(email, tier) {
-        const e = email.trim().toLowerCase()
-        saveUsers(loadUsers().map((su) => (su.email.toLowerCase() === e ? { ...su, tier } : su)))
-        setUser((u) => (u && u.email.toLowerCase() === e ? { ...u, tier } : u))
       },
 
       adminSetPassword(email, newPassword) {

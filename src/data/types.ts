@@ -11,8 +11,6 @@
 
 export type UserRole = 'Hub Manager' | 'Principal' | 'Sub-Agent'
 
-export type PlanTier = 'starter' | 'pro' | 'enterprise'
-
 // ---------------------------------------------------------------------------
 // Voyage lifecycle
 // ---------------------------------------------------------------------------
@@ -264,54 +262,4 @@ export interface ServiceCategory {
   icon: string
   blurb: string
   items: string[]
-}
-
-// ---------------------------------------------------------------------------
-// Billing / subscription (SaaS layer)
-// ---------------------------------------------------------------------------
-
-export interface Plan {
-  tier: PlanTier
-  name: string
-  priceMonthly: number | null // null = custom / contact sales
-  blurb: string
-  highlights: string[]
-  limits: {
-    voyagesPerMonth: number | null
-    subAgents: number | null
-    seats: number | null
-  }
-}
-
-export interface UsageMetric {
-  label: string
-  used: number
-  limit: number | null
-  unit: string
-}
-
-export type InvoiceStatus = 'paid' | 'due' | 'failed'
-
-export interface Invoice {
-  id: string
-  number: string
-  date: string
-  amount: string
-  status: InvoiceStatus
-  period: string
-}
-
-export interface PaymentMethod {
-  brand: string
-  last4: string
-  expiry: string
-  holder: string
-}
-
-export interface Subscription {
-  tier: PlanTier
-  status: 'active' | 'trialing' | 'past-due'
-  billingCycle: 'monthly' | 'annual'
-  renewsOn: string
-  seatsUsed: number
 }

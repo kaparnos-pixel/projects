@@ -1,24 +1,14 @@
 import { useState } from 'react'
 import { Card, PageHeader } from '../components/ui'
 import { getAccounts, getOwnerEmail, useAuth, type AccountSummary } from '../auth/AuthContext'
-import { tierName } from '../auth/entitlements'
-import type { PlanTier } from '../data/types'
-
-const tiers: PlanTier[] = ['starter', 'pro', 'enterprise']
 
 export default function Users() {
-  const { user, adminSetTier, adminSetPassword, adminDeleteUser } = useAuth()
+  const { user, adminSetPassword, adminDeleteUser } = useAuth()
   const [accounts, setAccounts] = useState<AccountSummary[]>(() => getAccounts())
   const [notice, setNotice] = useState('')
 
   const ownerEmail = getOwnerEmail()
   const refresh = () => setAccounts(getAccounts())
-
-  function changeTier(email: string, tier: PlanTier) {
-    adminSetTier(email, tier)
-    refresh()
-    setNotice(`Updated ${email} to ${tierName[tier]}.`)
-  }
 
   function resetPw(email: string) {
     const pw = window.prompt(`Set a new password for ${email} (min 6 characters):`)
@@ -53,7 +43,6 @@ export default function Users() {
             <tr>
               <th>User</th>
               <th>Role</th>
-              <th>Plan</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -78,19 +67,6 @@ export default function Users() {
                   </td>
                   <td>{a.role}</td>
                   <td>
-                    <select
-                      className="tier-select"
-                      value={a.tier}
-                      onChange={(e) => changeTier(a.email, e.target.value as PlanTier)}
-                    >
-                      {tiers.map((t) => (
-                        <option key={t} value={t}>
-                          {tierName[t]}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
                     <div className="row-actions">
                       <button className="btn btn-ghost btn-sm" onClick={() => resetPw(a.email)}>
                         Reset password
@@ -105,7 +81,7 @@ export default function Users() {
             })}
             {accounts.length === 0 && (
               <tr>
-                <td colSpan={4}>
+                <td colSpan={3}>
                   <div className="empty">No accounts yet.</div>
                 </td>
               </tr>

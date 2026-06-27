@@ -52,7 +52,6 @@ Key rules from the business model are enforced in the workflow:
 | `/audit` | Audit trail | Hashed, filterable record of every action. |
 | `/contracts` | Contracts & SLAs | Sub-agent frame agreement & principal master SLA drafts. |
 | `/services` | Services portfolio | Port agency, OPA, husbandry and vessel life-cycle support. |
-| `/subscription` | Subscription | The SaaS plan for the hub workspace. |
 | `/admin/users` | Users | Workspace-owner account management. |
 
 ## Roles

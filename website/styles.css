@@ -702,6 +702,9 @@ h3 {
   grid-template-columns: repeat(5, 1fr);
   gap: 16px;
 }
+.revenue-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
 .rev-card {
   background: #fff;
   border: 1px solid var(--slate-200);

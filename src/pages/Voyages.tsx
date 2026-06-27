@@ -5,6 +5,7 @@ import { usePlatform, type NewVoyageInput } from '../platform/PlatformContext'
 import { Badge, Card, PageHeader } from '../components/ui'
 import { stageMeta } from '../data/lifecycle'
 import { pdaTotal, usd } from '../data/calc'
+import { agencyFeeBandFor, suggestedAgencyFee } from '../data/seed'
 import type { VoyagePhase } from '../data/types'
 
 const phaseLabel: Record<VoyagePhase, string> = {
@@ -142,13 +143,19 @@ function AppointModal({ onClose }: { onClose: () => void }) {
     eta: '2026-07-10',
     etd: '2026-07-13',
     services: ['Port Agency'],
-    agencyFee: 5000,
+    agencyFee: suggestedAgencyFee(VESSEL_TYPES[0]),
   })
 
   function set<K extends keyof NewVoyageInput>(k: K, val: NewVoyageInput[K]) {
     setForm((f) => ({ ...f, [k]: val }))
   }
 
+  // Picking a vessel type also snaps the agency fee to the typical band midpoint.
+  function pickVesselType(t: string) {
+    setForm((f) => ({ ...f, vesselType: t, agencyFee: suggestedAgencyFee(t) }))
+  }
+
+  const band = agencyFeeBandFor(form.vesselType)
   const valid = form.vessel.trim() && form.imo.trim() && form.cargo.trim() && form.principalId
 
   return (
@@ -169,7 +176,7 @@ function AppointModal({ onClose }: { onClose: () => void }) {
           </label>
           <label>
             Vessel type
-            <select value={form.vesselType} onChange={(e) => set('vesselType', e.target.value)}>
+            <select value={form.vesselType} onChange={(e) => pickVesselType(e.target.value)}>
               {VESSEL_TYPES.map((t) => <option key={t}>{t}</option>)}
             </select>
           </label>
@@ -194,6 +201,11 @@ function AppointModal({ onClose }: { onClose: () => void }) {
           <label>
             Agency fee (USD)
             <input type="number" value={form.agencyFee} onChange={(e) => set('agencyFee', Number(e.target.value))} />
+            {band && (
+              <span className="muted-text" style={{ fontWeight: 400 }}>
+                Typical for this vessel type: {usd(band.low)}–{usd(band.high)}
+              </span>
+            )}
           </label>
           <label>
             ETA

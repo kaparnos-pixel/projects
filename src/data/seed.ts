@@ -249,6 +249,30 @@ export const seedPrincipals: Principal[] = [
 ]
 
 // ---------------------------------------------------------------------------
+// Typical agency-fee ranges by vessel type (USD), from the business model's
+// market research. Used to guide the agency fee when appointing a port call.
+// ---------------------------------------------------------------------------
+export const agencyFeeBands: { type: string; low: number; high: number }[] = [
+  { type: 'Handysize bulk carrier', low: 2500, high: 4500 },
+  { type: 'Supramax bulk carrier', low: 3000, high: 5500 },
+  { type: 'Panamax bulk carrier', low: 3500, high: 6500 },
+  { type: 'Capesize bulk carrier', low: 5000, high: 9500 },
+  { type: 'Product / chemical tanker', low: 4500, high: 9500 },
+  { type: 'Aframax tanker', low: 5500, high: 10500 },
+  { type: 'VLCC tanker', low: 6500, high: 12500 },
+  { type: 'Container vessel', low: 4500, high: 8500 },
+]
+
+export function agencyFeeBandFor(type: string): { low: number; high: number } | undefined {
+  return agencyFeeBands.find((b) => type === b.type || type.startsWith(b.type))
+}
+
+export function suggestedAgencyFee(type: string): number {
+  const b = agencyFeeBandFor(type)
+  return b ? Math.round((b.low + b.high) / 2 / 100) * 100 : 5000
+}
+
+// ---------------------------------------------------------------------------
 // Standardised Port DA tariff reference (drives EDI variance flagging)
 // ---------------------------------------------------------------------------
 export const seedTariffs: PortTariff[] = [
@@ -628,7 +652,62 @@ export const seedVoyages: Voyage[] = [
     ],
     createdAt: '2026-06-05 09:00',
   },
-  // 6) Settled — fully closed & archived
+  // 6) Sailed — FDA pending against the 30-day SLA
+  {
+    id: 'AUS-2026-0046',
+    vessel: 'MT Coral Trader',
+    imo: '9663140',
+    vesselType: 'Product / chemical tanker',
+    gt: 28900,
+    port: 'Fujairah',
+    country: 'United Arab Emirates',
+    countryCode: 'AE',
+    cargo: '31,000 mt jet fuel (load)',
+    principalId: 'pr-coraline',
+    subAgentId: 'sa-fjr',
+    hubManager: 'Liam Harper',
+    stage: 'sailed',
+    eta: '2026-06-18',
+    etd: '2026-06-21',
+    services: ['Port Agency', 'Bunker call', 'Fresh water'],
+    agencyFee: 7000,
+    daLines: [
+      line('l1', 'Pilotage', 'Inward & outward pilotage', 3400, 3600),
+      line('l2', 'Towage / Tugs', '2 tugs berth/unberth', 5000, 5200),
+      line('l3', 'Anchorage dues', 'OPL anchorage 30h', 3800, 4200),
+      line('l4', 'Fresh water', '90 mt potable', 1700, undefined),
+      line('l5', 'Agency fee', 'AusGlobal agency fee', 7000, 7500),
+    ],
+    sof: [
+      { id: 's1', label: 'ETA / Arrival pilot station', at: '2026-06-18 05:30' },
+      { id: 's2', label: 'NOR Tendered', at: '2026-06-18 05:55' },
+      { id: 's3', label: 'All Fast (alongside)', at: '2026-06-18 11:10' },
+      { id: 's4', label: 'Cargo operations commenced', at: '2026-06-18 14:00' },
+      { id: 's5', label: 'Cargo operations completed', at: '2026-06-20 22:30' },
+      { id: 's6', label: 'Unberthed / Sailed', at: '2026-06-21 06:15' },
+    ],
+    ledger: [
+      { id: 'g1', kind: 'principal-funding', amount: 20900, currency: 'USD', at: '2026-06-15 12:00', note: '100% PDA pre-funding received' },
+      { id: 'g2', kind: 'advance', amount: 13000, currency: 'USD', at: '2026-06-16 09:00', note: 'Operational advance to Gulf Anchorage Agencies' },
+    ],
+    documents: [
+      { id: 'd-15', name: 'PDA-AUS-2026-0046.xlsx', kind: 'PDA', uploadedBy: 'Sub-Agent', at: '2026-06-13 10:30', size: '86 KB' },
+      { id: 'd-16', name: 'Statement-of-Facts.pdf', kind: 'Statement of Facts', uploadedBy: 'Sub-Agent', at: '2026-06-21 07:00', size: '148 KB' },
+    ],
+    history: [
+      { stage: 'appointed', at: '2026-06-10 08:00', actor: 'Faisal Rahman · Coraline' },
+      { stage: 'forwarded', at: '2026-06-10 09:40', actor: 'Liam Harper · Hub' },
+      { stage: 'pda-submitted', at: '2026-06-13 10:30', actor: 'Omar Haddad · Gulf Anchorage' },
+      { stage: 'pda-vetted', at: '2026-06-14 09:00', actor: 'Liam Harper · Hub' },
+      { stage: 'pda-approved', at: '2026-06-14 15:30', actor: 'Faisal Rahman · Coraline' },
+      { stage: 'funded', at: '2026-06-15 12:00', actor: 'Faisal Rahman · Coraline' },
+      { stage: 'advanced', at: '2026-06-16 09:00', actor: 'Liam Harper · Hub' },
+      { stage: 'in-port', at: '2026-06-18 11:10', actor: 'Omar Haddad · Gulf Anchorage' },
+      { stage: 'sailed', at: '2026-06-21 06:15', actor: 'Omar Haddad · Gulf Anchorage' },
+    ],
+    createdAt: '2026-06-10 08:00',
+  },
+  // 7) Settled — fully closed & archived
   {
     id: 'AUS-2026-0028',
     vessel: 'MV Southern Horizon',

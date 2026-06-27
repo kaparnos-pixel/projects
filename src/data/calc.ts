@@ -54,3 +54,28 @@ export function ledgerBalance(ledger: LedgerEntry[]): {
 export function settlementDelta(v: Voyage): number {
   return pdaTotal(v.daLines) - fdaTotal(v.daLines)
 }
+
+// Revenue model: the principal pays the full invoice to the hub, which remits
+// 90% to the sub-agent and retains the balance as its margin.
+export const SUBAGENT_SHARE = 0.9
+export const FDA_SLA_DAYS = 30
+
+// The sub-agent remittance and the AusGlobal margin on a voyage's current total.
+export function subAgentRemittance(v: Voyage): number {
+  return Math.round(fdaTotal(v.daLines) * SUBAGENT_SHARE)
+}
+export function hubMargin(v: Voyage): number {
+  return fdaTotal(v.daLines) - subAgentRemittance(v)
+}
+
+// The FDA must be filed within FDA_SLA_DAYS of the vessel sailing. Returns the
+// due date and days remaining (negative = overdue), or null if not yet sailed.
+export function fdaSla(v: Voyage): { dueDate: string; daysLeft: number } | null {
+  const sailed = v.history.find((h) => h.stage === 'sailed')?.at
+  if (!sailed) return null
+  const d = new Date(sailed.replace(' ', 'T'))
+  if (isNaN(d.getTime())) return null
+  const due = new Date(d.getTime() + FDA_SLA_DAYS * 86_400_000)
+  const daysLeft = Math.ceil((due.getTime() - Date.now()) / 86_400_000)
+  return { dueDate: due.toISOString().slice(0, 10), daysLeft }
+}

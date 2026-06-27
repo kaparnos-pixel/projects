@@ -4,8 +4,15 @@ import { usePlatform } from '../platform/PlatformContext'
 import { Badge, Card } from '../components/ui'
 import { PartyFlow, PhaseStrip } from '../components/Flow'
 import { nextStage, stageMeta } from '../data/lifecycle'
-import { ledgerBalance, pdaTotal, usd } from '../data/calc'
+import { fdaSla, hubMargin, ledgerBalance, pdaTotal, usd } from '../data/calc'
 import type { UserRole } from '../data/types'
+
+interface Kpi {
+  icon: string
+  value: string | number
+  label: string
+  sub: string
+}
 
 const roleIntro: Record<UserRole, string> = {
   'Hub Manager': 'You coordinate principals and sub-agents, vet every PDA, hold and release funds, and audit each FDA.',
@@ -24,7 +31,47 @@ export default function Dashboard() {
     return n && (stageMeta[n].actor === role || role === 'Hub Manager')
   })
   const fundsHeld = platform.voyages.reduce((s, v) => s + ledgerBalance(v.ledger).held, 0)
-  const settledCount = platform.voyages.filter((v) => v.stage === 'settled').length
+
+  // Aggregates for the role-specific dashboards.
+  const all = platform.voyages
+  const totalFunded = all.reduce((s, v) => s + ledgerBalance(v.ledger).funded, 0)
+  const advancesReceived = all.reduce(
+    (s, v) => s + v.ledger.filter((g) => g.kind === 'advance').reduce((a, g) => a + g.amount, 0),
+    0,
+  )
+  const marginBooked = all
+    .filter((v) => v.stage === 'invoiced' || v.stage === 'settled')
+    .reduce((s, v) => s + hubMargin(v), 0)
+  const invoicesIssued = all.filter((v) => v.stage === 'invoiced' || v.stage === 'settled').length
+  const pdasToApprove = all.filter((v) => v.stage === 'pda-vetted').length
+  const pdasToSubmit = all.filter((v) => v.stage === 'forwarded').length
+  const fdasDue = all.filter((v) => v.stage === 'sailed')
+  const fdasOverdue = fdasDue.filter((v) => {
+    const s = fdaSla(v)
+    return s && s.daysLeft < 0
+  }).length
+
+  const kpisByRole: Record<UserRole, Kpi[]> = {
+    'Hub Manager': [
+      { icon: '⚓', value: open.length, label: 'Open voyages', sub: 'in progress now' },
+      { icon: '⏳', value: mine.length, label: 'Awaiting hub action', sub: 'vet · advance · audit · invoice' },
+      { icon: '🏦', value: usd(fundsHeld), label: 'Capital held by hub', sub: 'pre-funded, not advanced' },
+      { icon: '💼', value: usd(marginBooked), label: 'AusGlobal margin booked', sub: 'on invoiced & settled calls' },
+    ],
+    Principal: [
+      { icon: '⚓', value: open.length, label: 'My open voyages', sub: 'in progress' },
+      { icon: '✅', value: pdasToApprove, label: 'PDAs to approve', sub: 'vetted, awaiting you' },
+      { icon: '🏦', value: usd(totalFunded), label: 'Total pre-funded', sub: 'into the hub account' },
+      { icon: '🧾', value: invoicesIssued, label: 'Unified invoices', sub: 'one per completed call' },
+    ],
+    'Sub-Agent': [
+      { icon: '⚓', value: open.length, label: 'Assigned voyages', sub: 'in progress' },
+      { icon: '📝', value: pdasToSubmit, label: 'PDAs to submit', sub: 'appointments forwarded to you' },
+      { icon: '💵', value: usd(advancesReceived), label: 'Advances received', sub: 'for authority payments' },
+      { icon: '⏱', value: fdasDue.length, label: 'FDAs due', sub: fdasOverdue ? `${fdasOverdue} overdue` : 'within 30-day SLA' },
+    ],
+  }
+  const myKpis = kpisByRole[role]
 
   return (
     <div className="stack">
@@ -42,46 +89,18 @@ export default function Dashboard() {
       </Card>
 
       <div className="kpi-grid">
-        <Card>
-          <div className="kpi">
-            <div className="kpi-icon">⚓</div>
-            <div>
-              <div className="kpi-value">{open.length}</div>
-              <div className="kpi-label">Open voyages</div>
-              <div className="kpi-sub">in progress now</div>
+        {myKpis.map((k) => (
+          <Card key={k.label}>
+            <div className="kpi">
+              <div className="kpi-icon">{k.icon}</div>
+              <div>
+                <div className="kpi-value">{k.value}</div>
+                <div className="kpi-label">{k.label}</div>
+                <div className="kpi-sub">{k.sub}</div>
+              </div>
             </div>
-          </div>
-        </Card>
-        <Card>
-          <div className="kpi">
-            <div className="kpi-icon">⏳</div>
-            <div>
-              <div className="kpi-value">{mine.length}</div>
-              <div className="kpi-label">Awaiting your action</div>
-              <div className="kpi-sub">{role}</div>
-            </div>
-          </div>
-        </Card>
-        <Card>
-          <div className="kpi">
-            <div className="kpi-icon">🏦</div>
-            <div>
-              <div className="kpi-value">{usd(fundsHeld)}</div>
-              <div className="kpi-label">Capital held by hub</div>
-              <div className="kpi-sub">pre-funded, not yet advanced</div>
-            </div>
-          </div>
-        </Card>
-        <Card>
-          <div className="kpi">
-            <div className="kpi-icon">✅</div>
-            <div>
-              <div className="kpi-value">{settledCount}</div>
-              <div className="kpi-label">Settled & archived</div>
-              <div className="kpi-sub">fully reconciled</div>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        ))}
       </div>
 
       <Card>

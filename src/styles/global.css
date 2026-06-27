@@ -847,6 +847,14 @@ button {
   background: var(--good-bg);
   color: var(--good);
 }
+.banner-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.banner-bad {
+  background: #fdeaec;
+  color: #c0334a;
+}
 
 /* ---------- Chat ---------- */
 .chat-shell {

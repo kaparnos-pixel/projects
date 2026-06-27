@@ -730,6 +730,65 @@ h3 {
   margin: 0;
 }
 
+/* ---------- Economics ---------- */
+.econ-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  align-items: start;
+}
+.fee-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.fee-table th,
+.fee-table td {
+  text-align: left;
+  padding: 13px 18px;
+  font-size: 14.5px;
+}
+.fee-table thead th {
+  background: var(--navy-800);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.fee-table tbody tr {
+  border-top: 1px solid var(--slate-100);
+}
+.fee-table tbody tr:nth-child(even) {
+  background: var(--slate-50);
+}
+.fee-table td:last-child {
+  text-align: right;
+  font-weight: 700;
+  color: var(--navy-800);
+  white-space: nowrap;
+}
+.econ-callouts {
+  display: grid;
+  gap: 16px;
+}
+.econ-note {
+  text-align: center;
+  margin: 30px auto 0;
+  max-width: 720px;
+  color: var(--slate-500);
+  font-size: 14.5px;
+}
+@media (max-width: 1040px) {
+  .econ-wrap {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- CTA band ---------- */
 .cta-band {
   position: relative;

@@ -7,12 +7,15 @@ import { PhaseStrip } from '../components/Flow'
 import { nextStage, stageMeta } from '../data/lifecycle'
 import { seedTariffs } from '../data/seed'
 import {
+  fdaSla,
   fdaTotal,
+  hubMargin,
   isOverTariff,
   ledgerBalance,
   lineVariance,
   pdaTotal,
   settlementDelta,
+  subAgentRemittance,
   usd,
 } from '../data/calc'
 import type { DALine, UserRole } from '../data/types'
@@ -94,6 +97,10 @@ export default function Voyage() {
   const bal = ledgerBalance(v.ledger)
   const delta = settlementDelta(v)
   const hasFinal = v.daLines.some((l) => l.final != null)
+  const remit = subAgentRemittance(v)
+  const margin = hubMargin(v)
+  const sla = fdaSla(v)
+  const fdaPending = v.stage === 'sailed'
 
   function runPrimary() {
     if (!next) return
@@ -221,6 +228,20 @@ export default function Voyage() {
             <div className="banner banner-good">✓ Voyage settled and archived. Nothing left to do.</div>
           )}
 
+          {/* FDA SLA countdown once the vessel has sailed */}
+          {fdaPending && sla && (
+            <div
+              className={`banner ${sla.daysLeft < 0 ? 'banner-bad' : sla.daysLeft <= 7 ? 'banner-warn' : 'banner-info'}`}
+              style={{ marginTop: 12 }}
+            >
+              ⏱ FDA due by <strong>{sla.dueDate}</strong> ·{' '}
+              {sla.daysLeft < 0
+                ? `${-sla.daysLeft} day${sla.daysLeft === -1 ? '' : 's'} overdue`
+                : `${sla.daysLeft} day${sla.daysLeft === 1 ? '' : 's'} remaining`}{' '}
+              (SLA: 30 days from sailing)
+            </div>
+          )}
+
           {/* Live SoF logging while in port */}
           {v.stage === 'in-port' && (role === 'Sub-Agent' || role === 'Hub Manager') && (
             <div style={{ marginTop: 18 }}>
@@ -248,6 +269,14 @@ export default function Voyage() {
               <tr>
                 <td>Final DA (FDA)</td>
                 <td className="mono" style={{ textAlign: 'right' }}>{hasFinal ? usd(fTotal) : '—'}</td>
+              </tr>
+              <tr>
+                <td>Remit to sub-agent <span className="muted-text">(90%)</span></td>
+                <td className="mono" style={{ textAlign: 'right' }}>{usd(remit)}</td>
+              </tr>
+              <tr>
+                <td>AusGlobal retains <span className="muted-text">(margin)</span></td>
+                <td className="mono" style={{ textAlign: 'right' }}><strong>{usd(margin)}</strong></td>
               </tr>
               <tr>
                 <td>Funded into hub account</td>

@@ -38,7 +38,7 @@ export default function Subscription() {
     <div className="stack">
       <PageHeader
         title="Subscription & billing"
-        subtitle="Manage your BEACON plan, monitor usage against limits, and review invoices."
+        subtitle="Manage your AusGlobal workspace plan, monitor usage against limits, and review invoices."
         action={
           <div className="cycle-toggle">
             <button
@@ -141,7 +141,7 @@ export default function Subscription() {
                 ))}
               </ul>
               <div className="plan-limits mono">
-                {limitLabel(p.limits.agents)} agents · {limitLabel(p.limits.portCallsPerMonth)} calls/mo ·{' '}
+                {limitLabel(p.limits.voyagesPerMonth)} voyages/mo · {limitLabel(p.limits.subAgents)} sub-agents ·{' '}
                 {limitLabel(p.limits.seats)} seats
               </div>
               <button
@@ -157,7 +157,7 @@ export default function Subscription() {
         </div>
         <div className="banner banner-info plan-change-note">
           You're on the <strong>{currentPlan.name}</strong> plan. Changing it here takes effect right away in
-          this demo and unlocks or locks the matching modules in the sidebar. Nothing is charged.
+          this demo. The plan governs voyage and sub-agent limits, never access to the audit record. Nothing is charged.
         </div>
       </section>
 
@@ -216,9 +216,8 @@ export default function Subscription() {
       </div>
 
       <p className="audit-foot">
-        * Annual billing applies a 15% discount. Agent Hub is priced per managed port call; PCM, Vendor
-        Dock and Purser are billed separately, and Purser additionally carries a take-rate on settled
-        payment volume.
+        * Annual billing applies a 15% discount. The AusGlobal hub platform is priced per managed voyage
+        (port call); enhanced compliance and data-residency options are available on Enterprise.
       </p>
     </div>
   )

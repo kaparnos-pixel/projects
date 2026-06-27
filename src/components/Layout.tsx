@@ -1,78 +1,69 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { getOwnerEmail, useAuth } from '../auth/AuthContext'
-import { canAccess, tierName, type Feature } from '../auth/entitlements'
-import { flowStages } from '../data/workflow'
+import { tierName } from '../auth/entitlements'
+import { usePlatform } from '../platform/PlatformContext'
+import type { UserRole } from '../data/types'
 
 interface NavItem {
   to: string
   label: string
   icon: string
-  end: boolean
-  feature: Feature
+  end?: boolean
+  roles?: UserRole[] // if set, only these roles see the item
 }
 
-const navGroups: { title: string | null; items: NavItem[]; ownerOnly?: boolean }[] = [
-  { title: null, items: [{ to: '/', label: 'Dashboard', icon: '🛰️', end: true, feature: 'agent-hub' }] },
+interface NavGroup {
+  title: string | null
+  items: NavItem[]
+  ownerOnly?: boolean
+}
+
+const navGroups: NavGroup[] = [
+  { title: null, items: [{ to: '/', label: 'Dashboard', icon: '🛰️', end: true }] },
   {
-    title: 'Agent Hub · Appointment',
-    items: flowStages.map((s) => ({ to: s.route, label: stageNav(s.key), icon: s.icon, end: false, feature: 'agent-hub' as Feature })),
-  },
-  {
-    title: 'Vendor Dock · Supply',
+    title: 'Operations',
     items: [
-      { to: '/vendor', label: 'Overview', icon: '🚢', end: true, feature: 'vendor-dock' },
-      { to: '/vendor/marketplace', label: 'Marketplace', icon: '🛒', end: false, feature: 'vendor-dock' },
-      { to: '/vendor/offers', label: 'Offers & Quotes', icon: '🧾', end: false, feature: 'vendor-dock' },
-      { to: '/vendor/da', label: 'DA Tracking', icon: '💱', end: false, feature: 'vendor-dock' },
-      { to: '/vendor/sof', label: 'SOF', icon: '📑', end: false, feature: 'vendor-dock' },
+      { to: '/voyages', label: 'Voyages', icon: '⚓' },
+      { to: '/inbox', label: 'Inbox', icon: '✉️' },
+      { to: '/repository', label: 'Repository', icon: '🗄️' },
+      { to: '/audit', label: 'Audit trail', icon: '🧾' },
     ],
   },
   {
-    title: 'Finance',
+    title: 'Network',
     items: [
-      { to: '/pcm', label: 'PCM · Cost', icon: '🧮', end: false, feature: 'pcm' },
-      { to: '/purser', label: 'Purser · Pay', icon: '💸', end: false, feature: 'purser' },
+      { to: '/sub-agents', label: 'Sub-Agent Network', icon: '🌐', roles: ['Hub Manager'] },
+      { to: '/principals', label: 'Principals', icon: '🚢', roles: ['Hub Manager'] },
+      { to: '/contracts', label: 'Contracts & SLAs', icon: '📄' },
+      { to: '/services', label: 'Services portfolio', icon: '🧰' },
     ],
   },
-  { title: 'Account', items: [{ to: '/subscription', label: 'Subscription', icon: '💳', end: false, feature: 'account' }] },
+  { title: 'Account', items: [{ to: '/subscription', label: 'Subscription', icon: '💳' }] },
   {
     title: 'Admin',
     ownerOnly: true,
-    items: [{ to: '/admin/users', label: 'Users', icon: '👥', end: false, feature: 'account' }],
+    items: [{ to: '/admin/users', label: 'Users', icon: '👥' }],
   },
 ]
-
-function stageNav(key: string): string {
-  switch (key) {
-    case 'discovery':
-      return 'Agent Discovery'
-    case 'onboarding':
-      return 'Onboarding'
-    case 'chat':
-      return 'Secure Chat'
-    case 'contracts':
-      return 'Contracts'
-    case 'port-calls':
-      return 'Port Calls'
-    case 'audit':
-      return 'Audit Trail'
-    default:
-      return key
-  }
-}
 
 // Marketing site lives one level up from the app's base (/projects/app/ → /projects/).
 const siteHome = import.meta.env.BASE_URL.replace(/app\/$/, '')
 
 export default function Layout() {
   const { user, logout } = useAuth()
+  const { resetDemo } = usePlatform()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
 
   const ownerEmail = getOwnerEmail()
   const isOwner = !!user && !!ownerEmail && user.email.toLowerCase() === ownerEmail.toLowerCase()
-  const visibleGroups = navGroups.filter((g) => !g.ownerOnly || isOwner)
+  const role = user?.role ?? 'Hub Manager'
+
+  const visibleGroups = navGroups
+    .filter((g) => !g.ownerOnly || isOwner)
+    .map((g) => ({ ...g, items: g.items.filter((it) => !it.roles || it.roles.includes(role)) }))
+    .filter((g) => g.items.length > 0)
 
   function leave() {
     setMenuOpen(false)
@@ -80,80 +71,64 @@ export default function Layout() {
     navigate('/login', { replace: true })
   }
 
-  function resetDemo() {
-    if (!window.confirm('Reset all Vendor Dock and Finance demo data to defaults?')) return
-    localStorage.removeItem('beacon.vendor.v1')
-    localStorage.removeItem('beacon.finance.v1')
-    window.location.reload()
+  function doReset() {
+    if (!window.confirm('Reset all voyages, network and audit data to the seeded demo state?')) return
+    resetDemo()
+    navigate('/')
   }
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <img src="/beacon.svg" alt="BEACON" width={34} height={34} />
+          <img src="/ausglobal.svg" alt="AusGlobal" width={34} height={34} />
           <div>
-            <strong>BEACON</strong>
-            <span>Agent Hub</span>
+            <strong>AusGlobal</strong>
+            <span>Ship Agency Hub</span>
           </div>
-          <span className="portside-dot" title="Port-side product" aria-hidden />
         </div>
 
         <nav className="nav">
           {visibleGroups.map((group, gi) => (
             <div className="nav-group" key={group.title ?? `g${gi}`}>
               {group.title && <span className="nav-group-title">{group.title}</span>}
-              {group.items.map((item) => {
-                const locked = user ? !canAccess(user.tier, item.feature) : false
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) =>
-                      `nav-link${isActive ? ' active' : ''}${locked ? ' locked' : ''}`
-                    }
-                  >
-                    <span className="nav-icon" aria-hidden>
-                      {item.icon}
-                    </span>
-                    {item.label}
-                    {locked && (
-                      <span className="nav-lock" aria-label="Upgrade required">
-                        🔒
-                      </span>
-                    )}
-                  </NavLink>
-                )
-              })}
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+                >
+                  <span className="nav-icon" aria-hidden>
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </NavLink>
+              ))}
             </div>
           ))}
         </nav>
 
         <div className="ecosystem">
-          <span className="ecosystem-title">BEACON ecosystem</span>
+          <span className="ecosystem-title">The AusGlobal model</span>
           <div className="eco-item active">
-            <span className="eco-dot port" /> Agent Hub
-            <em>appointment</em>
+            <span className="eco-dot port" /> Principal
+            <em>appoints</em>
           </div>
           <div className="eco-item active">
-            <span className="eco-dot starboard" /> Vendor Dock
-            <em>supply</em>
+            <span className="eco-dot amber" /> Hub agent
+            <em>coordinates</em>
           </div>
           <div className="eco-item active">
-            <span className="eco-dot neutral" /> PCM
-            <em>cost</em>
-          </div>
-          <div className="eco-item active">
-            <span className="eco-dot amber" /> Purser
-            <em>pay</em>
+            <span className="eco-dot starboard" /> Sub-agent
+            <em>executes</em>
           </div>
         </div>
 
         <div className="sidebar-foot">
-          <div className="layer-chip">Appointment + Supply</div>
-          <p>Operators · Charterers · Agents · Suppliers · Port-ops</p>
-          <button className="reset-demo" type="button" onClick={resetDemo}>
+          <div className="layer-chip">Brisbane · Global ports</div>
+          <p>Principals · Hub managers · Sub-agents</p>
+          <button className="reset-demo" type="button" onClick={doReset}>
             ↺ Reset demo data
           </button>
         </div>
@@ -163,11 +138,11 @@ export default function Layout() {
         <header className="topbar">
           <div className="topbar-search">
             <span aria-hidden>🔎</span>
-            <input placeholder="Search agents, vessels, ports, contracts…" />
+            <input placeholder="Search voyages, vessels, ports, sub-agents…" />
           </div>
           <div className="topbar-right">
-            <a className="site-link" href={siteHome} title="Back to beacon site">
-              ↗ BEACON site
+            <a className="site-link" href={siteHome} title="Back to AusGlobal site">
+              ↗ AusGlobal site
             </a>
             <button className="ghost-btn" type="button">
               🔔
@@ -179,10 +154,10 @@ export default function Layout() {
             )}
             <div className="user-menu">
               <button className="user-pill" type="button" onClick={() => setMenuOpen((v) => !v)}>
-                <div className="avatar">{user?.initials ?? 'OP'}</div>
+                <div className="avatar">{user?.initials ?? 'HM'}</div>
                 <div className="user-meta">
-                  <strong>{user?.name ?? 'Ops Desk'}</strong>
-                  <span>{user?.role ?? 'Operator'}</span>
+                  <strong>{user?.name ?? 'Hub Desk'}</strong>
+                  <span>{user?.role ?? 'Hub Manager'}</span>
                 </div>
                 <span className="user-caret" aria-hidden>
                   ▾

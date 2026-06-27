@@ -44,8 +44,8 @@ interface AuthValue {
   adminDeleteUser: (email: string) => void
 }
 
-const SESSION_KEY = 'beacon.session'
-const USERS_KEY = 'beacon.users'
+const SESSION_KEY = 'ausglobal.session'
+const USERS_KEY = 'ausglobal.users'
 const AuthContext = createContext<AuthValue | null>(null)
 
 function loadUsers(): StoredUser[] {

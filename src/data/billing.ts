@@ -1,34 +1,34 @@
 import type { Invoice, PaymentMethod, Plan, Subscription, UsageMetric } from './types'
 
-// Tiered SaaS access to Agent Hub, priced per managed port call. PCM, Purser
-// and Vendor Dock are billed separately; Purser additionally carries a
-// take-rate on settled payment volume.
+// The AusGlobal platform is offered to hub operators as tiered SaaS, priced by
+// managed voyages (port calls). The plan governs limits, not access — every
+// party always sees the full audit trail and disbursement record.
 export const plans: Plan[] = [
   {
     tier: 'starter',
     name: 'Starter',
     priceMonthly: 0,
-    blurb: 'For single operators trialling agent appointment in the UAE.',
+    blurb: 'For a new hub desk piloting the AusGlobal model on a few routes.',
     highlights: [
-      'Up to 5 appointed agents',
-      '25 managed port calls / month',
-      'Secure chat & auditable record',
-      'Community support',
+      'Up to 25 managed voyages / month',
+      'Up to 10 enlisted sub-agents',
+      'Full PDA / FDA lifecycle & audit trail',
+      'Email community support',
     ],
-    limits: { agents: 5, portCallsPerMonth: 25, seats: 2 },
+    limits: { voyagesPerMonth: 25, subAgents: 10, seats: 3 },
   },
   {
     tier: 'pro',
     name: 'Pro',
-    priceMonthly: 499,
-    blurb: 'For fleets coordinating agents & husbandry across multiple ports.',
+    priceMonthly: 899,
+    blurb: 'For an established hub coordinating a global sub-agent network.',
     highlights: [
-      'Up to 50 appointed agents & husbandry providers',
-      '500 managed port calls / month',
-      'Pre-audited contract templates & ledger storage',
-      'Priority support · 99.9% SLA',
+      'Up to 500 managed voyages / month',
+      'Up to 100 enlisted sub-agents',
+      'Tariff benchmarking & variance analytics',
+      'Centralised repository & priority SLA',
     ],
-    limits: { agents: 50, portCallsPerMonth: 500, seats: 15 },
+    limits: { voyagesPerMonth: 500, subAgents: 100, seats: 25 },
   },
   {
     tier: 'enterprise',
@@ -36,12 +36,12 @@ export const plans: Plan[] = [
     priceMonthly: null,
     blurb: 'For global operators with heavy compliance & cross-border exposure.',
     highlights: [
-      'Unlimited agents & managed port calls',
-      'Premium compliance & enhanced due-diligence tier',
+      'Unlimited voyages & sub-agents',
+      'Premium compliance & enhanced due-diligence',
       'SSO / SAML, custom roles & data residency',
       'Dedicated success manager & DPA',
     ],
-    limits: { agents: null, portCallsPerMonth: null, seats: null },
+    limits: { voyagesPerMonth: null, subAgents: null, seats: null },
   },
 ]
 
@@ -50,28 +50,28 @@ export const currentSubscription: Subscription = {
   status: 'active',
   billingCycle: 'monthly',
   renewsOn: '2026-07-15',
-  seatsUsed: 9,
+  seatsUsed: 11,
 }
 
 export const usage: UsageMetric[] = [
-  { label: 'Verified agents', used: 32, limit: 50, unit: '' },
-  { label: 'Port calls this month', used: 218, limit: 500, unit: '' },
-  { label: 'Team seats', used: 9, limit: 15, unit: '' },
-  { label: 'Contract storage', used: 6.4, limit: 25, unit: 'GB' },
+  { label: 'Managed voyages this month', used: 218, limit: 500, unit: '' },
+  { label: 'Enlisted sub-agents', used: 36, limit: 100, unit: '' },
+  { label: 'Team seats', used: 11, limit: 25, unit: '' },
+  { label: 'Document archive', used: 14.2, limit: 50, unit: 'GB' },
 ]
 
 export const paymentMethod: PaymentMethod = {
   brand: 'Visa',
   last4: '4242',
   expiry: '08/27',
-  holder: 'TechHub RAK FZ-LLC',
+  holder: 'AusGlobal Ship Agent Pty Ltd',
 }
 
 export const invoices: Invoice[] = [
-  { id: 'in-6', number: 'BEA-2026-0006', date: '2026-06-15', amount: 'USD 499.00', status: 'paid', period: 'Jun 2026' },
-  { id: 'in-5', number: 'BEA-2026-0005', date: '2026-05-15', amount: 'USD 499.00', status: 'paid', period: 'May 2026' },
-  { id: 'in-4', number: 'BEA-2026-0004', date: '2026-04-15', amount: 'USD 499.00', status: 'paid', period: 'Apr 2026' },
-  { id: 'in-3', number: 'BEA-2026-0003', date: '2026-03-15', amount: 'USD 499.00', status: 'paid', period: 'Mar 2026' },
-  { id: 'in-2', number: 'BEA-2026-0002', date: '2026-02-15', amount: 'USD 499.00', status: 'paid', period: 'Feb 2026' },
-  { id: 'in-1', number: 'BEA-2026-0001', date: '2026-01-15', amount: 'USD 249.00', status: 'paid', period: 'Jan 2026' },
+  { id: 'in-6', number: 'AUS-INV-2026-0006', date: '2026-06-15', amount: 'AUD 899.00', status: 'paid', period: 'Jun 2026' },
+  { id: 'in-5', number: 'AUS-INV-2026-0005', date: '2026-05-15', amount: 'AUD 899.00', status: 'paid', period: 'May 2026' },
+  { id: 'in-4', number: 'AUS-INV-2026-0004', date: '2026-04-15', amount: 'AUD 899.00', status: 'paid', period: 'Apr 2026' },
+  { id: 'in-3', number: 'AUS-INV-2026-0003', date: '2026-03-15', amount: 'AUD 899.00', status: 'paid', period: 'Mar 2026' },
+  { id: 'in-2', number: 'AUS-INV-2026-0002', date: '2026-02-15', amount: 'AUD 899.00', status: 'paid', period: 'Feb 2026' },
+  { id: 'in-1', number: 'AUS-INV-2026-0001', date: '2026-01-15', amount: 'AUD 499.00', status: 'paid', period: 'Jan 2026' },
 ]

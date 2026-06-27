@@ -1,15 +1,15 @@
-# BEACON marketing website
+# AusGlobal marketing website
 
-A self-contained static marketing site for BEACON Maritime Technologies, built
+A self-contained static marketing site for AusGlobal Ship Agent Pty Ltd, built
 from the company business profile. No build step or dependencies, just HTML +
 CSS.
 
 ## Files
 
 - `index.html`, the single-page marketing site
-- `styles.css`, all styling (maritime navy / signal-amber, port-side red &
+- `styles.css`, all styling (maritime navy / signal-amber, with port-side red &
   starboard green accents)
-- `beacon.svg`, logo / favicon
+- `ausglobal.svg`, logo / favicon
 
 ## View locally
 
@@ -21,12 +21,12 @@ python3 -m http.server 8000
 # then open http://localhost:8000
 ```
 
-## The "Launch app" links
+## The "Launch platform" links
 
-The header and call-to-action buttons link to `/`, which is where the
-**Agent Hub portal** (the Vite app in the repo root) is served. When deploying,
-host the marketing site and the app so that `/` resolves to the portal, or
-update the `href="/"` links to wherever the app is hosted.
+The header and call-to-action buttons link to `/projects/app/`, where the
+**AusGlobal operational platform** (the Vite app in the repo root) is served.
+When deploying, host the marketing site and the app together, or update the
+`href` links to wherever the app is hosted.
 
 ## Deploy
 

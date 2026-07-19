@@ -70,9 +70,9 @@ export default function Archived({ type }: { type: ReportType }) {
             {rows.map((r) => (
               <tr key={r.id}>
                 <td className="mono">{r.id}</td>
-                <td className="mono">{r.jobCode || '—'}</td>
-                <td>{r.vessel || '—'}</td>
-                <td>{r.port || '—'}</td>
+                <td className="mono">{r.jobCode || '-'}</td>
+                <td>{r.vessel || '-'}</td>
+                <td>{r.port || '-'}</td>
                 <td><Badge label={r.status} /></td>
                 <td className="muted-text mono">{r.createdAtLocal}</td>
                 <td><button className="btn btn-ghost btn-sm" onClick={() => setView(r)}>View</button></td>

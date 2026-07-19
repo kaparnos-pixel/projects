@@ -160,7 +160,7 @@ export function useAuth(): AuthValue {
   return ctx
 }
 
-// Accounts saved in this browser, without passwords — used for quick switching.
+// Accounts saved in this browser, without passwords - used for quick switching.
 export function getAccounts(): AccountSummary[] {
   return loadUsers().map(({ password: _password, ...rest }) => rest)
 }

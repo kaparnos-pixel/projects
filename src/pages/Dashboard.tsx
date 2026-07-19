@@ -140,7 +140,7 @@ export default function Dashboard() {
                       <strong>
                         <Link className="link" to={`/voyages/${v.id}`}>{v.vessel}</Link> · {v.port}
                       </strong>
-                      <span className="mini-detail">Next: {stageMeta[n].label} — {stageMeta[n].short}</span>
+                      <span className="mini-detail">Next: {stageMeta[n].label} - {stageMeta[n].short}</span>
                       <span className="mini-meta">{v.id} · {stageMeta[n].actor}</span>
                     </div>
                   </li>
@@ -191,7 +191,7 @@ export default function Dashboard() {
                 <td className="mono"><Link className="link" to={`/voyages/${v.id}`}>{v.id}</Link></td>
                 <td>{v.vessel}</td>
                 <td>{v.port}</td>
-                <td className="mono" style={{ textAlign: 'right' }}>{v.daLines.length ? usd(pdaTotal(v.daLines)) : '—'}</td>
+                <td className="mono" style={{ textAlign: 'right' }}>{v.daLines.length ? usd(pdaTotal(v.daLines)) : '-'}</td>
                 <td><Badge label={stageMeta[v.stage].label} /></td>
               </tr>
             ))}

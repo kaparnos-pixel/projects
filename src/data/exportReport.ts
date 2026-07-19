@@ -34,7 +34,7 @@ export function exportReportsCsv(reports: Report[], filename = 'ausglobal-report
 }
 
 // ---------------------------------------------------------------------------
-// PDF export (print) — full detail with the AusGlobal logo
+// PDF export (print) - full detail with the AusGlobal logo
 // ---------------------------------------------------------------------------
 
 // The company logo, inlined so it renders in the standalone print window.
@@ -60,7 +60,7 @@ function esc(v: unknown): string {
 // A definition list; rows with an empty value are dropped.
 function kvBlock(pairs: [string, unknown][]): string {
   const rows = pairs
-    .filter(([, v]) => v !== '' && v != null && v !== '—')
+    .filter(([, v]) => v !== '' && v != null && v !== '-')
     .map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`)
     .join('')
   return rows ? `<table class="kv">${rows}</table>` : ''
@@ -78,7 +78,7 @@ function dataTable(headers: string[], rows: string[][]): string {
 }
 
 function timeBlock(title: string, pairs: [string, string][]): string {
-  const rows = pairs.filter(([, v]) => v && v !== '—')
+  const rows = pairs.filter(([, v]) => v && v !== '-')
   if (!rows.length) return ''
   return `<div class="tcol"><h4>${esc(title)}</h4>${rows
     .map(([k, v]) => `<div class="trow"><span>${esc(k)}</span><b>${esc(v)}</b></div>`)
@@ -92,7 +92,7 @@ function renderReport(r: Report): string {
       <div>
         <span class="rep-kicker">${esc(reportTypeMeta[r.type].label)} report</span>
         <h1>${esc(r.vessel || 'Report')}</h1>
-        <p class="rep-ref">${esc(r.id)} · Job Code ${esc(r.jobCode || '—')}</p>
+        <p class="rep-ref">${esc(r.id)} · Job Code ${esc(r.jobCode || '-')}</p>
       </div>
       <div class="rep-stamp">
         <div><b>${esc(r.createdAtLocal)}</b> local</div>
@@ -129,7 +129,7 @@ function renderReport(r: Report): string {
       'Services rendered',
       dataTable(
         ['Type of Service', 'Status', 'Remarks', 'Attachment'],
-        r.services.map((s) => [s.serviceType, s.status, s.remark, s.attachment ?? '—']),
+        r.services.map((s) => [s.serviceType, s.status, s.remark, s.attachment ?? '-']),
       ),
     )
     body += section('General remarks', r.generalRemarks ? `<p>${esc(r.generalRemarks)}</p>` : '')

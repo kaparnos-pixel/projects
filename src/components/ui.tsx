@@ -78,7 +78,7 @@ export function Stars({ value }: { value: number }) {
 export function Flag({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span className={`badge badge-${ok ? 'good' : 'muted'}`} title={label}>
-      {ok ? '✓' : '—'} {label}
+      {ok ? '✓' : '-'} {label}
     </span>
   )
 }

@@ -90,10 +90,10 @@ export default function Voyages() {
                     <div className="muted-text">{v.vesselType}</div>
                   </td>
                   <td>{v.port}<div className="muted-text">{v.country}</div></td>
-                  <td>{principal?.company ?? '—'}</td>
+                  <td>{principal?.company ?? '-'}</td>
                   <td>{sub?.company ?? <span className="muted-text">unassigned</span>}</td>
                   <td className="mono" style={{ textAlign: 'right' }}>
-                    {v.daLines.length ? usd(pdaTotal(v.daLines)) : '—'}
+                    {v.daLines.length ? usd(pdaTotal(v.daLines)) : '-'}
                   </td>
                   <td><Badge label={stageMeta[v.stage].label} /></td>
                 </tr>

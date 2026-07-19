@@ -182,7 +182,7 @@ export default function Voyage() {
           </div>
           <div>
             <span className="cd-label">Principal</span>
-            <strong>{principal?.company ?? '—'}</strong>
+            <strong>{principal?.company ?? '-'}</strong>
           </div>
           <div>
             <span className="cd-label">Sub-agent</span>
@@ -268,7 +268,7 @@ export default function Voyage() {
               </tr>
               <tr>
                 <td>Final DA (FDA)</td>
-                <td className="mono" style={{ textAlign: 'right' }}>{hasFinal ? usd(fTotal) : '—'}</td>
+                <td className="mono" style={{ textAlign: 'right' }}>{hasFinal ? usd(fTotal) : '-'}</td>
               </tr>
               <tr>
                 <td>Remit to sub-agent <span className="muted-text">(90%)</span></td>
@@ -332,11 +332,11 @@ export default function Voyage() {
                     <td><strong>{l.category}</strong></td>
                     <td className="muted-text">{l.description}</td>
                     <td className="mono" style={{ textAlign: 'right' }}>{usd(l.proforma)}</td>
-                    <td className="mono" style={{ textAlign: 'right' }}>{l.tariffCap ? usd(l.tariffCap) : '—'}</td>
-                    <td className="mono" style={{ textAlign: 'right' }}>{l.final != null ? usd(l.final) : '—'}</td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{l.tariffCap ? usd(l.tariffCap) : '-'}</td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{l.final != null ? usd(l.final) : '-'}</td>
                     <td className="mono" style={{ textAlign: 'right' }}>
                       {l.tariffCap == null ? (
-                        '—'
+                        '-'
                       ) : (
                         <span className={over ? 'var-up' : 'var-down'}>
                           {over ? '▲ ' : '▼ '}
@@ -353,7 +353,7 @@ export default function Voyage() {
                 <td colSpan={2}><strong>Total</strong></td>
                 <td className="mono" style={{ textAlign: 'right' }}><strong>{usd(pTotal)}</strong></td>
                 <td />
-                <td className="mono" style={{ textAlign: 'right' }}><strong>{hasFinal ? usd(fTotal) : '—'}</strong></td>
+                <td className="mono" style={{ textAlign: 'right' }}><strong>{hasFinal ? usd(fTotal) : '-'}</strong></td>
                 <td />
               </tr>
             </tfoot>
@@ -502,7 +502,7 @@ function ForwardModal({ voyageId, port, onClose }: { voyageId: string; port: str
         <p className="page-sub" style={{ marginTop: 0 }}>
           {local.length
             ? `Enlisted sub-agents serving ${port}:`
-            : `No enlisted sub-agent in ${port} yet — choose any enlisted partner:`}
+            : `No enlisted sub-agent in ${port} yet - choose any enlisted partner:`}
         </p>
         <div className="login-accounts-grid" style={{ marginBottom: 16 }}>
           {options.map((s) => (
@@ -589,7 +589,7 @@ function PdaModal({
                   />
                 </td>
                 <td className="mono" style={{ textAlign: 'right' }}>
-                  {l.tariffCap ? (l.proforma > l.tariffCap ? <span className="var-up">{usd(l.tariffCap)}</span> : usd(l.tariffCap)) : '—'}
+                  {l.tariffCap ? (l.proforma > l.tariffCap ? <span className="var-up">{usd(l.tariffCap)}</span> : usd(l.tariffCap)) : '-'}
                 </td>
               </tr>
             ))}
@@ -641,7 +641,7 @@ function AdvanceModal({
         </div>
         <p className="page-sub" style={{ marginTop: 0 }}>
           The hub holds the principal's capital and releases a matching advance so the sub-agent can pay
-          port authorities — never the full sum up front.
+          port authorities - never the full sum up front.
         </p>
         <label className="full">
           Advance amount (USD)

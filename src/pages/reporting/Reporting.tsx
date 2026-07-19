@@ -48,8 +48,8 @@ export default function Reporting() {
                     <Link className="link" to={`/reporting/${reportTypeMeta[r.type].route}`}>{r.id}</Link>
                   </td>
                   <td>{reportTypeMeta[r.type].label}</td>
-                  <td>{r.vessel || '—'}</td>
-                  <td>{r.port || '—'}</td>
+                  <td>{r.vessel || '-'}</td>
+                  <td>{r.port || '-'}</td>
                   <td><Badge label={r.status} /></td>
                   <td className="muted-text mono">{r.createdAtLocal}</td>
                 </tr>

@@ -414,7 +414,7 @@ export const serviceCatalogue: ServiceCategory[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// Voyages — one per lifecycle stage band, so every screen has live data
+// Voyages - one per lifecycle stage band, so every screen has live data
 // ---------------------------------------------------------------------------
 function line(
   id: string,
@@ -428,7 +428,7 @@ function line(
 }
 
 export const seedVoyages: Voyage[] = [
-  // 1) Early appointment — Hub still to forward to sub-agent
+  // 1) Early appointment - Hub still to forward to sub-agent
   {
     id: 'AUS-2026-0051',
     vessel: 'MV Meridian Spirit',
@@ -456,7 +456,7 @@ export const seedVoyages: Voyage[] = [
     history: [{ stage: 'appointed', at: '2026-06-26 09:12', actor: 'Helena Voss · Meridian' }],
     createdAt: '2026-06-26 09:12',
   },
-  // 2) PDA submitted — awaiting Hub vetting
+  // 2) PDA submitted - awaiting Hub vetting
   {
     id: 'AUS-2026-0048',
     vessel: 'MT Southern Falcon',
@@ -495,7 +495,7 @@ export const seedVoyages: Voyage[] = [
     ],
     createdAt: '2026-06-24 08:05',
   },
-  // 3) Funded — Hub to release advance
+  // 3) Funded - Hub to release advance
   {
     id: 'AUS-2026-0042',
     vessel: 'MV Kowloon Trader',
@@ -541,7 +541,7 @@ export const seedVoyages: Voyage[] = [
     ],
     createdAt: '2026-06-20 07:40',
   },
-  // 4) In port — SoF live, advance released
+  // 4) In port - SoF live, advance released
   {
     id: 'AUS-2026-0039',
     vessel: 'MV North Star Pioneer',
@@ -594,7 +594,7 @@ export const seedVoyages: Voyage[] = [
     ],
     createdAt: '2026-06-18 06:00',
   },
-  // 5) FDA submitted — awaiting Hub audit
+  // 5) FDA submitted - awaiting Hub audit
   {
     id: 'AUS-2026-0035',
     vessel: 'MV Meridian Dawn',
@@ -652,7 +652,7 @@ export const seedVoyages: Voyage[] = [
     ],
     createdAt: '2026-06-05 09:00',
   },
-  // 6) Sailed — FDA pending against the 30-day SLA
+  // 6) Sailed - FDA pending against the 30-day SLA
   {
     id: 'AUS-2026-0046',
     vessel: 'MT Coral Trader',
@@ -707,7 +707,7 @@ export const seedVoyages: Voyage[] = [
     ],
     createdAt: '2026-06-10 08:00',
   },
-  // 7) Settled — fully closed & archived
+  // 7) Settled - fully closed & archived
   {
     id: 'AUS-2026-0028',
     vessel: 'MV Southern Horizon',

@@ -63,7 +63,7 @@ export default function Audit() {
                 <td><strong>{e.action}</strong><div><Badge label={e.category} /></div></td>
                 <td className="audit-detail">{e.detail}</td>
                 <td className="mono">
-                  {e.voyageId ? <Link className="link" to={`/voyages/${e.voyageId}`}>{e.voyageId}</Link> : '—'}
+                  {e.voyageId ? <Link className="link" to={`/voyages/${e.voyageId}`}>{e.voyageId}</Link> : '-'}
                 </td>
                 <td className="audit-foot mono">{e.hash}</td>
               </tr>

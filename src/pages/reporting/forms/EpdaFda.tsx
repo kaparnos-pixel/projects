@@ -39,8 +39,8 @@ export default function EpdaFda({
         </div>
         <p className="muted-text">
           {report.stage === 'EPDA'
-            ? 'Estimated proforma disbursement account — the sub-agent’s pre-call estimate.'
-            : 'Final disbursement account — reconciled against vouchers after the call.'}
+            ? 'Estimated proforma disbursement account - the sub-agent’s pre-call estimate.'
+            : 'Final disbursement account - reconciled against vouchers after the call.'}
         </p>
       </div>
 

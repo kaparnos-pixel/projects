@@ -83,11 +83,11 @@ export default function GeneralAgency({
             <input value={report.placeOfOperations} onChange={(e) => update({ placeOfOperations: e.target.value })} placeholder="Terminal / Berth / Anchorage" />
           </label>
           <label>
-            Draft Survey — Initial
+            Draft Survey - Initial
             <input value={report.draftInitial} onChange={(e) => update({ draftInitial: e.target.value })} placeholder="e.g. 11.2 m" />
           </label>
           <label>
-            Draft Survey — Final
+            Draft Survey - Final
             <input value={report.draftFinal} onChange={(e) => update({ draftFinal: e.target.value })} placeholder="e.g. 6.4 m" />
           </label>
         </div>
@@ -124,7 +124,7 @@ export default function GeneralAgency({
       {/* 3 · cargo ops grid */}
       <div className="card">
         <div className="card-head">
-          <div className="section-title">Cargo operations — live tracking</div>
+          <div className="section-title">Cargo operations - live tracking</div>
           <button className="btn btn-ghost btn-sm" onClick={addOps}>+ Add shift / day</button>
         </div>
         <div className="grid-scroll">
@@ -156,7 +156,7 @@ export default function GeneralAgency({
                     <td><input className="cell-in num" type="number" value={r.cumulative} onChange={(e) => setOps(r.id, { cumulative: Number(e.target.value) })} /></td>
                     <td><input className="cell-in num" type="number" value={r.remaining} onChange={(e) => setOps(r.id, { remaining: Number(e.target.value) })} /></td>
                     <td className="mono" style={{ textAlign: 'right' }}>{rate.toLocaleString()}</td>
-                    <td className="mono" style={{ textAlign: 'right' }}>{etc || '—'}</td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{etc || '-'}</td>
                     <td><input className="cell-in" value={r.cranes} onChange={(e) => setOps(r.id, { cranes: e.target.value })} placeholder="Gantry 1,2…" /></td>
                     <td><button className="icon-btn" onClick={() => delOps(r.id)}>✕</button></td>
                   </tr>
@@ -207,7 +207,7 @@ export default function GeneralAgency({
       {/* 5 · documents, facts & remarks */}
       <div className="card">
         <div className="card-head">
-          <div className="section-title">Statement of Facts — timeline pins</div>
+          <div className="section-title">Statement of Facts - timeline pins</div>
           <button className="btn btn-ghost btn-sm" onClick={addPin}>+ Pin event</button>
         </div>
         {report.sofPins.map((p) => (

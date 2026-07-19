@@ -17,7 +17,7 @@ export const reportTypeMeta: Record<
 > = {
   husbandry: {
     label: 'Husbandry Service',
-    short: 'Crew, stores, CTM, bunkers and vessel husbandry — service by service.',
+    short: 'Crew, stores, CTM, bunkers and vessel husbandry - service by service.',
     icon: '🧑‍✈️',
     route: 'husbandry',
   },
@@ -343,8 +343,8 @@ export const seedReports: Report[] = [
     subAgentId: 'sa-hou',
     purposeOfCall: 'Crew Change Only',
     cargo: '28,500 mt steel coils (discharge)',
-    arrival: { eosp: '2026-06-25 03:40', anchorDropped: '—', norTendered: '2026-06-25 04:35' },
-    shifting: { anchorAweigh: '—', pilotOnBoard: '2026-06-25 07:30', firstLineAshore: '2026-06-25 09:05', allFast: '2026-06-25 09:20' },
+    arrival: { eosp: '2026-06-25 03:40', anchorDropped: '-', norTendered: '2026-06-25 04:35' },
+    shifting: { anchorAweigh: '-', pilotOnBoard: '2026-06-25 07:30', firstLineAshore: '2026-06-25 09:05', allFast: '2026-06-25 09:20' },
     sailing: { cargoCompleted: '', documentsSigned: '', pilotDisembarked: '', cosp: '' },
     placeOfService: 'Berth',
     services: [
@@ -376,7 +376,7 @@ export const seedReports: Report[] = [
     draftInitial: '11.2 m',
     draftFinal: '6.4 m',
     placeOfOperations: 'Bulk Berth B3',
-    arrival: { eta: '2026-06-12 00:00', actualArrival: '2026-06-12 01:40', eosp: '2026-06-12 01:50', anchored: '—', norTendered: '2026-06-12 02:20', norAccepted: '2026-06-12 03:00' },
+    arrival: { eta: '2026-06-12 00:00', actualArrival: '2026-06-12 01:40', eosp: '2026-06-12 01:50', anchored: '-', norTendered: '2026-06-12 02:20', norAccepted: '2026-06-12 03:00' },
     shifting: { pilotOnBoard: '2026-06-12 06:30', firstLineAshore: '2026-06-12 07:30', allFast: '2026-06-12 07:40', gangwayDown: '2026-06-12 08:10' },
     sailing: { cargoCompleted: '2026-06-14 18:30', documentsSigned: '2026-06-14 22:00', linesCastOff: '2026-06-15 02:50', pilotDisembarked: '2026-06-15 03:20', cosp: '2026-06-15 03:15' },
     cargoOps: [

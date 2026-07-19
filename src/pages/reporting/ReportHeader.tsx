@@ -43,7 +43,7 @@ export default function ReportHeader({
         <label>
           Voyage / Job Code
           <select value={report.jobCode} onChange={(e) => pickJob(e.target.value)}>
-            <option value="">— select a job code —</option>
+            <option value="">- select a job code -</option>
             {platform.voyages.map((v) => (
               <option key={v.id} value={v.id}>{v.id} · {v.vessel}</option>
             ))}

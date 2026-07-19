@@ -5,14 +5,14 @@
 **AusGlobal Ship Agent Pty Ltd** is an asset-light global ship agency based in
 Brisbane, Queensland. It operates as the **HUB agent** between three parties:
 
-- **Principal** — ship owner, charterer, operator or ship-management company
-- **AusGlobal Hub** — the HUB agent that coordinates and controls the port call
-- **Sub-Agent** — a vetted local port agency that executes the call on the ground
+- **Principal** - ship owner, charterer, operator or ship-management company
+- **AusGlobal Hub** - the HUB agent that coordinates and controls the port call
+- **Sub-Agent** - a vetted local port agency that executes the call on the ground
 
 This repository contains both halves of the product:
 
 - a public **marketing website** (`website/`)
-- the **operational platform** — a React SPA (`src/`) that runs the entire
+- the **operational platform** - a React SPA (`src/`) that runs the entire
   appointment → disbursement → funding → execution → settlement lifecycle.
 
 ## The lifecycle
@@ -33,7 +33,7 @@ Key rules from the business model are enforced in the workflow:
 - The sub-agent submits the **PDA** in a standardised Port DA format; lines over
   the pre-agreed port **tariff cap** are flagged automatically (EDI validation).
 - The principal funds **100%** of the estimate into the central hub account; the
-  hub **holds** the capital and releases **matching advances** to the sub-agent —
+  hub **holds** the capital and releases **matching advances** to the sub-agent -
   never the full sum up front.
 - The hub audits the **FDA line-by-line**, issues a **single unified invoice**,
   and refunds or credits any unused balance to the next voyage.
@@ -45,7 +45,7 @@ Key rules from the business model are enforced in the workflow:
 | ----- | ------ | ------------ |
 | `/` | Dashboard | Role-aware overview: what's awaiting you, funds held, pipeline. |
 | `/voyages`, `/voyages/:id` | Voyages | The full port-call lifecycle with role-gated actions, PDA/FDA tables, SoF, funding ledger, documents & history. |
-| `/reporting`, `/reporting/:type` | Sub-Agent Reporting | Digital reporting forms — Husbandry, General Agency, Protecting Agency, EPDA & FDA — each with a Generate form and an Archived view (filters + PDF/Excel export). Job-Code auto-fill, per-service grids, live cargo-ops tracking and an interruptions/laytime log. |
+| `/reporting`, `/reporting/:type` | Sub-Agent Reporting | Digital reporting forms - Husbandry, General Agency, Protecting Agency, EPDA & FDA - each with a Generate form and an Archived view (filters + PDF/Excel export). Job-Code auto-fill, per-service grids, live cargo-ops tracking and an interruptions/laytime log. |
 | `/sub-agents` | Sub-Agent Network | Sourcing, due-diligence (TRACE / FCPA / ISO 9001 / financials), SLA enlistment. |
 | `/principals` | Principals | Owner / charterer / operator fleets under master SLA. |
 | `/inbox` | Inbox | The platform's auto-generated emails across all parties. |
@@ -58,8 +58,8 @@ Key rules from the business model are enforced in the workflow:
 ## Roles
 
 Each account picks a role at sign-up: **Hub Manager**, **Principal** or
-**Sub-Agent**. The lifecycle is role-gated — only the responsible party can
-advance a given step — though the Hub Manager (who operates the platform) may act
+**Sub-Agent**. The lifecycle is role-gated - only the responsible party can
+advance a given step - though the Hub Manager (who operates the platform) may act
 on any party's behalf in this demo.
 
 ## Tech stack
@@ -89,7 +89,7 @@ workspace). Use **Reset demo data** in the sidebar to restore the seeded state.
 ```
 src/
   auth/        Authentication, roles & workspace ownership
-  platform/    PlatformContext — the state engine & lifecycle actions
+  platform/    PlatformContext - the state engine & lifecycle actions
   components/  Layout, flow visuals, shared UI primitives
   pages/       One screen per module
   data/        Domain types, lifecycle definition, seed data, calculations

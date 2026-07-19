@@ -88,6 +88,19 @@ export default function Dashboard() {
         <PartyFlow />
       </Card>
 
+      {role === 'Sub-Agent' && (
+        <Card>
+          <div className="card-head">
+            <div className="section-title">📝 Your reporting desk</div>
+            <Link className="btn btn-primary btn-sm" to="/reporting">Open reporting →</Link>
+          </div>
+          <p className="muted-text" style={{ margin: 0 }}>
+            File Husbandry, General Agency, Protecting Agency and EPDA/FDA reports against a Job Code, log
+            the Statement of Facts live, and export archived logs to PDF or Excel.
+          </p>
+        </Card>
+      )}
+
       <div className="kpi-grid">
         {myKpis.map((k) => (
           <Card key={k.label}>

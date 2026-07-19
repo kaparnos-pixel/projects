@@ -18,6 +18,7 @@ import {
   seedSubAgents,
   seedVoyages,
 } from '../data/seed'
+import { seedReports, reportTypeMeta, type Report } from '../data/reporting'
 import { pdaTotal } from '../data/calc'
 
 const HUB_MAIL = 'hub@ausglobal.com.au'
@@ -29,6 +30,7 @@ interface PlatformState {
   principals: Principal[]
   mail: MailMessage[]
   audit: AuditEntry[]
+  reports: Report[]
 }
 
 interface Actor {
@@ -76,6 +78,9 @@ interface PlatformValue extends PlatformState {
   // network actions
   updateSubAgent: (id: string, patch: Partial<SubAgent>) => void
   enlistSubAgent: (id: string, actor: Actor) => void
+  // sub-agent reporting
+  saveReport: (report: Report) => void
+  deleteReport: (id: string) => void
   resetDemo: () => void
 }
 
@@ -88,6 +93,7 @@ function seedState(): PlatformState {
     principals: structuredClone(seedPrincipals),
     mail: structuredClone(seedMail),
     audit: structuredClone(seedAudit),
+    reports: structuredClone(seedReports),
   }
 }
 
@@ -95,7 +101,10 @@ function load(): PlatformState {
   try {
     const raw = localStorage.getItem(STORE_KEY)
     if (!raw) return seedState()
-    return JSON.parse(raw) as PlatformState
+    const parsed = JSON.parse(raw) as Partial<PlatformState>
+    // Merge missing top-level keys so state saved before a new field was added
+    // (e.g. reports) still loads with sensible defaults instead of undefined.
+    return { ...seedState(), ...parsed }
   } catch {
     return seedState()
   }
@@ -561,6 +570,40 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
             ],
           }
         })
+      },
+
+      saveReport(report) {
+        setState((s) => {
+          const exists = s.reports.some((r) => r.id === report.id)
+          const reports = exists
+            ? s.reports.map((r) => (r.id === report.id ? report : r))
+            : [report, ...s.reports]
+          // Submitting a report writes an audit entry, keeping the transparent
+          // record the model promises to all three parties.
+          let audit = s.audit
+          if (report.submitted && !(exists && s.reports.find((r) => r.id === report.id)?.submitted)) {
+            const sa = s.subAgents.find((x) => x.id === report.subAgentId)
+            audit = [
+              {
+                id: rid('a'),
+                at: now(),
+                actor: sa?.contact ?? 'Sub-Agent',
+                role: 'Sub-Agent',
+                category: 'execution',
+                action: `${reportTypeMeta[report.type].label} report submitted`,
+                detail: `${report.vessel} · ${report.port} (${report.jobCode || 'no job code'})`,
+                voyageId: report.jobCode || null,
+                hash: hash(),
+              },
+              ...s.audit,
+            ]
+          }
+          return { ...s, reports, audit }
+        })
+      },
+
+      deleteReport(id) {
+        setState((s) => ({ ...s, reports: s.reports.filter((r) => r.id !== id) }))
       },
 
       resetDemo() {

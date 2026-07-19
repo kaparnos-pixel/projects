@@ -45,6 +45,7 @@ Key rules from the business model are enforced in the workflow:
 | ----- | ------ | ------------ |
 | `/` | Dashboard | Role-aware overview: what's awaiting you, funds held, pipeline. |
 | `/voyages`, `/voyages/:id` | Voyages | The full port-call lifecycle with role-gated actions, PDA/FDA tables, SoF, funding ledger, documents & history. |
+| `/reporting`, `/reporting/:type` | Sub-Agent Reporting | Digital reporting forms — Husbandry, General Agency, Protecting Agency, EPDA & FDA — each with a Generate form and an Archived view (filters + PDF/Excel export). Job-Code auto-fill, per-service grids, live cargo-ops tracking and an interruptions/laytime log. |
 | `/sub-agents` | Sub-Agent Network | Sourcing, due-diligence (TRACE / FCPA / ISO 9001 / financials), SLA enlistment. |
 | `/principals` | Principals | Owner / charterer / operator fleets under master SLA. |
 | `/inbox` | Inbox | The platform's auto-generated emails across all parties. |

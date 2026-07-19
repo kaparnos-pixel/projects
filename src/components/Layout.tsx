@@ -24,6 +24,7 @@ const navGroups: NavGroup[] = [
     title: 'Operations',
     items: [
       { to: '/voyages', label: 'Voyages', icon: '⚓' },
+      { to: '/reporting', label: 'Sub-Agent Reporting', icon: '📝', roles: ['Sub-Agent', 'Hub Manager'] },
       { to: '/inbox', label: 'Inbox', icon: '✉️' },
       { to: '/repository', label: 'Repository', icon: '🗄️' },
       { to: '/audit', label: 'Audit trail', icon: '🧾' },

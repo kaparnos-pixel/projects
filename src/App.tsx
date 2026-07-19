@@ -13,6 +13,8 @@ import Repository from './pages/Repository'
 import Audit from './pages/Audit'
 import Contracts from './pages/Contracts'
 import Services from './pages/Services'
+import Reporting from './pages/reporting/Reporting'
+import ReportHub from './pages/reporting/ReportHub'
 import Users from './pages/Users'
 
 export default function App() {
@@ -36,6 +38,8 @@ export default function App() {
         <Route path="audit" element={<Audit />} />
         <Route path="contracts" element={<Contracts />} />
         <Route path="services" element={<Services />} />
+        <Route path="reporting" element={<Reporting />} />
+        <Route path="reporting/:type" element={<ReportHub />} />
         <Route path="admin/users" element={<RequireOwner><Users /></RequireOwner>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

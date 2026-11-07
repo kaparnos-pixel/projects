@@ -1,23 +1,23 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
 <title>Instant PnL Calculator</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* Layout: two-column work surface — inputs left, sticky PnL statement right; stacks on phones */
 :root{
   --bg:#f3f5f7; --surface:#ffffff; --sunk:#eaeef2; --line:#d5dce3;
-  --fg:#15222e; --muted:#5b6a78; --accent:#1d4e74; --accent-soft:#e1ebf3;
+  --fg:#15222e; --muted:#5b6a78; --accent:#1E5A8C; --accent-soft:#e2ecf5; --red:#D81F2A;
   --good:#1f7a4d; --good-soft:#e1f2e8; --warn:#9a6200; --warn-soft:#fbefd6; --bad:#b4322c; --bad-soft:#f8e1df;
-  --f-display:"Archivo",system-ui,sans-serif; --f-body:"IBM Plex Sans",system-ui,sans-serif; --f-num:"IBM Plex Mono",ui-monospace,monospace;
+  --f-display:Arial,"Helvetica Neue",Helvetica,sans-serif; --f-body:Arial,"Helvetica Neue",Helvetica,sans-serif; --f-num:"IBM Plex Mono",ui-monospace,monospace;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#0f161d; --surface:#16202a; --sunk:#111a22; --line:#2a3846;
-  --fg:#e3e9ef; --muted:#93a3b2; --accent:#7fb3dc; --accent-soft:#1b2d3d;
+  --fg:#e3e9ef; --muted:#93a3b2; --accent:#6fa8db; --accent-soft:#16293a; --red:#f0545c;
   --good:#5cc78f; --good-soft:#15301f; --warn:#e2b04f; --warn-soft:#33280f; --bad:#ef7d74; --bad-soft:#3a1a18; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f161d; --surface:#16202a; --sunk:#111a22; --line:#2a3846;
-  --fg:#e3e9ef; --muted:#93a3b2; --accent:#7fb3dc; --accent-soft:#1b2d3d;
+  --fg:#e3e9ef; --muted:#93a3b2; --accent:#6fa8db; --accent-soft:#16293a; --red:#f0545c;
   --good:#5cc78f; --good-soft:#15301f; --warn:#e2b04f; --warn-soft:#33280f; --bad:#ef7d74; --bad-soft:#3a1a18; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.5}
@@ -61,9 +61,9 @@ aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}
 .verdict{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:8px;margin-bottom:14px;font-weight:600}
 .verdict .dot{width:10px;height:10px;border-radius:50%;background:currentColor;flex:none}
 .v-good{background:var(--good-soft);color:var(--good)}.v-warn{background:var(--warn-soft);color:var(--warn)}.v-bad{background:var(--bad-soft);color:var(--bad)}
-.hero{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.hero{display:grid;grid-template-columns:1.35fr 1fr;gap:10px;margin-bottom:14px}
 .hero div{background:var(--sunk);border-radius:8px;padding:10px 12px;min-width:0}
-.hero .v{font-family:var(--f-num);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero .v{font-family:var(--f-num);font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hero .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .stmt{width:100%;min-width:0;border-collapse:collapse}
 .stmt td{border:none;padding:4px 0;font-size:13px}
@@ -82,14 +82,26 @@ aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}
 .actions button{flex:1}
 .toast{font-size:12px;color:var(--good);min-height:18px;margin-top:6px}
 .example{font-size:12px;background:var(--warn-soft);color:var(--warn);border-radius:99px;padding:3px 10px;font-weight:600}
+.brandbar{background:var(--surface);border-bottom:3px solid var(--red)}
+.brandbar .in{max-width:1200px;margin:0 auto;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brandbar .logo{display:inline-flex;background:#fff;border-radius:6px;padding:4px 6px}
+.brandbar .logo img{height:40px;width:auto;display:block}
+.brandbar nav{display:flex;gap:14px;align-items:center;font-size:13px;color:var(--muted)}
+.brandbar nav a{color:var(--accent);text-decoration:none;font-weight:600}
+.brandbar nav a:hover{text-decoration:underline}
+h1 .tag{display:block;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--red);margin-bottom:4px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head><body>
 
+<div class="brandbar"><div class="in">
+  <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
+  <nav><a href="/">All tools</a><span id="who"></span><a href="/.auth/logout">Sign out</a></nav>
+</div></div>
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Instant PnL Calculator</h1>
+      <h1><span class="tag">Bifold Tools</span>Instant PnL Calculator</h1>
       <p class="sub">Enter the customer's PO value, list what the job will cost you, and see what the company keeps.</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -291,5 +303,6 @@ $("resetBtn").onclick=()=>{S=JSON.parse(JSON.stringify(BLANK));isExample=false;$
 function save(){try{localStorage.setItem("pnl-draft",JSON.stringify(S))}catch(e){}}
 try{const d=JSON.parse(localStorage.getItem("pnl-draft"));if(d&&d.lines){S=d;isExample=false;$("exTag").hidden=true}}catch(e){}
 renderFields();renderLines();update();
+fetch("/.auth/me").then(r=>r.json()).then(d=>{const p=d&&d.clientPrincipal;if(p)$("who").textContent=p.userDetails}).catch(()=>{});
 </script>
 </body></html>

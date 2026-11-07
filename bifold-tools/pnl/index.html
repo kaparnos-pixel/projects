@@ -1,0 +1,295 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Instant PnL Calculator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: two-column work surface — inputs left, sticky PnL statement right; stacks on phones */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --sunk:#eaeef2; --line:#d5dce3;
+  --fg:#15222e; --muted:#5b6a78; --accent:#1d4e74; --accent-soft:#e1ebf3;
+  --good:#1f7a4d; --good-soft:#e1f2e8; --warn:#9a6200; --warn-soft:#fbefd6; --bad:#b4322c; --bad-soft:#f8e1df;
+  --f-display:"Archivo",system-ui,sans-serif; --f-body:"IBM Plex Sans",system-ui,sans-serif; --f-num:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f161d; --surface:#16202a; --sunk:#111a22; --line:#2a3846;
+  --fg:#e3e9ef; --muted:#93a3b2; --accent:#7fb3dc; --accent-soft:#1b2d3d;
+  --good:#5cc78f; --good-soft:#15301f; --warn:#e2b04f; --warn-soft:#33280f; --bad:#ef7d74; --bad-soft:#3a1a18; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f161d; --surface:#16202a; --sunk:#111a22; --line:#2a3846;
+  --fg:#e3e9ef; --muted:#93a3b2; --accent:#7fb3dc; --accent-soft:#1b2d3d;
+  --good:#5cc78f; --good-soft:#15301f; --warn:#e2b04f; --warn-soft:#33280f; --bad:#ef7d74; --bad-soft:#3a1a18; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.wrap{max-width:1200px;margin:0 auto;padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:20px}
+h1{font-family:var(--f-display);font-weight:800;font-size:clamp(24px,3.4vw,32px);letter-spacing:-.01em;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:4px 0 0;max-width:60ch}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
+.panel+.panel{margin-top:16px}
+h2{font-family:var(--f-display);font-weight:700;font-size:16px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lbl{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+input,select{width:100%;font:inherit;color:var(--fg);background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-width:0}
+input.num{font-family:var(--f-num);text-align:right;font-variant-numeric:tabular-nums}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.po input{font-size:22px;font-weight:600;padding:10px 12px}
+.hint{font-size:12px;color:var(--muted);margin-top:4px}
+.tblwrap{overflow-x:auto;margin:0 -4px}
+table{width:100%;border-collapse:collapse;min-width:620px}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;font-weight:600;padding:6px 4px;border-bottom:1px solid var(--line)}
+th.r,td.r{text-align:right}
+td{padding:5px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.tot{font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap;padding-right:8px}
+.c-desc{width:38%}.c-cat{width:18%}.c-qty{width:9%}.c-unit{width:15%}.c-tot{width:14%}.c-x{width:6%}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:7px 12px;font-weight:500}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:600}
+button.primary:hover{color:var(--surface);filter:brightness(1.1)}
+button.x{border:none;background:none;color:var(--muted);font-size:18px;line-height:1;padding:4px 8px}
+button.x:hover{color:var(--bad)}
+.row-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;justify-content:space-between;align-items:center}
+.subtotal{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-weight:600}
+.cats{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.cat{font-size:12px;background:var(--sunk);border-radius:99px;padding:3px 10px;color:var(--muted)}
+.cat b{font-family:var(--f-num);color:var(--fg);font-weight:500}
+/* statement */
+aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}
+@media (max-width:900px){aside{position:static}}
+.verdict{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:8px;margin-bottom:14px;font-weight:600}
+.verdict .dot{width:10px;height:10px;border-radius:50%;background:currentColor;flex:none}
+.v-good{background:var(--good-soft);color:var(--good)}.v-warn{background:var(--warn-soft);color:var(--warn)}.v-bad{background:var(--bad-soft);color:var(--bad)}
+.hero{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.hero div{background:var(--sunk);border-radius:8px;padding:10px 12px;min-width:0}
+.hero .v{font-family:var(--f-num);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.stmt{width:100%;min-width:0;border-collapse:collapse}
+.stmt td{border:none;padding:4px 0;font-size:13px}
+.stmt td.r{font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+.stmt tr.sum td{border-top:1px solid var(--line);padding-top:7px;font-weight:600}
+.stmt tr.big td{border-top:2px solid var(--fg);padding-top:8px;font-weight:700;font-size:15px}
+.stmt .ind{padding-left:12px;color:var(--muted)}
+.neg{color:var(--bad)}.pos{color:var(--good)}
+.bar{height:12px;border-radius:99px;background:var(--sunk);display:flex;overflow:hidden;margin:14px 0 6px}
+.bar span{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--muted)}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.be{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);font-size:13px;color:var(--muted)}
+.be b{color:var(--fg);font-family:var(--f-num);font-weight:600}
+.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.actions button{flex:1}
+.toast{font-size:12px;color:var(--good);min-height:18px;margin-top:6px}
+.example{font-size:12px;background:var(--warn-soft);color:var(--warn);border-radius:99px;padding:3px 10px;font-weight:600}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head><body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Instant PnL Calculator</h1>
+      <p class="sub">Enter the customer's PO value, list what the job will cost you, and see what the company keeps.</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="example" id="exTag">Example figures loaded</span>
+      <button id="resetBtn" type="button">Start new project</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <main>
+      <section class="panel">
+        <h2>Purchase order</h2>
+        <div class="fields">
+          <label><span class="lbl">Company</span>
+            <select id="company"><option>Bifold Technologies</option><option>Tech Hub IT</option></select></label>
+          <label><span class="lbl">Customer</span><input id="customer" type="text"></label>
+          <label><span class="lbl">PO / LPO no.</span><input id="poNo" type="text"></label>
+        </div>
+        <div class="fields" style="margin-top:12px">
+          <label class="po" style="grid-column:1/-1"><span class="lbl">PO value (AED, excluding VAT)</span>
+            <input id="poValue" class="num" type="text" inputmode="decimal"></label>
+        </div>
+        <p class="hint" id="vatHint"></p>
+      </section>
+
+      <section class="panel">
+        <h2>Estimated project cost <span class="subtotal" id="directTotal"></span></h2>
+        <div class="tblwrap">
+          <table>
+            <thead><tr><th class="c-desc">Item</th><th class="c-cat">Category</th><th class="c-qty r">Qty</th><th class="c-unit r">Unit cost</th><th class="c-tot r">Total</th><th class="c-x"></th></tr></thead>
+            <tbody id="lines"></tbody>
+          </table>
+        </div>
+        <div class="row-actions">
+          <button type="button" id="addLine">+ Add cost line</button>
+        </div>
+        <div class="cats" id="cats"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Allowances</h2>
+        <div class="fields">
+          <label><span class="lbl">Contingency (% of cost)</span><input id="contPct" class="num" type="text" inputmode="decimal"><span class="hint">Buffer for price changes, extra cable, revisits</span></label>
+          <label><span class="lbl">Sales commission (% of PO)</span><input id="commPct" class="num" type="text" inputmode="decimal"></label>
+          <label><span class="lbl">Overhead share (% of PO)</span><input id="ohPct" class="num" type="text" inputmode="decimal"><span class="hint">Rent, salaries, admin spread over jobs</span></label>
+        </div>
+        <div class="fields" style="margin-top:12px">
+          <label><span class="lbl">Customer pays after (days)</span><input id="credDays" class="num" type="text" inputmode="numeric"></label>
+          <label><span class="lbl">Cost of money (% per year)</span><input id="finRate" class="num" type="text" inputmode="decimal"><span class="hint">Cash tied up until the customer pays</span></label>
+          <label><span class="lbl">Target net margin (%)</span><input id="target" class="num" type="text" inputmode="decimal"></label>
+        </div>
+      </section>
+    </main>
+
+    <aside>
+      <section class="panel">
+        <h2>Project PnL</h2>
+        <div class="verdict" id="verdict"><span class="dot"></span><span id="verdictTxt"></span></div>
+        <div class="hero">
+          <div><div class="k">Net profit</div><div class="v" id="hNet"></div></div>
+          <div><div class="k">Net margin</div><div class="v" id="hNetPct"></div></div>
+        </div>
+        <table class="stmt"><tbody id="stmt"></tbody></table>
+        <div class="bar" id="bar" aria-hidden="true"></div>
+        <div class="legend" id="legend"></div>
+        <div class="be" id="be"></div>
+        <div class="actions">
+          <button type="button" class="primary" id="copyBtn">Copy summary</button>
+        </div>
+        <div class="toast" id="toast" role="status"></div>
+        <textarea id="copyFallback" hidden readonly style="width:100%;height:160px;margin-top:8px;font-family:var(--f-num);font-size:12px"></textarea>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+const CATS=["Hardware","Software / licences","Subcontractor","Labour","Cabling & materials","Logistics","Other"];
+const CAT_COLORS=["#3f7cac","#7a63b8","#c0793a","#2f9c8f","#8a8f2e","#a15c7e","#7c8794"];
+const EXAMPLE={company:"Bifold Technologies",customer:"Example: Al Noor Logistics",poNo:"LPO-2026-0418",poValue:185000,contPct:5,commPct:2,ohPct:8,credDays:60,finRate:8,target:12,
+ lines:[
+  {d:"IP cameras 4MP",c:"Hardware",q:32,u:520},
+  {d:"NVR 32-channel",c:"Hardware",q:2,u:4800},
+  {d:"PoE access switches 24-port",c:"Hardware",q:3,u:6200},
+  {d:"Cat6 cabling, trunking, racks",c:"Cabling & materials",q:1,u:14500},
+  {d:"Installation team (12 days)",c:"Labour",q:1,u:18000},
+  {d:"Civil works subcontract",c:"Subcontractor",q:1,u:6500},
+  {d:"VMS licences",c:"Software / licences",q:1,u:3200},
+  {d:"Delivery and site logistics",c:"Logistics",q:1,u:1500}]};
+const BLANK={company:"Bifold Technologies",customer:"",poNo:"",poValue:0,contPct:5,commPct:0,ohPct:8,credDays:30,finRate:8,target:12,lines:[{d:"",c:"Hardware",q:1,u:0}]};
+let S=JSON.parse(JSON.stringify(EXAMPLE)), isExample=true;
+const $=id=>document.getElementById(id);
+const num=v=>{const n=parseFloat(String(v).replace(/[^0-9.\-]/g,""));return isFinite(n)?n:0};
+const aed=n=>(n<0?"−":"")+"AED "+Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});
+const pct=n=>isFinite(n)?n.toFixed(1)+"%":"—";
+const fmtIn=n=>n?Number(n).toLocaleString("en-US",{maximumFractionDigits:2}):"";
+
+function compute(s){
+  const po=num(s.poValue);
+  const direct=s.lines.reduce((a,l)=>a+num(l.q)*num(l.u),0);
+  const cont=direct*num(s.contPct)/100;
+  const cost=direct+cont;
+  const gp=po-cost;
+  const comm=po*num(s.commPct)/100;
+  const oh=po*num(s.ohPct)/100;
+  const fin=cost*num(s.finRate)/100*num(s.credDays)/365;
+  const net=gp-comm-oh-fin;
+  const byCat={};s.lines.forEach(l=>{const t=num(l.q)*num(l.u);if(t)byCat[l.c]=(byCat[l.c]||0)+t});
+  // Minimum PO that still hits the target net margin
+  const k=(num(s.commPct)+num(s.ohPct)+num(s.target))/100;
+  const minPO=k<1?(cost+fin)/(1-k):NaN;
+  const bePO=(num(s.commPct)+num(s.ohPct))/100<1?(cost+fin)/(1-(num(s.commPct)+num(s.ohPct))/100):NaN;
+  return {po,direct,cont,cost,gp,comm,oh,fin,net,byCat,minPO,bePO,
+    gpPct:po?gp/po*100:NaN,netPct:po?net/po*100:NaN,markup:cost?gp/cost*100:NaN};
+}
+
+function renderLines(){
+  const tb=$("lines");tb.innerHTML="";
+  S.lines.forEach((l,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td><input id="d${i}" type="text" placeholder="e.g. Firewall appliance" value=""></td>
+      <td><select id="c${i}">${CATS.map(c=>`<option${c===l.c?" selected":""}>${c}</option>`).join("")}</select></td>
+      <td><input id="q${i}" class="num" type="text" inputmode="decimal"></td>
+      <td><input id="u${i}" class="num" type="text" inputmode="decimal" placeholder="0"></td>
+      <td class="tot r" id="t${i}"></td>
+      <td class="r"><button class="x" type="button" aria-label="Remove line" data-i="${i}">×</button></td>`;
+    tb.appendChild(tr);
+    $("d"+i).value=l.d; $("q"+i).value=fmtIn(l.q); $("u"+i).value=fmtIn(l.u);
+    $("d"+i).oninput=e=>{l.d=e.target.value;touch()};
+    $("c"+i).onchange=e=>{l.c=e.target.value;touch()};
+    $("q"+i).oninput=e=>{l.q=num(e.target.value);touch()};
+    $("u"+i).oninput=e=>{l.u=num(e.target.value);touch()};
+  });
+  tb.querySelectorAll("button.x").forEach(b=>b.onclick=()=>{S.lines.splice(+b.dataset.i,1);if(!S.lines.length)S.lines.push({d:"",c:"Hardware",q:1,u:0});renderLines();touch()});
+}
+
+const FIELDS=["company","customer","poNo","poValue","contPct","commPct","ohPct","credDays","finRate","target"];
+function renderFields(){FIELDS.forEach(f=>{const el=$(f);if(el.classList.contains("num")){el.value=S[f]?fmtIn(S[f]):(f==="poValue"?"":"0")}else{el.value=S[f]||""}})}
+FIELDS.forEach(f=>{const el=$(f);el.addEventListener(el.tagName==="SELECT"?"change":"input",e=>{S[f]=el.classList.contains("num")?num(e.target.value):e.target.value;touch()})});
+$("poValue").addEventListener("blur",e=>{e.target.value=fmtIn(S.poValue)});
+
+function touch(){if(isExample){isExample=false;$("exTag").hidden=true}save();update()}
+
+function update(){
+  const r=compute(S);
+  S.lines.forEach((l,i)=>{const t=$("t"+i);if(t)t.textContent=(num(l.q)*num(l.u)).toLocaleString("en-US",{maximumFractionDigits:0})});
+  $("directTotal").textContent=aed(r.direct);
+  $("vatHint").textContent=r.po?`With 5% VAT the customer pays ${aed(r.po*1.05)}. VAT is passed to the FTA and is not counted as income.`:"Use the PO amount before VAT. VAT is not income.";
+  $("cats").innerHTML=Object.entries(r.byCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<span class="cat">${c} <b>${aed(v)}</b> · ${r.direct?(v/r.direct*100).toFixed(0):0}%</span>`).join("");
+
+  const t=num(S.target);
+  let cls,txt;
+  if(!r.po){cls="v-warn";txt="Enter the PO value to see the result"}
+  else if(r.net<0){cls="v-bad";txt="Loss-making at this PO value"}
+  else if(r.netPct<t){cls="v-warn";txt=`Profitable, but below your ${pct(t)} target`}
+  else{cls="v-good";txt=`Meets your ${pct(t)} net margin target`}
+  $("verdict").className="verdict "+cls;$("verdictTxt").textContent=txt;
+  $("hNet").textContent=aed(r.net);$("hNet").className="v "+(r.net<0?"neg":"");
+  $("hNetPct").textContent=pct(r.netPct);$("hNetPct").className="v "+(r.net<0?"neg":"");
+
+  const row=(k,v,c="")=>`<tr class="${c}"><td class="${c.includes("ind")?"ind":""}">${k}</td><td class="r ${v<0?"neg":""}">${aed(v)}</td></tr>`;
+  $("stmt").innerHTML=
+    row("PO value (revenue)",r.po)+
+    row("Direct project cost",-r.direct,"ind")+
+    row(`Contingency ${pct(num(S.contPct))}`,-r.cont,"ind")+
+    `<tr class="sum"><td>Gross profit <span style="color:var(--muted);font-weight:400">· ${pct(r.gpPct)}</span></td><td class="r ${r.gp<0?"neg":""}">${aed(r.gp)}</td></tr>`+
+    row(`Sales commission`,-r.comm,"ind")+
+    row(`Overhead share`,-r.oh,"ind")+
+    row(`Cash tied up ${num(S.credDays)} days`,-r.fin,"ind")+
+    `<tr class="big"><td>Net profit</td><td class="r ${r.net<0?"neg":"pos"}">${aed(r.net)}</td></tr>`+
+    `<tr><td class="ind">Markup on cost</td><td class="r">${pct(r.markup)}</td></tr>`;
+
+  // where each dirham of the PO goes
+  const parts=[["Project cost",r.cost,"var(--accent)"],["Commission",r.comm,"#c0793a"],["Overhead",r.oh,"#7c8794"],["Finance",r.fin,"#a15c7e"],["Net profit",Math.max(r.net,0),"var(--good)"]];
+  const tot=parts.reduce((a,p)=>a+p[1],0)||1;
+  $("bar").innerHTML=parts.map(p=>`<span style="width:${p[1]/tot*100}%;background:${p[2]}"></span>`).join("");
+  $("legend").innerHTML=parts.filter(p=>p[1]>0).map(p=>`<span><i style="background:${p[2]}"></i>${p[0]} ${(p[1]/tot*100).toFixed(0)}%</span>`).join("");
+
+  $("be").innerHTML=isFinite(r.minPO)?`Break-even PO: <b>${aed(r.bePO)}</b><br>Lowest PO to hit ${pct(t)} net: <b>${aed(r.minPO)}</b>`+(r.po&&r.minPO>r.po?`<br><span class="neg">Short by ${aed(r.minPO-r.po)}</span>`:r.po?`<br>Room to discount: <b>${aed(r.po-r.minPO)}</b>`:""):"Commission, overhead and target add up to 100% or more.";
+}
+
+function summary(){
+  const r=compute(S);
+  return [`PROJECT PnL — ${S.company}`,`Customer: ${S.customer||"-"}   PO: ${S.poNo||"-"}`,"",
+  `PO value (ex VAT):   ${aed(r.po)}`,`Direct cost:         ${aed(r.direct)}`,`Contingency:         ${aed(r.cont)}`,
+  `Gross profit:        ${aed(r.gp)} (${pct(r.gpPct)})`,`Commission:          ${aed(r.comm)}`,`Overhead share:      ${aed(r.oh)}`,`Finance cost:        ${aed(r.fin)}`,
+  `NET PROFIT:          ${aed(r.net)} (${pct(r.netPct)})`,`Markup on cost:      ${pct(r.markup)}`,"",
+  `Break-even PO:       ${aed(r.bePO)}`,`PO for ${pct(num(S.target))} net:   ${aed(r.minPO)}`].join("\n");
+}
+$("copyBtn").onclick=()=>{
+  const txt=summary(),fb=$("copyFallback");
+  const done=()=>{$("toast").textContent="Summary copied";fb.hidden=true;setTimeout(()=>$("toast").textContent="",2500)};
+  const fail=()=>{fb.value=txt;fb.hidden=false;fb.select();$("toast").textContent="Select the text below and copy it"};
+  try{navigator.clipboard.writeText(txt).then(done,fail)}catch(e){fail()}
+};
+$("addLine").onclick=()=>{S.lines.push({d:"",c:"Hardware",q:1,u:0});renderLines();touch();$("d"+(S.lines.length-1)).focus()};
+$("resetBtn").onclick=()=>{S=JSON.parse(JSON.stringify(BLANK));isExample=false;$("exTag").hidden=true;renderFields();renderLines();save();update();$("poValue").focus()};
+
+function save(){try{localStorage.setItem("pnl-draft",JSON.stringify(S))}catch(e){}}
+try{const d=JSON.parse(localStorage.getItem("pnl-draft"));if(d&&d.lines){S=d;isExample=false;$("exTag").hidden=true}}catch(e){}
+renderFields();renderLines();update();
+</script>
+</body></html>

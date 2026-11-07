@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bifold Customers</title>
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
+<style>
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:20px}
+.filters{margin-bottom:12px}.filters input{max-width:340px}
+.listpanel{padding:0;overflow:hidden}
+td .t{font-weight:700} td .s{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="brandbar"><div class="in">
+  <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
+  <nav><a href="/">All tools</a><a href="/pnl/">PnL Calculator</a><span id="who"></span><a href="/.auth/logout">Sign out</a></nav>
+</div></div>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1><span class="tag">Bifold Tools</span>Customers</h1>
+      <p class="sub">One customer list shared by every Bifold tool. Add a customer once and pick it anywhere.</p>
+    </div>
+    <button class="primary" type="button" id="addBtn">+ New customer</button>
+  </header>
+  <div class="filters"><input id="q" type="search" placeholder="Search name, contact, TRN or emirate" aria-label="Search customers"></div>
+  <div class="panel listpanel">
+    <div class="tblwrap">
+      <table class="list">
+        <thead><tr><th>Customer</th><th>Contact</th><th>Phone</th><th>Email</th><th>TRN</th><th>Emirate</th><th>Added</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty">Loading customers…</div>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <form id="form" method="dialog">
+    <h3 id="dlgTitle">New customer</h3>
+    <label><span class="lbl">Customer name *</span><input id="cName" required maxlength="150"></label>
+    <div class="fields">
+      <label><span class="lbl">Contact person</span><input id="cContact" maxlength="100"></label>
+      <label><span class="lbl">Phone</span><input id="cPhone" maxlength="50"></label>
+    </div>
+    <div class="fields">
+      <label><span class="lbl">Email</span><input id="cEmail" type="email" maxlength="150"></label>
+      <label><span class="lbl">TRN</span><input id="cTrn" maxlength="30"></label>
+    </div>
+    <div class="fields">
+      <label><span class="lbl">Emirate</span><select id="cEmirate"><option></option><option>Abu Dhabi</option><option>Dubai</option><option>Sharjah</option><option>Ajman</option><option>Umm Al Quwain</option><option>Ras Al Khaimah</option><option>Fujairah</option><option>Outside UAE</option></select></label>
+      <label><span class="lbl">Address</span><input id="cAddress" maxlength="300"></label>
+    </div>
+    <p class="hint" id="meta" style="margin:0"></p>
+    <div class="err" id="err"></div>
+    <div class="foot">
+      <button type="button" class="danger" id="delBtn" hidden style="margin-right:auto">Delete</button>
+      <button type="button" id="cancel">Cancel</button><button class="primary" type="submit" id="saveBtn">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const day=iso=>iso?new Date(iso).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"";
+let ME=null,LIST=[],cur=null;
+function toast(m,e){const t=document.createElement("div");t.className="toast"+(e?" err":"");t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),e?6000:2600)}
+async function api(method,path,body){
+  let r;try{r=await fetch("/api/"+path,{method,headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,cache:"no-store"})}catch{throw new Error("Can't reach the server. Check your connection and try again.")}
+  const ct=r.headers.get("content-type")||"";
+  if(r.redirected||(r.ok&&r.status!==204&&!ct.includes("json")))throw new Error("Your session has ended. Reload the page to sign in again.");
+  let j=null;if(r.status!==204){try{j=await r.json()}catch{}}
+  if(!r.ok){const e=new Error((j&&j.error)||"The request failed.");e.status=r.status;throw e}return j;
+}
+const F={name:"cName",contactName:"cContact",phone:"cPhone",email:"cEmail",trn:"cTrn",emirate:"cEmirate",address:"cAddress"};
+function render(){
+  const q=$("q").value.trim().toLowerCase();
+  const rows=LIST.filter(c=>!q||[c.name,c.contactName,c.trn,c.emirate,c.email,c.phone].join(" ").toLowerCase().includes(q));
+  $("rows").innerHTML=rows.map(c=>`<tr data-id="${esc(c.id)}" tabindex="0"><td><div class="t">${esc(c.name)}</div><div class="s">${esc(c.address)}</div></td><td>${esc(c.contactName)}</td><td class="mono">${esc(c.phone)}</td><td>${esc(c.email)}</td><td class="mono">${esc(c.trn)}</td><td>${esc(c.emirate)}</td><td class="s">${esc(day(c.createdAt))}</td></tr>`).join("");
+  $("rows").querySelectorAll("tr").forEach(tr=>{tr.onclick=()=>open(LIST.find(c=>c.id===tr.dataset.id));tr.onkeydown=e=>{if(e.key==="Enter")tr.onclick()}});
+  $("empty").hidden=rows.length>0;$("empty").textContent=LIST.length?"No customers match your search.":"No customers yet. Add the first one with + New customer.";
+}
+function open(c){
+  cur=c||null;$("form").reset();$("err").textContent="";
+  $("dlgTitle").textContent=c?"Edit customer":"New customer";$("saveBtn").textContent=c?"Save changes":"Add customer";
+  if(c)for(const k in F)$(F[k]).value=c[k]||"";
+  $("meta").textContent=c?`Added by ${c.createdBy} on ${day(c.createdAt)}${c.updatedAt!==c.createdAt?` · last changed by ${c.updatedBy}`:""}`:"";
+  $("delBtn").hidden=!(c&&ME.isManager);
+  $("dlg").showModal();$("cName").focus();
+}
+$("addBtn").onclick=()=>open(null);$("cancel").onclick=()=>$("dlg").close();$("q").oninput=render;
+$("form").onsubmit=async e=>{
+  e.preventDefault();$("err").textContent="";$("saveBtn").disabled=true;
+  const body={};for(const k in F)body[k]=$(F[k]).value;
+  try{
+    const c=cur?await api("PUT","customers/"+encodeURIComponent(cur.id),body):await api("POST","customers",body);
+    LIST=LIST.filter(x=>x.id!==c.id).concat(c).sort((a,b)=>a.name.localeCompare(b.name));render();$("dlg").close();toast(cur?"Customer updated":`${c.name} added`);
+  }catch(err){$("err").textContent=err.message}finally{$("saveBtn").disabled=false}
+};
+$("delBtn").onclick=async()=>{
+  if($("delBtn").dataset.armed!=="1"){$("delBtn").dataset.armed="1";$("delBtn").textContent="Click again to delete";setTimeout(()=>{$("delBtn").dataset.armed="";$("delBtn").textContent="Delete"},4000);return}
+  try{await api("DELETE","customers/"+encodeURIComponent(cur.id));LIST=LIST.filter(x=>x.id!==cur.id);render();$("dlg").close();toast("Customer deleted")}catch(err){$("err").textContent=err.message}
+};
+(async()=>{try{[ME,LIST]=await Promise.all([api("GET","me"),api("GET","customers")]);$("who").textContent=ME.email;render()}catch(e){$("empty").textContent=e.message}})();
+</script>
+</body>
+</html>

@@ -1,235 +1,404 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Instant PnL Calculator</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="icon" href="/assets/bifold_logo.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
 <style>
-/* Layout: two-column work surface — inputs left, sticky PnL statement right; stacks on phones */
-:root{
-  --bg:#f3f5f7; --surface:#ffffff; --sunk:#eaeef2; --line:#d5dce3;
-  --fg:#15222e; --muted:#5b6a78; --accent:#1E5A8C; --accent-soft:#e2ecf5; --red:#D81F2A;
-  --good:#1f7a4d; --good-soft:#e1f2e8; --warn:#9a6200; --warn-soft:#fbefd6; --bad:#b4322c; --bad-soft:#f8e1df;
-  --f-display:Arial,"Helvetica Neue",Helvetica,sans-serif; --f-body:Arial,"Helvetica Neue",Helvetica,sans-serif; --f-num:"IBM Plex Mono",ui-monospace,monospace;
-}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0f161d; --surface:#16202a; --sunk:#111a22; --line:#2a3846;
-  --fg:#e3e9ef; --muted:#93a3b2; --accent:#6fa8db; --accent-soft:#16293a; --red:#f0545c;
-  --good:#5cc78f; --good-soft:#15301f; --warn:#e2b04f; --warn-soft:#33280f; --bad:#ef7d74; --bad-soft:#3a1a18; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0f161d; --surface:#16202a; --sunk:#111a22; --line:#2a3846;
-  --fg:#e3e9ef; --muted:#93a3b2; --accent:#6fa8db; --accent-soft:#16293a; --red:#f0545c;
-  --good:#5cc78f; --good-soft:#15301f; --warn:#e2b04f; --warn-soft:#33280f; --bad:#ef7d74; --bad-soft:#3a1a18; color-scheme:dark}
-*{box-sizing:border-box}
-body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.5}
-.wrap{max-width:1200px;margin:0 auto;padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:20px}
-h1{font-family:var(--f-display);font-weight:800;font-size:clamp(24px,3.4vw,32px);letter-spacing:-.01em;margin:0;text-wrap:balance}
-.sub{color:var(--muted);margin:4px 0 0;max-width:60ch}
+.btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+/* list view */
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.filters input{max-width:340px}
+.filters select{max-width:220px}
+.listpanel{padding:0;overflow:hidden}
+td .t{font-weight:700}
+td .s{font-size:12px;color:var(--muted)}
+/* editor */
+.docbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:16px}
+.docbar .meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:13px}
+.docbar .docid{font-family:var(--f-num);font-weight:600;color:var(--fg)}
+.status.dirty{color:var(--warn);font-weight:700}
+.readonly-note{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 14px;font-weight:600;margin-bottom:14px}
 .grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start}
 @media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
 .panel+.panel{margin-top:16px}
 h2{font-family:var(--f-display);font-weight:700;font-size:16px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;gap:8px}
-.lbl{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
-.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
-input,select{width:100%;font:inherit;color:var(--fg);background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-width:0}
-input.num{font-family:var(--f-num);text-align:right;font-variant-numeric:tabular-nums}
-input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+fieldset:disabled button{display:none}
+.custrow{display:flex;gap:6px}
+.custrow select{flex:1}
 .po input{font-size:22px;font-weight:600;padding:10px 12px}
-.hint{font-size:12px;color:var(--muted);margin-top:4px}
-.tblwrap{overflow-x:auto;margin:0 -4px}
-table{width:100%;border-collapse:collapse;min-width:620px}
-th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;font-weight:600;padding:6px 4px;border-bottom:1px solid var(--line)}
-th.r,td.r{text-align:right}
-td{padding:5px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
-td.tot{font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap;padding-right:8px}
+.ctbl{width:100%;border-collapse:collapse;min-width:620px}
+.ctbl th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;font-weight:700;padding:6px 4px;border-bottom:1px solid var(--line)}
+.ctbl td{padding:5px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
+.ctbl td.tot{font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap;padding-right:8px;text-align:right}
 .c-desc{width:38%}.c-cat{width:18%}.c-qty{width:9%}.c-unit{width:15%}.c-tot{width:14%}.c-x{width:6%}
-button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:7px 12px;font-weight:500}
-button:hover{border-color:var(--accent);color:var(--accent)}
-button.primary{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:600}
-button.primary:hover{color:var(--surface);filter:brightness(1.1)}
-button.x{border:none;background:none;color:var(--muted);font-size:18px;line-height:1;padding:4px 8px}
-button.x:hover{color:var(--bad)}
-.row-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;justify-content:space-between;align-items:center}
+.row-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .subtotal{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-weight:600}
 .cats{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
 .cat{font-size:12px;background:var(--sunk);border-radius:99px;padding:3px 10px;color:var(--muted)}
 .cat b{font-family:var(--f-num);color:var(--fg);font-weight:500}
-/* statement */
-aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}
+aside{position:sticky;top:16px}
 @media (max-width:900px){aside{position:static}}
-.verdict{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:8px;margin-bottom:14px;font-weight:600}
+.verdict{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:8px;margin-bottom:14px;font-weight:700}
 .verdict .dot{width:10px;height:10px;border-radius:50%;background:currentColor;flex:none}
 .v-good{background:var(--good-soft);color:var(--good)}.v-warn{background:var(--warn-soft);color:var(--warn)}.v-bad{background:var(--bad-soft);color:var(--bad)}
 .hero{display:grid;grid-template-columns:1.35fr 1fr;gap:10px;margin-bottom:14px}
 .hero div{background:var(--sunk);border-radius:8px;padding:10px 12px;min-width:0}
 .hero .v{font-family:var(--f-num);font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hero .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
-.stmt{width:100%;min-width:0;border-collapse:collapse}
-.stmt td{border:none;padding:4px 0;font-size:13px}
+.stmt{width:100%;border-collapse:collapse}
+.stmt td{padding:4px 0;font-size:13px}
 .stmt td.r{font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
-.stmt tr.sum td{border-top:1px solid var(--line);padding-top:7px;font-weight:600}
+.stmt tr.sum td{border-top:1px solid var(--line);padding-top:7px;font-weight:700}
 .stmt tr.big td{border-top:2px solid var(--fg);padding-top:8px;font-weight:700;font-size:15px}
 .stmt .ind{padding-left:12px;color:var(--muted)}
-.neg{color:var(--bad)}.pos{color:var(--good)}
 .bar{height:12px;border-radius:99px;background:var(--sunk);display:flex;overflow:hidden;margin:14px 0 6px}
 .bar span{display:block;height:100%}
 .legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--muted)}
 .legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
 .be{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);font-size:13px;color:var(--muted)}
-.be b{color:var(--fg);font-family:var(--f-num);font-weight:600}
-.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
-.actions button{flex:1}
-.toast{font-size:12px;color:var(--good);min-height:18px;margin-top:6px}
-.example{font-size:12px;background:var(--warn-soft);color:var(--warn);border-radius:99px;padding:3px 10px;font-weight:600}
-.brandbar{background:var(--surface);border-bottom:3px solid var(--red)}
-.brandbar .in{max-width:1200px;margin:0 auto;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.brandbar .logo{display:inline-flex;background:#fff;border-radius:6px;padding:4px 6px}
-.brandbar .logo img{height:40px;width:auto;display:block}
-.brandbar nav{display:flex;gap:14px;align-items:center;font-size:13px;color:var(--muted)}
-.brandbar nav a{color:var(--accent);text-decoration:none;font-weight:600}
-.brandbar nav a:hover{text-decoration:underline}
-h1 .tag{display:block;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--red);margin-bottom:4px}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.be b{color:var(--fg);font-family:var(--f-num)}
+.menu{position:relative}
+.menu .pop{position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px;display:grid;gap:2px;min-width:190px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.15)}
+.menu .pop button{border:none;justify-content:flex-start;width:100%}
+.menu .pop button:hover{background:var(--accent-soft)}
+/* share dialog */
+.people{display:grid;gap:6px}
+.person{display:grid;grid-template-columns:minmax(0,1fr) 110px 32px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.person .em{overflow-wrap:anywhere}
+.person.fixed{grid-template-columns:minmax(0,1fr) auto}
+.addp{display:grid;grid-template-columns:minmax(0,1fr) 110px auto;gap:8px}
+@media (max-width:480px){.addp{grid-template-columns:1fr 1fr}.addp button{grid-column:1/-1}}
+.loading{padding:40px;text-align:center;color:var(--muted)}
 </style>
-</head><body>
-
+</head>
+<body>
 <div class="brandbar"><div class="in">
   <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
-  <nav><a href="/">All tools</a><span id="who"></span><a href="/.auth/logout">Sign out</a></nav>
+  <nav><a href="/">All tools</a><a href="/customers/">Customers</a><span id="who"></span><a href="/.auth/logout">Sign out</a></nav>
 </div></div>
+
 <div class="wrap">
-  <header class="top">
-    <div>
-      <h1><span class="tag">Bifold Tools</span>Instant PnL Calculator</h1>
-      <p class="sub">Enter the customer's PO value, list what the job will cost you, and see what the company keeps.</p>
+  <!-- LIST VIEW -->
+  <section id="listView" hidden>
+    <header class="top">
+      <div>
+        <h1><span class="tag">Bifold Tools</span>Instant PnL Calculator</h1>
+        <p class="sub">Saved project PnLs you created or that were shared with you. Open one to view, edit, share or download it.</p>
+      </div>
+      <div class="btns"><button class="primary" type="button" id="newBtn">+ New PnL</button></div>
+    </header>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Search customer, PO no. or doc no." aria-label="Search">
+      <select id="scope" aria-label="Show">
+        <option value="all">Everything I can see</option>
+        <option value="mine">Created by me</option>
+        <option value="shared">Shared with me</option>
+      </select>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <span class="example" id="exTag">Example figures loaded</span>
-      <button id="resetBtn" type="button">Start new project</button>
+    <div class="panel listpanel">
+      <div class="tblwrap">
+        <table class="list">
+          <thead><tr><th>Doc no.</th><th>Customer / PO</th><th>Company</th><th class="r">PO value</th><th class="r">Net profit</th><th class="r">Margin</th><th>Owner</th><th>Your access</th><th>Updated</th></tr></thead>
+          <tbody id="docRows"></tbody>
+        </table>
+      </div>
+      <div id="listEmpty" class="empty" hidden></div>
     </div>
-  </header>
+  </section>
 
-  <div class="grid">
-    <main>
-      <section class="panel">
-        <h2>Purchase order</h2>
-        <div class="fields">
-          <label><span class="lbl">Company</span>
-            <select id="company"><option>Bifold Technologies</option><option>Tech Hub IT</option></select></label>
-          <label><span class="lbl">Customer</span><input id="customer" type="text"></label>
-          <label><span class="lbl">PO / LPO no.</span><input id="poNo" type="text"></label>
+  <!-- EDITOR VIEW -->
+  <section id="editView" hidden>
+    <div class="docbar">
+      <div class="meta">
+        <a href="#" class="btn" id="backBtn">← All PnLs</a>
+        <span class="docid" id="docId">New PnL</span>
+        <span class="chip" id="roleChip" hidden></span>
+        <span class="status" id="docStatus"></span>
+      </div>
+      <div class="btns">
+        <button type="button" class="primary" id="saveBtn">Save</button>
+        <button type="button" id="shareBtn" hidden>Share</button>
+        <div class="menu">
+          <button type="button" id="dlBtn" aria-haspopup="true" aria-expanded="false">Download ▾</button>
+          <div class="pop" id="dlMenu" hidden>
+            <button type="button" id="dlPdf">PDF (branded)</button>
+            <button type="button" id="dlXlsx">Excel (.xlsx)</button>
+          </div>
         </div>
-        <div class="fields" style="margin-top:12px">
-          <label class="po" style="grid-column:1/-1"><span class="lbl">PO value (AED, excluding VAT)</span>
-            <input id="poValue" class="num" type="text" inputmode="decimal"></label>
-        </div>
-        <p class="hint" id="vatHint"></p>
-      </section>
+        <button type="button" class="danger" id="delBtn" hidden>Delete</button>
+      </div>
+    </div>
+    <div class="readonly-note" id="roNote" hidden>You have view access. Ask the owner or a manager if you need to make changes.</div>
 
-      <section class="panel">
-        <h2>Estimated project cost <span class="subtotal" id="directTotal"></span></h2>
-        <div class="tblwrap">
-          <table>
-            <thead><tr><th class="c-desc">Item</th><th class="c-cat">Category</th><th class="c-qty r">Qty</th><th class="c-unit r">Unit cost</th><th class="c-tot r">Total</th><th class="c-x"></th></tr></thead>
-            <tbody id="lines"></tbody>
-          </table>
-        </div>
-        <div class="row-actions">
-          <button type="button" id="addLine">+ Add cost line</button>
-        </div>
-        <div class="cats" id="cats"></div>
-      </section>
+    <div class="grid">
+      <fieldset id="editFs">
+        <section class="panel">
+          <h2>Purchase order</h2>
+          <div class="fields">
+            <label><span class="lbl">Company</span>
+              <select id="company"><option>Bifold Technologies</option><option>Tech Hub IT</option></select></label>
+            <label style="grid-column:span 2;min-width:0"><span class="lbl">Customer</span>
+              <span class="custrow"><select id="customerId"></select><button type="button" id="newCustBtn" title="Add a new customer">+ New</button></span></label>
+          </div>
+          <div class="fields" style="margin-top:12px">
+            <label><span class="lbl">PO / LPO no.</span><input id="poNo" type="text"></label>
+            <label><span class="lbl">Project title (optional)</span><input id="title" type="text" placeholder="e.g. CCTV upgrade, Warehouse 2"></label>
+          </div>
+          <div class="fields" style="margin-top:12px">
+            <label class="po" style="grid-column:1/-1"><span class="lbl">PO value (AED, excluding VAT)</span>
+              <input id="poValue" class="num" type="text" inputmode="decimal" placeholder="0"></label>
+          </div>
+          <p class="hint" id="vatHint"></p>
+        </section>
 
-      <section class="panel">
-        <h2>Allowances</h2>
-        <div class="fields">
-          <label><span class="lbl">Contingency (% of cost)</span><input id="contPct" class="num" type="text" inputmode="decimal"><span class="hint">Buffer for price changes, extra cable, revisits</span></label>
-          <label><span class="lbl">Sales commission (% of PO)</span><input id="commPct" class="num" type="text" inputmode="decimal"></label>
-          <label><span class="lbl">Overhead share (% of PO)</span><input id="ohPct" class="num" type="text" inputmode="decimal"><span class="hint">Rent, salaries, admin spread over jobs</span></label>
-        </div>
-        <div class="fields" style="margin-top:12px">
-          <label><span class="lbl">Customer pays after (days)</span><input id="credDays" class="num" type="text" inputmode="numeric"></label>
-          <label><span class="lbl">Cost of money (% per year)</span><input id="finRate" class="num" type="text" inputmode="decimal"><span class="hint">Cash tied up until the customer pays</span></label>
-          <label><span class="lbl">Target net margin (%)</span><input id="target" class="num" type="text" inputmode="decimal"></label>
-        </div>
-      </section>
-    </main>
+        <section class="panel">
+          <h2>Estimated project cost <span class="subtotal" id="directTotal"></span></h2>
+          <div class="tblwrap">
+            <table class="ctbl">
+              <thead><tr><th class="c-desc">Item</th><th class="c-cat">Category</th><th class="c-qty r">Qty</th><th class="c-unit r">Unit cost</th><th class="c-tot r">Total</th><th class="c-x"></th></tr></thead>
+              <tbody id="lines"></tbody>
+            </table>
+          </div>
+          <div class="row-actions"><button type="button" id="addLine">+ Add cost line</button></div>
+          <div class="cats" id="cats"></div>
+        </section>
 
-    <aside>
-      <section class="panel">
-        <h2>Project PnL</h2>
-        <div class="verdict" id="verdict"><span class="dot"></span><span id="verdictTxt"></span></div>
-        <div class="hero">
-          <div><div class="k">Net profit</div><div class="v" id="hNet"></div></div>
-          <div><div class="k">Net margin</div><div class="v" id="hNetPct"></div></div>
-        </div>
-        <table class="stmt"><tbody id="stmt"></tbody></table>
-        <div class="bar" id="bar" aria-hidden="true"></div>
-        <div class="legend" id="legend"></div>
-        <div class="be" id="be"></div>
-        <div class="actions">
-          <button type="button" class="primary" id="copyBtn">Copy summary</button>
-        </div>
-        <div class="toast" id="toast" role="status"></div>
-        <textarea id="copyFallback" hidden readonly style="width:100%;height:160px;margin-top:8px;font-family:var(--f-num);font-size:12px"></textarea>
-      </section>
-    </aside>
-  </div>
+        <section class="panel">
+          <h2>Allowances</h2>
+          <div class="fields">
+            <label><span class="lbl">Contingency (% of cost)</span><input id="contPct" class="num" type="text" inputmode="decimal"><span class="hint">Buffer for price changes, extra cable, revisits</span></label>
+            <label><span class="lbl">Sales commission (% of PO)</span><input id="commPct" class="num" type="text" inputmode="decimal"></label>
+            <label><span class="lbl">Overhead share (% of PO)</span><input id="ohPct" class="num" type="text" inputmode="decimal"><span class="hint">Rent, salaries, admin spread over jobs</span></label>
+          </div>
+          <div class="fields" style="margin-top:12px">
+            <label><span class="lbl">Customer pays after (days)</span><input id="credDays" class="num" type="text" inputmode="numeric"></label>
+            <label><span class="lbl">Cost of money (% per year)</span><input id="finRate" class="num" type="text" inputmode="decimal"><span class="hint">Cash tied up until the customer pays</span></label>
+            <label><span class="lbl">Target net margin (%)</span><input id="target" class="num" type="text" inputmode="decimal"></label>
+          </div>
+        </section>
+      </fieldset>
+
+      <aside>
+        <section class="panel">
+          <h2>Project PnL</h2>
+          <div class="verdict" id="verdict"><span class="dot"></span><span id="verdictTxt"></span></div>
+          <div class="hero">
+            <div><div class="k">Net profit</div><div class="v" id="hNet"></div></div>
+            <div><div class="k">Net margin</div><div class="v" id="hNetPct"></div></div>
+          </div>
+          <table class="stmt"><tbody id="stmt"></tbody></table>
+          <div class="bar" id="bar" aria-hidden="true"></div>
+          <div class="legend" id="legend"></div>
+          <div class="be" id="be"></div>
+        </section>
+      </aside>
+    </div>
+  </section>
+
+  <div id="boot" class="loading">Loading…</div>
 </div>
 
+<!-- New customer -->
+<dialog id="custDlg">
+  <form id="custForm" method="dialog">
+    <h3>New customer</h3>
+    <p class="hint" style="margin:0">Customers are shared across all Bifold tools.</p>
+    <label><span class="lbl">Customer name *</span><input id="cName" required maxlength="150"></label>
+    <div class="fields">
+      <label><span class="lbl">Contact person</span><input id="cContact" maxlength="100"></label>
+      <label><span class="lbl">Phone</span><input id="cPhone" maxlength="50"></label>
+    </div>
+    <div class="fields">
+      <label><span class="lbl">Email</span><input id="cEmail" type="email" maxlength="150"></label>
+      <label><span class="lbl">TRN</span><input id="cTrn" maxlength="30"></label>
+    </div>
+    <div class="fields">
+      <label><span class="lbl">Emirate</span><select id="cEmirate"><option></option><option>Abu Dhabi</option><option>Dubai</option><option>Sharjah</option><option>Ajman</option><option>Umm Al Quwain</option><option>Ras Al Khaimah</option><option>Fujairah</option><option>Outside UAE</option></select></label>
+      <label><span class="lbl">Address</span><input id="cAddress" maxlength="300"></label>
+    </div>
+    <div class="err" id="custErr"></div>
+    <div class="foot"><button type="button" id="custCancel">Cancel</button><button class="primary" type="submit" id="custSave">Add customer</button></div>
+  </form>
+</dialog>
+
+<!-- Share -->
+<dialog id="shareDlg">
+  <form id="shareForm" method="dialog">
+    <h3>Share this PnL</h3>
+    <div class="people" id="people"></div>
+    <div class="addp">
+      <input id="shEmail" type="email" placeholder="name@bifoldtech.com" aria-label="Email">
+      <select id="shRole" aria-label="Access"><option value="view">Can view</option><option value="edit">Can edit</option></select>
+      <button class="primary" type="submit">Add</button>
+    </div>
+    <div class="err" id="shErr"></div>
+    <div class="foot"><button type="button" id="shClose">Done</button></div>
+  </form>
+</dialog>
+
+<!-- Confirm -->
+<dialog id="confirmDlg">
+  <form method="dialog">
+    <h3 id="cfTitle"></h3>
+    <p id="cfText" style="margin:0"></p>
+    <div class="foot"><button value="no">Cancel</button><button value="yes" class="primary" id="cfYes"></button></div>
+  </form>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 const CATS=["Hardware","Software / licences","Subcontractor","Labour","Cabling & materials","Logistics","Other"];
-const CAT_COLORS=["#3f7cac","#7a63b8","#c0793a","#2f9c8f","#8a8f2e","#a15c7e","#7c8794"];
-const EXAMPLE={company:"Bifold Technologies",customer:"Example: Al Noor Logistics",poNo:"LPO-2026-0418",poValue:185000,contPct:5,commPct:2,ohPct:8,credDays:60,finRate:8,target:12,
- lines:[
-  {d:"IP cameras 4MP",c:"Hardware",q:32,u:520},
-  {d:"NVR 32-channel",c:"Hardware",q:2,u:4800},
-  {d:"PoE access switches 24-port",c:"Hardware",q:3,u:6200},
-  {d:"Cat6 cabling, trunking, racks",c:"Cabling & materials",q:1,u:14500},
-  {d:"Installation team (12 days)",c:"Labour",q:1,u:18000},
-  {d:"Civil works subcontract",c:"Subcontractor",q:1,u:6500},
-  {d:"VMS licences",c:"Software / licences",q:1,u:3200},
-  {d:"Delivery and site logistics",c:"Logistics",q:1,u:1500}]};
-const BLANK={company:"Bifold Technologies",customer:"",poNo:"",poValue:0,contPct:5,commPct:0,ohPct:8,credDays:30,finRate:8,target:12,lines:[{d:"",c:"Hardware",q:1,u:0}]};
-let S=JSON.parse(JSON.stringify(EXAMPLE)), isExample=true;
+const BLANK=()=>({company:"Bifold Technologies",customerId:"",customer:"",poNo:"",title:"",poValue:0,contPct:5,commPct:0,ohPct:8,credDays:30,finRate:8,target:12,lines:[{d:"",c:"Hardware",q:1,u:0}]});
 const $=id=>document.getElementById(id);
 const num=v=>{const n=parseFloat(String(v).replace(/[^0-9.\-]/g,""));return isFinite(n)?n:0};
-const aed=n=>(n<0?"−":"")+"AED "+Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});
+const aed=n=>(n<0?"−":"")+"AED "+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0});
+const aedPlain=n=>(n<0?"-":"")+"AED "+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0});
 const pct=n=>isFinite(n)?n.toFixed(1)+"%":"—";
 const fmtIn=n=>n?Number(n).toLocaleString("en-US",{maximumFractionDigits:2}):"";
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const when=iso=>{if(!iso)return"";const d=new Date(iso),s=(Date.now()-d)/1000;if(s<60)return"just now";if(s<3600)return Math.floor(s/60)+" min ago";if(s<86400)return Math.floor(s/3600)+" h ago";return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})};
+const shortName=e=>String(e||"").split("@")[0];
 
+let ME=null, CUSTOMERS=[], DOCS=[];
+let S=BLANK(), DOC=null, dirty=false, busy=false;
+
+function toast(msg,isErr){const t=document.createElement("div");t.className="toast"+(isErr?" err":"");t.setAttribute("role","status");t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),isErr?6000:2600)}
+function confirmBox(title,text,yes){return new Promise(res=>{$("cfTitle").textContent=title;$("cfText").textContent=text;$("cfYes").textContent=yes;const d=$("confirmDlg");d.onclose=()=>res(d.returnValue==="yes");d.returnValue="";d.showModal()})}
+
+async function api(method,path,body){
+  let r;
+  try{r=await fetch("/api/"+path,{method,headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,credentials:"same-origin",cache:"no-store"})}
+  catch(e){throw new Error("Can't reach the server. Check your connection and try again.")}
+  const ct=r.headers.get("content-type")||"";
+  if(r.redirected||(r.ok&&r.status!==204&&!ct.includes("json"))){const e=new Error("Your session has ended. Reload the page to sign in again.");e.status=401;throw e}
+  let j=null;if(r.status!==204){try{j=await r.json()}catch{}}
+  if(!r.ok){const e=new Error((j&&j.error)||("The request failed ("+r.status+")."));e.status=r.status;e.data=j;throw e}
+  return j;
+}
+
+/* ---------- calculation (same formula as the server) ---------- */
 function compute(s){
   const po=num(s.poValue);
   const direct=s.lines.reduce((a,l)=>a+num(l.q)*num(l.u),0);
-  const cont=direct*num(s.contPct)/100;
-  const cost=direct+cont;
-  const gp=po-cost;
-  const comm=po*num(s.commPct)/100;
-  const oh=po*num(s.ohPct)/100;
+  const cont=direct*num(s.contPct)/100, cost=direct+cont, gp=po-cost;
+  const comm=po*num(s.commPct)/100, oh=po*num(s.ohPct)/100;
   const fin=cost*num(s.finRate)/100*num(s.credDays)/365;
   const net=gp-comm-oh-fin;
   const byCat={};s.lines.forEach(l=>{const t=num(l.q)*num(l.u);if(t)byCat[l.c]=(byCat[l.c]||0)+t});
-  // Minimum PO that still hits the target net margin
-  const k=(num(s.commPct)+num(s.ohPct)+num(s.target))/100;
-  const minPO=k<1?(cost+fin)/(1-k):NaN;
-  const bePO=(num(s.commPct)+num(s.ohPct))/100<1?(cost+fin)/(1-(num(s.commPct)+num(s.ohPct))/100):NaN;
-  return {po,direct,cont,cost,gp,comm,oh,fin,net,byCat,minPO,bePO,
+  const k=(num(s.commPct)+num(s.ohPct)+num(s.target))/100, k0=(num(s.commPct)+num(s.ohPct))/100;
+  return {po,direct,cont,cost,gp,comm,oh,fin,net,byCat,minPO:k<1?(cost+fin)/(1-k):NaN,bePO:k0<1?(cost+fin)/(1-k0):NaN,
     gpPct:po?gp/po*100:NaN,netPct:po?net/po*100:NaN,markup:cost?gp/cost*100:NaN};
 }
+
+/* ---------- routing ---------- */
+function route(){
+  const h=decodeURIComponent(location.hash.slice(1));
+  $("boot").hidden=true;
+  if(!h||h==="list") return showList();
+  if(h==="new") return openNew();
+  return openDoc(h);
+}
+let lastHash=location.hash;
+window.addEventListener("hashchange",async()=>{
+  if(dirty&&!(await confirmBox("Leave without saving?","You have unsaved changes on this PnL.","Leave"))){history.replaceState(null,"",lastHash||"#");return}
+  dirty=false;lastHash=location.hash;route();
+});
+window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue=""}});
+
+/* ---------- list ---------- */
+async function showList(){
+  $("editView").hidden=true;$("listView").hidden=false;document.title="Instant PnL Calculator";
+  $("docRows").innerHTML="";$("listEmpty").hidden=false;$("listEmpty").textContent="Loading saved PnLs…";
+  try{DOCS=await api("GET","pnl");renderList()}catch(e){$("listEmpty").textContent=e.message}
+}
+function renderList(){
+  const q=$("q").value.trim().toLowerCase(), sc=$("scope").value;
+  const rows=DOCS.filter(d=>(sc==="all"||(sc==="mine"?d.role==="owner":d.role==="view"||d.role==="edit"))&&
+    (!q||[d.id,d.customerName,d.poNo,d.title,d.owner].join(" ").toLowerCase().includes(q)));
+  $("docRows").innerHTML=rows.map(d=>`<tr data-id="${esc(d.id)}" tabindex="0">
+    <td class="mono">${esc(d.id)}</td>
+    <td><div class="t">${esc(d.customerName||"No customer")}</div><div class="s">${esc([d.poNo,d.title&&d.title!==[d.customerName,d.poNo].filter(Boolean).join(" · ")?d.title:""].filter(Boolean).join(" · "))}</div></td>
+    <td>${esc(d.company)}</td>
+    <td class="r mono">${aed(d.poValue)}</td>
+    <td class="r mono ${d.netProfit<0?"neg":""}">${aed(d.netProfit)}</td>
+    <td class="r mono ${d.netProfit<0?"neg":""}">${d.poValue?pct(d.netPct):"—"}</td>
+    <td>${esc(shortName(d.owner))}</td>
+    <td><span class="chip ${d.role}">${d.role==="manager"?"Manager":d.role==="owner"?"Owner":d.role==="edit"?"Can edit":"Can view"}</span></td>
+    <td class="s">${esc(when(d.updatedAt))}</td></tr>`).join("");
+  $("docRows").querySelectorAll("tr").forEach(tr=>{const go=()=>location.hash=tr.dataset.id;tr.onclick=go;tr.onkeydown=e=>{if(e.key==="Enter")go()}});
+  $("listEmpty").hidden=rows.length>0;
+  $("listEmpty").innerHTML=DOCS.length?"No PnLs match your search.":"No saved PnLs yet. Click <b>+ New PnL</b> to create your first one.";
+}
+$("q").oninput=renderList;$("scope").onchange=renderList;
+$("newBtn").onclick=()=>location.hash="new";
+
+/* ---------- editor ---------- */
+function showEditor(){$("listView").hidden=true;$("editView").hidden=false;window.scrollTo(0,0)}
+function openNew(){
+  DOC=null;S=BLANK();dirty=false;showEditor();renderDocMeta();renderCustomers();renderFields();renderLines();update();
+  document.title="New PnL · Instant PnL Calculator";
+}
+async function openDoc(id){
+  showEditor();$("docId").textContent=id;$("docStatus").textContent="Loading…";
+  try{
+    const d=await api("GET","pnl/"+encodeURIComponent(id));
+    DOC=d;S=Object.assign(BLANK(),d.data||{});if(!S.lines||!S.lines.length)S.lines=BLANK().lines;
+    dirty=false;renderDocMeta();renderCustomers();renderFields();renderLines();update();
+    document.title=id+" · Instant PnL Calculator";
+  }catch(e){toast(e.message,true);location.hash="list"}
+}
+function renderDocMeta(){
+  const role=DOC?DOC.role:"owner", editable=!DOC||DOC.canEdit;
+  $("docId").textContent=DOC?DOC.id:"New PnL (not saved yet)";
+  $("roleChip").hidden=!DOC;
+  if(DOC){$("roleChip").className="chip "+role;$("roleChip").textContent=role==="manager"?"Manager access":role==="owner"?"Owner":role==="edit"?"Can edit":"View only"}
+  $("editFs").disabled=!editable;$("roNote").hidden=editable;
+  $("saveBtn").hidden=!editable;$("shareBtn").hidden=!(DOC&&DOC.canShare);$("delBtn").hidden=!(DOC&&DOC.canShare);
+  setStatus();
+}
+function setStatus(){
+  const el=$("docStatus");
+  if(dirty){el.className="status dirty";el.textContent="Unsaved changes"}
+  else if(DOC){el.className="status";el.textContent=`Saved ${when(DOC.updatedAt)} by ${shortName(DOC.updatedBy)} · owner ${shortName(DOC.owner)}`}
+  else{el.className="status";el.textContent=""}
+  $("saveBtn").disabled=busy||(!dirty&&!!DOC);
+}
+function touch(){if(!dirty){dirty=true}setStatus();update()}
+
+function renderCustomers(){
+  const sel=$("customerId");
+  const opts=CUSTOMERS.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`);
+  if(S.customerId&&!CUSTOMERS.some(c=>c.id===S.customerId)) opts.unshift(`<option value="${esc(S.customerId)}">${esc(S.customer||"Removed customer")} (removed)</option>`);
+  sel.innerHTML=`<option value="">Select a customer…</option>`+opts.join("");
+  sel.value=S.customerId||"";
+}
+$("customerId").onchange=e=>{const c=CUSTOMERS.find(c=>c.id===e.target.value);S.customerId=e.target.value;S.customer=c?c.name:"";touch()};
+
+const FIELDS=["company","poNo","title","poValue","contPct","commPct","ohPct","credDays","finRate","target"];
+function renderFields(){FIELDS.forEach(f=>{const el=$(f);if(el.classList.contains("num")){el.value=S[f]?fmtIn(S[f]):(f==="poValue"?"":"0")}else{el.value=S[f]||""}})}
+FIELDS.forEach(f=>{const el=$(f);el.addEventListener(el.tagName==="SELECT"?"change":"input",e=>{S[f]=el.classList.contains("num")?num(e.target.value):e.target.value;touch()})});
+$("poValue").addEventListener("blur",e=>{e.target.value=fmtIn(S.poValue)});
 
 function renderLines(){
   const tb=$("lines");tb.innerHTML="";
   S.lines.forEach((l,i)=>{
     const tr=document.createElement("tr");
-    tr.innerHTML=`<td><input id="d${i}" type="text" placeholder="e.g. Firewall appliance" value=""></td>
-      <td><select id="c${i}">${CATS.map(c=>`<option${c===l.c?" selected":""}>${c}</option>`).join("")}</select></td>
-      <td><input id="q${i}" class="num" type="text" inputmode="decimal"></td>
-      <td><input id="u${i}" class="num" type="text" inputmode="decimal" placeholder="0"></td>
-      <td class="tot r" id="t${i}"></td>
+    tr.innerHTML=`<td><input id="d${i}" type="text" placeholder="e.g. Firewall appliance" aria-label="Item"></td>
+      <td><select id="c${i}" aria-label="Category">${CATS.map(c=>`<option${c===l.c?" selected":""}>${c}</option>`).join("")}</select></td>
+      <td><input id="q${i}" class="num" type="text" inputmode="decimal" aria-label="Quantity"></td>
+      <td><input id="u${i}" class="num" type="text" inputmode="decimal" placeholder="0" aria-label="Unit cost"></td>
+      <td class="tot" id="t${i}"></td>
       <td class="r"><button class="x" type="button" aria-label="Remove line" data-i="${i}">×</button></td>`;
     tb.appendChild(tr);
-    $("d"+i).value=l.d; $("q"+i).value=fmtIn(l.q); $("u"+i).value=fmtIn(l.u);
+    $("d"+i).value=l.d||"";$("q"+i).value=fmtIn(l.q);$("u"+i).value=fmtIn(l.u);
     $("d"+i).oninput=e=>{l.d=e.target.value;touch()};
     $("c"+i).onchange=e=>{l.c=e.target.value;touch()};
     $("q"+i).oninput=e=>{l.q=num(e.target.value);touch()};
@@ -237,22 +406,14 @@ function renderLines(){
   });
   tb.querySelectorAll("button.x").forEach(b=>b.onclick=()=>{S.lines.splice(+b.dataset.i,1);if(!S.lines.length)S.lines.push({d:"",c:"Hardware",q:1,u:0});renderLines();touch()});
 }
-
-const FIELDS=["company","customer","poNo","poValue","contPct","commPct","ohPct","credDays","finRate","target"];
-function renderFields(){FIELDS.forEach(f=>{const el=$(f);if(el.classList.contains("num")){el.value=S[f]?fmtIn(S[f]):(f==="poValue"?"":"0")}else{el.value=S[f]||""}})}
-FIELDS.forEach(f=>{const el=$(f);el.addEventListener(el.tagName==="SELECT"?"change":"input",e=>{S[f]=el.classList.contains("num")?num(e.target.value):e.target.value;touch()})});
-$("poValue").addEventListener("blur",e=>{e.target.value=fmtIn(S.poValue)});
-
-function touch(){if(isExample){isExample=false;$("exTag").hidden=true}save();update()}
+$("addLine").onclick=()=>{S.lines.push({d:"",c:"Hardware",q:1,u:0});renderLines();touch();$("d"+(S.lines.length-1)).focus()};
 
 function update(){
-  const r=compute(S);
-  S.lines.forEach((l,i)=>{const t=$("t"+i);if(t)t.textContent=(num(l.q)*num(l.u)).toLocaleString("en-US",{maximumFractionDigits:0})});
+  const r=compute(S), t=num(S.target);
+  S.lines.forEach((l,i)=>{const el=$("t"+i);if(el)el.textContent=(num(l.q)*num(l.u)).toLocaleString("en-US",{maximumFractionDigits:0})});
   $("directTotal").textContent=aed(r.direct);
   $("vatHint").textContent=r.po?`With 5% VAT the customer pays ${aed(r.po*1.05)}. VAT is passed to the FTA and is not counted as income.`:"Use the PO amount before VAT. VAT is not income.";
-  $("cats").innerHTML=Object.entries(r.byCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<span class="cat">${c} <b>${aed(v)}</b> · ${r.direct?(v/r.direct*100).toFixed(0):0}%</span>`).join("");
-
-  const t=num(S.target);
+  $("cats").innerHTML=Object.entries(r.byCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<span class="cat">${esc(c)} <b>${aed(v)}</b> · ${r.direct?(v/r.direct*100).toFixed(0):0}%</span>`).join("");
   let cls,txt;
   if(!r.po){cls="v-warn";txt="Enter the PO value to see the result"}
   else if(r.net<0){cls="v-bad";txt="Loss-making at this PO value"}
@@ -261,48 +422,145 @@ function update(){
   $("verdict").className="verdict "+cls;$("verdictTxt").textContent=txt;
   $("hNet").textContent=aed(r.net);$("hNet").className="v "+(r.net<0?"neg":"");
   $("hNetPct").textContent=pct(r.netPct);$("hNetPct").className="v "+(r.net<0?"neg":"");
-
-  const row=(k,v,c="")=>`<tr class="${c}"><td class="${c.includes("ind")?"ind":""}">${k}</td><td class="r ${v<0?"neg":""}">${aed(v)}</td></tr>`;
-  $("stmt").innerHTML=
-    row("PO value (revenue)",r.po)+
-    row("Direct project cost",-r.direct,"ind")+
-    row(`Contingency ${pct(num(S.contPct))}`,-r.cont,"ind")+
+  const row=(k,v,ind)=>`<tr><td class="${ind?"ind":""}">${k}</td><td class="r ${v<0?"neg":""}">${aed(v)}</td></tr>`;
+  $("stmt").innerHTML=row("PO value (revenue)",r.po)+row("Direct project cost",-r.direct,1)+row(`Contingency ${pct(num(S.contPct))}`,-r.cont,1)+
     `<tr class="sum"><td>Gross profit <span style="color:var(--muted);font-weight:400">· ${pct(r.gpPct)}</span></td><td class="r ${r.gp<0?"neg":""}">${aed(r.gp)}</td></tr>`+
-    row(`Sales commission`,-r.comm,"ind")+
-    row(`Overhead share`,-r.oh,"ind")+
-    row(`Cash tied up ${num(S.credDays)} days`,-r.fin,"ind")+
-    `<tr class="big"><td>Net profit</td><td class="r ${r.net<0?"neg":"pos"}">${aed(r.net)}</td></tr>`+
-    `<tr><td class="ind">Markup on cost</td><td class="r">${pct(r.markup)}</td></tr>`;
-
-  // where each dirham of the PO goes
+    row("Sales commission",-r.comm,1)+row("Overhead share",-r.oh,1)+row(`Cash tied up ${num(S.credDays)} days`,-r.fin,1)+
+    `<tr class="big"><td>Net profit</td><td class="r ${r.net<0?"neg":"pos"}">${aed(r.net)}</td></tr><tr><td class="ind">Markup on cost</td><td class="r">${pct(r.markup)}</td></tr>`;
   const parts=[["Project cost",r.cost,"var(--accent)"],["Commission",r.comm,"#c0793a"],["Overhead",r.oh,"#7c8794"],["Finance",r.fin,"#a15c7e"],["Net profit",Math.max(r.net,0),"var(--good)"]];
   const tot=parts.reduce((a,p)=>a+p[1],0)||1;
   $("bar").innerHTML=parts.map(p=>`<span style="width:${p[1]/tot*100}%;background:${p[2]}"></span>`).join("");
   $("legend").innerHTML=parts.filter(p=>p[1]>0).map(p=>`<span><i style="background:${p[2]}"></i>${p[0]} ${(p[1]/tot*100).toFixed(0)}%</span>`).join("");
-
   $("be").innerHTML=isFinite(r.minPO)?`Break-even PO: <b>${aed(r.bePO)}</b><br>Lowest PO to hit ${pct(t)} net: <b>${aed(r.minPO)}</b>`+(r.po&&r.minPO>r.po?`<br><span class="neg">Short by ${aed(r.minPO-r.po)}</span>`:r.po?`<br>Room to discount: <b>${aed(r.po-r.minPO)}</b>`:""):"Commission, overhead and target add up to 100% or more.";
 }
 
-function summary(){
-  const r=compute(S);
-  return [`PROJECT PnL — ${S.company}`,`Customer: ${S.customer||"-"}   PO: ${S.poNo||"-"}`,"",
-  `PO value (ex VAT):   ${aed(r.po)}`,`Direct cost:         ${aed(r.direct)}`,`Contingency:         ${aed(r.cont)}`,
-  `Gross profit:        ${aed(r.gp)} (${pct(r.gpPct)})`,`Commission:          ${aed(r.comm)}`,`Overhead share:      ${aed(r.oh)}`,`Finance cost:        ${aed(r.fin)}`,
-  `NET PROFIT:          ${aed(r.net)} (${pct(r.netPct)})`,`Markup on cost:      ${pct(r.markup)}`,"",
-  `Break-even PO:       ${aed(r.bePO)}`,`PO for ${pct(num(S.target))} net:   ${aed(r.minPO)}`].join("\n");
+/* ---------- save / delete ---------- */
+async function save(){
+  if(busy||(DOC&&!DOC.canEdit))return;
+  if(!S.customerId){toast("Choose a customer before saving.",true);$("customerId").focus();return}
+  if(!num(S.poValue)){toast("Enter the PO value before saving.",true);$("poValue").focus();return}
+  busy=true;setStatus();$("saveBtn").textContent="Saving…";
+  try{
+    const body={title:S.title,data:S};
+    const d=DOC?await api("PUT","pnl/"+encodeURIComponent(DOC.id),{...body,etag:DOC.etag}):await api("POST","pnl",body);
+    const isNew=!DOC;DOC=d;S=Object.assign(BLANK(),d.data);dirty=false;
+    if(isNew){lastHash="#"+d.id;history.replaceState(null,"","#"+d.id);document.title=d.id+" · Instant PnL Calculator"}
+    renderDocMeta();toast(isNew?`Saved as ${d.id}`:"Saved");
+  }catch(e){toast(e.message,true)}
+  finally{busy=false;$("saveBtn").textContent="Save";setStatus()}
 }
-$("copyBtn").onclick=()=>{
-  const txt=summary(),fb=$("copyFallback");
-  const done=()=>{$("toast").textContent="Summary copied";fb.hidden=true;setTimeout(()=>$("toast").textContent="",2500)};
-  const fail=()=>{fb.value=txt;fb.hidden=false;fb.select();$("toast").textContent="Select the text below and copy it"};
-  try{navigator.clipboard.writeText(txt).then(done,fail)}catch(e){fail()}
+$("saveBtn").onclick=save;
+document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"&&!$("editView").hidden){e.preventDefault();save()}});
+$("delBtn").onclick=async()=>{
+  if(!DOC)return;
+  if(!(await confirmBox("Delete this PnL?",`${DOC.id} will be removed for everyone it's shared with. This can't be undone.`,"Delete")))return;
+  try{await api("DELETE","pnl/"+encodeURIComponent(DOC.id));dirty=false;toast("Deleted "+DOC.id);location.hash="list"}catch(e){toast(e.message,true)}
 };
-$("addLine").onclick=()=>{S.lines.push({d:"",c:"Hardware",q:1,u:0});renderLines();touch();$("d"+(S.lines.length-1)).focus()};
-$("resetBtn").onclick=()=>{S=JSON.parse(JSON.stringify(BLANK));isExample=false;$("exTag").hidden=true;renderFields();renderLines();save();update();$("poValue").focus()};
+$("backBtn").onclick=e=>{e.preventDefault();location.hash="list"};
 
-function save(){try{localStorage.setItem("pnl-draft",JSON.stringify(S))}catch(e){}}
-try{const d=JSON.parse(localStorage.getItem("pnl-draft"));if(d&&d.lines){S=d;isExample=false;$("exTag").hidden=true}}catch(e){}
-renderFields();renderLines();update();
-fetch("/.auth/me").then(r=>r.json()).then(d=>{const p=d&&d.clientPrincipal;if(p)$("who").textContent=p.userDetails}).catch(()=>{});
+/* ---------- customers ---------- */
+$("newCustBtn").onclick=()=>{$("custForm").reset();$("custErr").textContent="";$("custDlg").showModal();$("cName").focus()};
+$("custCancel").onclick=()=>$("custDlg").close();
+$("custForm").onsubmit=async e=>{
+  e.preventDefault();$("custErr").textContent="";$("custSave").disabled=true;
+  const body={name:$("cName").value,contactName:$("cContact").value,phone:$("cPhone").value,email:$("cEmail").value,trn:$("cTrn").value,emirate:$("cEmirate").value,address:$("cAddress").value};
+  try{
+    const c=await api("POST","customers",body);CUSTOMERS.push(c);CUSTOMERS.sort((a,b)=>a.name.localeCompare(b.name));pick(c);toast(`${c.name} added to customers`);$("custDlg").close();
+  }catch(err){
+    if(err.status===409&&err.data&&err.data.customer){pick(err.data.customer);toast(err.message+" It's now selected.");$("custDlg").close()}
+    else $("custErr").textContent=err.message;
+  }finally{$("custSave").disabled=false}
+  function pick(c){S.customerId=c.id;S.customer=c.name;renderCustomers();touch()}
+};
+
+/* ---------- sharing ---------- */
+function renderPeople(){
+  const acc=DOC.access||{}, mgr=(ME.managers||[]).filter(m=>m!==DOC.owner);
+  let h=`<div class="person fixed"><span class="em">${esc(DOC.owner)}</span><span class="chip owner">Owner</span></div>`;
+  h+=mgr.map(m=>`<div class="person fixed"><span class="em">${esc(m)}</span><span class="chip manager">Manager · can edit</span></div>`).join("");
+  h+=Object.entries(acc).sort().map(([em,r])=>`<div class="person"><span class="em">${esc(em)}</span>
+    <select data-em="${esc(em)}" aria-label="Access for ${esc(em)}"><option value="view"${r==="view"?" selected":""}>Can view</option><option value="edit"${r==="edit"?" selected":""}>Can edit</option></select>
+    <button type="button" class="x" data-rm="${esc(em)}" aria-label="Remove ${esc(em)}">×</button></div>`).join("");
+  $("people").innerHTML=h;
+  $("people").querySelectorAll("select[data-em]").forEach(s=>s.onchange=()=>setAccess(s.dataset.em,s.value));
+  $("people").querySelectorAll("button[data-rm]").forEach(b=>b.onclick=()=>setAccess(b.dataset.rm,"none"));
+}
+async function setAccess(email,role){
+  $("shErr").textContent="";
+  try{const r=await api("PUT",`pnl/${encodeURIComponent(DOC.id)}/access`,{email,role});DOC.access=r.access;renderPeople();toast(role==="none"?`Removed ${email}`:`${email} ${role==="edit"?"can edit":"can view"}`);return true}
+  catch(e){$("shErr").textContent=e.message;return false}
+}
+$("shareBtn").onclick=()=>{$("shErr").textContent="";$("shEmail").value="";renderPeople();$("shareDlg").showModal();$("shEmail").focus()};
+$("shClose").onclick=()=>$("shareDlg").close();
+$("shareForm").onsubmit=async e=>{e.preventDefault();const em=$("shEmail").value.trim();if(!em)return;if(await setAccess(em,$("shRole").value))$("shEmail").value=""};
+
+/* ---------- downloads ---------- */
+const dlMenu=$("dlMenu");
+$("dlBtn").onclick=e=>{e.stopPropagation();dlMenu.hidden=!dlMenu.hidden;$("dlBtn").setAttribute("aria-expanded",String(!dlMenu.hidden))};
+document.addEventListener("click",()=>{dlMenu.hidden=true;$("dlBtn").setAttribute("aria-expanded","false")});
+function fileBase(){return [(DOC&&DOC.id)||"PnL-draft",(S.customer||"").replace(/[^A-Za-z0-9]+/g,"-").replace(/^-|-$/g,"")].filter(Boolean).join("_")}
+function headerRows(){return [["Doc no.",(DOC&&DOC.id)||"Not saved"],["Company",S.company],["Customer",S.customer||"-"],["PO / LPO no.",S.poNo||"-"],["Project",S.title||"-"],["Prepared by",DOC?DOC.owner:ME.email],["Date",new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})]]}
+function stmtRows(r){return [["PO value (revenue, ex VAT)",r.po],["Direct project cost",-r.direct],[`Contingency (${pct(num(S.contPct))})`,-r.cont],["Gross profit",r.gp],[`Sales commission (${pct(num(S.commPct))})`,-r.comm],[`Overhead share (${pct(num(S.ohPct))})`,-r.oh],[`Finance cost (${num(S.credDays)} days at ${pct(num(S.finRate))})`,-r.fin],["Net profit",r.net]]}
+
+$("dlXlsx").onclick=()=>{
+  if(!window.XLSX){toast("The Excel export library didn't load. Reload the page and try again.",true);return}
+  const r=compute(S), rows=[["Bifold Technologies L.L.C - Project PnL"],[]];
+  headerRows().forEach(x=>rows.push(x));rows.push([]);
+  rows.push(["Item","Category","Qty","Unit cost (AED)","Total (AED)"]);
+  const first=rows.length+1;
+  S.lines.forEach((l,i)=>{const n=rows.length+1;rows.push([l.d||"",l.c,num(l.q),num(l.u),{t:"n",v:num(l.q)*num(l.u),f:`C${n}*D${n}`}])});
+  const last=rows.length;
+  rows.push(["","","","Direct cost",{t:"n",v:r.direct,f:`SUM(E${first}:E${last})`}]);rows.push([]);
+  rows.push(["PnL statement","","","","AED"]);
+  stmtRows(r).forEach(([k,v])=>rows.push([k,"","","",Math.round(v*100)/100]));
+  rows.push(["Net margin","","","",r.po?Math.round(r.netPct*10)/10+"%":"-"],["Markup on cost","","","",isFinite(r.markup)?Math.round(r.markup*10)/10+"%":"-"],[]);
+  rows.push(["Break-even PO","","","",Math.round(r.bePO)],[`Lowest PO for ${pct(num(S.target))} net`,"","","",Math.round(r.minPO)]);
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"]=[{wch:44},{wch:22},{wch:8},{wch:16},{wch:16}];
+  for(const a in ws){if(a[0]!=="!"&&(a[0]==="D"||a[0]==="E")&&typeof ws[a].v==="number")ws[a].z="#,##0"}
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"PnL");
+  XLSX.writeFile(wb,fileBase()+".xlsx");
+};
+
+let logoCache=null;
+async function logo(){if(logoCache)return logoCache;const b=await (await fetch("/assets/bifold_logo.png")).blob();return logoCache=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(b)})}
+$("dlPdf").onclick=async()=>{
+  if(!window.jspdf||!window.jspdf.jsPDF||!window.jspdf.jsPDF.API.autoTable){toast("The PDF library didn't load. Reload the page and try again.",true);return}
+  const {jsPDF}=window.jspdf, d=new jsPDF({unit:"pt",format:"a4"}), r=compute(S), W=d.internal.pageSize.getWidth(), M=40;
+  const BLUE=[30,90,140], RED=[216,31,42];
+  try{d.addImage(await logo(),"PNG",M,28,150,45)}catch(e){d.setFont("helvetica","bold");d.setFontSize(20);d.setTextColor(...BLUE);d.text("BIFOLD",M,58)}
+  d.setFont("helvetica","bold");d.setFontSize(18);d.setTextColor(...BLUE);d.text("Project PnL",W-M,50,{align:"right"});
+  d.setFont("helvetica","normal");d.setFontSize(9);d.setTextColor(90);d.text((DOC&&DOC.id)||"Draft - not saved",W-M,66,{align:"right"});
+  d.setDrawColor(...RED);d.setLineWidth(2);d.line(M,84,W-M,84);
+  d.autoTable({startY:96,theme:"plain",body:headerRows(),styles:{fontSize:9,cellPadding:3},columnStyles:{0:{fontStyle:"bold",textColor:[90,106,120],cellWidth:110}},margin:{left:M,right:M}});
+  const col=n=>Number(n).toLocaleString("en-US",{maximumFractionDigits:0});
+  d.autoTable({startY:d.lastAutoTable.finalY+14,head:[["Item","Category","Qty","Unit cost","Total (AED)"]],
+    body:S.lines.filter(l=>l.d||num(l.u)).map(l=>[l.d||"",l.c,col(num(l.q)),col(num(l.u)),col(num(l.q)*num(l.u))]),
+    foot:[["","","","Direct cost",col(r.direct)]],
+    headStyles:{fillColor:BLUE,textColor:255,fontStyle:"bold"},footStyles:{fillColor:[234,238,242],textColor:20,fontStyle:"bold"},
+    styles:{fontSize:9,cellPadding:4},alternateRowStyles:{fillColor:[246,248,250]},
+    columnStyles:{2:{halign:"right"},3:{halign:"right"},4:{halign:"right"}},margin:{left:M,right:M}});
+  const st=stmtRows(r);
+  d.autoTable({startY:d.lastAutoTable.finalY+16,head:[["PnL statement","AED"]],
+    body:[...st.map(([k,v])=>[k,aedPlain(v)]),["Net margin",pct(r.netPct)],["Markup on cost",pct(r.markup)],["Break-even PO",aedPlain(r.bePO)],[`Lowest PO for ${pct(num(S.target))} net`,aedPlain(r.minPO)]],
+    headStyles:{fillColor:BLUE,textColor:255},styles:{fontSize:9.5,cellPadding:4},columnStyles:{1:{halign:"right"}},
+    didParseCell:c=>{if(c.section!=="body")return;const k=c.row.raw[0];if(k==="Gross profit"||k==="Net profit"){c.cell.styles.fontStyle="bold";c.cell.styles.fillColor=k==="Net profit"?[226,236,245]:[246,248,250]}
+      if(c.column.index===1&&/^-/.test(String(c.cell.raw)))c.cell.styles.textColor=[180,50,44]},
+    margin:{left:M,right:M}});
+  const pages=d.getNumberOfPages();
+  for(let i=1;i<=pages;i++){d.setPage(i);const H=d.internal.pageSize.getHeight();d.setDrawColor(...RED);d.setLineWidth(1);d.line(M,H-40,W-M,H-40);
+    d.setFontSize(8);d.setTextColor(120);d.text("Bifold Technologies L.L.C · Confidential, internal use only",M,H-26);d.text(`Page ${i} of ${pages}`,W-M,H-26,{align:"right"})}
+  d.save(fileBase()+".pdf");
+};
+
+/* ---------- start ---------- */
+(async()=>{
+  try{
+    [ME,CUSTOMERS]=await Promise.all([api("GET","me"),api("GET","customers")]);
+    $("who").textContent=ME.email;
+  }catch(e){$("boot").innerHTML=`<div class="panel" style="max-width:560px;margin:40px auto;text-align:left"><h2>Can't open the PnL tool</h2><p>${esc(e.message)}</p></div>`;return}
+  route();
+})();
 </script>
-</body></html>
+</body>
+</html>

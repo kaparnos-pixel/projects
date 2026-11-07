@@ -1,0 +1,67 @@
+/* Bifold Tools shared styles: brand tokens, header, controls, dialogs. Steel blue #1E5A8C + red #D81F2A, Arial. */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --sunk:#eaeef2; --line:#d5dce3;
+  --fg:#15222e; --muted:#5b6a78; --accent:#1E5A8C; --accent-soft:#e2ecf5; --red:#D81F2A;
+  --good:#1f7a4d; --good-soft:#e1f2e8; --warn:#9a6200; --warn-soft:#fbefd6; --bad:#b4322c; --bad-soft:#f8e1df;
+  --f-display:Arial,"Helvetica Neue",Helvetica,sans-serif; --f-body:Arial,"Helvetica Neue",Helvetica,sans-serif; --f-num:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --on-accent:#ffffff;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f161d; --surface:#16202a; --sunk:#111a22; --line:#2a3846;
+  --fg:#e3e9ef; --muted:#93a3b2; --accent:#6fa8db; --accent-soft:#16293a; --red:#f0545c;
+  --good:#5cc78f; --good-soft:#15301f; --warn:#e2b04f; --warn-soft:#33280f; --bad:#ef7d74; --bad-soft:#3a1a18;
+  --on-accent:#0f161d; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.wrap{max-width:1200px;margin:0 auto;padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.brandbar{background:var(--surface);border-bottom:3px solid var(--red)}
+.brandbar .in{max-width:1200px;margin:0 auto;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brandbar .logo{display:inline-flex;background:#fff;border-radius:6px;padding:4px 6px}
+.brandbar .logo img{height:40px;width:auto;display:block}
+.brandbar nav{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.brandbar nav a{color:var(--accent);text-decoration:none;font-weight:600}
+.brandbar nav a:hover{text-decoration:underline}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,3.2vw,30px);margin:0;text-wrap:balance}
+h1 .tag{display:block;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--red);margin-bottom:4px}
+.sub{color:var(--muted);margin:4px 0 0;max-width:62ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
+.lbl{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+input,select,textarea{width:100%;font:inherit;color:var(--fg);background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-width:0}
+input.num{font-family:var(--f-num);text-align:right;font-variant-numeric:tabular-nums}
+input:disabled,select:disabled,textarea:disabled{opacity:1;color:var(--fg);background:transparent;border-color:transparent}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button,.btn{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:7px 12px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+button:hover:not(:disabled),.btn:hover{border-color:var(--accent);color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+button.primary:hover:not(:disabled){color:var(--on-accent);filter:brightness(1.1)}
+button.danger:hover:not(:disabled){border-color:var(--bad);color:var(--bad)}
+button.x{border:none;background:none;color:var(--muted);font-size:18px;line-height:1;padding:4px 8px}
+button.x:hover:not(:disabled){color:var(--bad)}
+.hint{font-size:12px;color:var(--muted);margin-top:4px}
+.chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:99px;padding:2px 9px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.chip.owner{background:var(--accent-soft);color:var(--accent)}
+.chip.manager{background:var(--warn-soft);color:var(--warn)}
+.chip.edit{background:var(--good-soft);color:var(--good)}
+.neg{color:var(--bad)}.pos{color:var(--good)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;z-index:50;max-width:calc(100% - 32px);box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.toast.err{background:var(--bad);color:#fff}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);padding:0;width:min(560px,calc(100% - 32px));max-height:calc(100% - 32px)}
+dialog::backdrop{background:rgba(10,20,30,.45)}
+dialog form{padding:20px;display:grid;gap:12px}
+dialog h3{margin:0;font-family:var(--f-display);font-size:18px}
+dialog .foot{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:4px}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.err{color:var(--bad);font-size:13px;font-weight:600}
+table.list{width:100%;border-collapse:collapse;min-width:760px}
+table.list th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.list td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.list tbody tr{cursor:pointer}
+table.list tbody tr:hover td{background:var(--accent-soft)}
+.r{text-align:right}
+.mono{font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tblwrap{overflow-x:auto}
+.empty{padding:32px 16px;text-align:center;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}

@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sales Pipeline · Bifold Tools</title>
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
+<style>
+.wrap{max-width:1600px}
+.brandbar .in{max-width:1600px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:18px}
+header.top .acts{display:flex;gap:8px;flex-wrap:wrap}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.kpi .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.kpi .v{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:22px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .s{font-size:12px;color:var(--muted)}
+.kpi.alert .v{color:var(--bad)}
+
+@media (max-width:640px){.kpis{grid-template-columns:1fr 1fr;gap:8px}.kpi{padding:10px 12px}.kpi .v{font-size:17px}.kpi .s{font-size:11px}}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+
+/* toolbar */
+.tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;border-radius:0;background:none;padding:7px 12px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.seg button[aria-pressed="true"]:hover{color:var(--on-accent)}
+.tools select,.tools input{width:auto}
+.tools input[type=search]{min-width:min(260px,100%);flex:1 1 200px;max-width:340px}
+.tools .sp{flex:1}
+
+/* board */
+.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(250px,1fr);gap:10px;overflow-x:auto;padding-bottom:8px;align-items:start}
+.col{background:var(--sunk);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-height:220px;max-height:calc(100vh - 140px)}
+.col.over{border-color:var(--accent);background:var(--accent-soft)}
+.col h3{margin:0;padding:10px 12px 8px;font-size:13px;font-weight:700;display:flex;justify-content:space-between;gap:8px;align-items:baseline;border-top:3px solid var(--accent);border-radius:10px 10px 0 0}
+.col[data-stage=won] h3{border-top-color:var(--good)}
+.col[data-stage=lost] h3{border-top-color:var(--muted)}
+.col[data-stage=po] h3{border-top-color:var(--red)}
+.col h3 .n{font-weight:400;color:var(--muted)}
+.col .tot{padding:0 12px 8px;font-family:var(--f-num);font-size:12px;color:var(--muted);border-bottom:1px solid var(--line)}
+.col .cards{padding:8px;display:grid;gap:8px;overflow-y:auto;align-content:start;flex:1}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 11px;cursor:grab;display:grid;gap:4px;user-select:none}
+.card:hover,.card:focus-visible{border-color:var(--accent)}
+.card.dragging{opacity:.45}
+.card .t{font-weight:700;line-height:1.3;overflow-wrap:anywhere}
+.card .c{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.card .row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.card .val{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-weight:600}
+.card .meta{font-size:11px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+.due{font-weight:700}.due.late{color:var(--bad)}.due.today{color:var(--warn)}
+.co{font-size:10px;font-weight:700;letter-spacing:.05em;border-radius:4px;padding:1px 6px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.co.th{background:var(--good-soft);color:var(--good)}
+.av{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--sunk);border:1px solid var(--line);font-size:10px;font-weight:700;color:var(--muted)}
+.col .none{font-size:12px;color:var(--muted);text-align:center;padding:14px 6px}
+
+/* list */
+.listpanel{padding:0;overflow:hidden}
+table.list{min-width:1100px}
+table.list th.r{text-align:right}
+table.list th.sortable{cursor:pointer;user-select:none}
+table.list th.sortable:hover{color:var(--accent)}
+table.list th[aria-sort] .ar::after{content:" ▾"}
+table.list th[aria-sort=ascending] .ar::after{content:" ▴"}
+td .t{font-weight:700} td .s{font-size:12px;color:var(--muted)}
+.st{display:inline-block;font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.st.won{background:var(--good-soft);color:var(--good)}.st.lost{background:var(--sunk);color:var(--muted)}.st.po{background:var(--bad-soft);color:var(--red)}
+
+/* dialog */
+#dealDlg{width:min(760px,calc(100% - 32px))}
+#dealForm{gap:14px}
+.custrow{display:flex;gap:6px}.custrow select{flex:1}
+.dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.dhead .id{font-family:var(--f-num);font-size:12px;color:var(--muted)}
+.stagebar{display:flex;gap:4px;flex-wrap:wrap}
+.stagebar button{flex:1 1 auto;font-size:12px;padding:6px 8px;border-radius:5px;justify-content:center;color:var(--muted)}
+.stagebar button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.stagebar button[data-s=won][aria-pressed="true"]{background:var(--good);border-color:var(--good)}
+.stagebar button[data-s=lost][aria-pressed="true"]{background:var(--muted);border-color:var(--muted)}
+textarea{resize:vertical;min-height:64px}
+.weighted{font-size:12px;color:var(--muted);margin-top:4px}
+.activity{border-top:1px solid var(--line);padding-top:12px;display:grid;gap:10px}
+.activity h4{margin:0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.noteadd{display:flex;gap:6px}.noteadd input{flex:1}
+.log{display:grid;gap:8px;max-height:220px;overflow-y:auto;margin:0;padding:0;list-style:none}
+.log li{font-size:13px;border-left:3px solid var(--line);padding:2px 0 2px 10px}
+.log li.note{border-left-color:var(--accent)}
+.log li.stage{border-left-color:var(--red)}
+.log .w{font-size:11px;color:var(--muted)}
+.lostbox{background:var(--sunk);border-radius:8px;padding:10px}
+</style>
+</head>
+<body>
+<div class="brandbar"><div class="in">
+  <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
+  <nav><a href="/">All tools</a><a href="/pnl/">PnL Calculator</a><a href="/customers/">Customers</a><span id="who"></span><a href="/.auth/logout">Sign out</a></nav>
+</div></div>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1><span class="tag">Bifold Tools</span>Sales Pipeline</h1>
+      <p class="sub" id="sub">Track every open deal for Bifold and Tech Hub from first lead to PO.</p>
+    </div>
+    <div class="acts">
+      <button type="button" id="csvBtn">Download CSV</button>
+      <button class="primary" type="button" id="addBtn">+ New deal</button>
+    </div>
+  </header>
+
+  <section class="kpis" aria-label="Pipeline totals">
+    <div class="kpi"><div class="k">Open pipeline</div><div class="v" id="kOpen">–</div><div class="s" id="kOpenN"></div></div>
+    <div class="kpi"><div class="k">Weighted forecast</div><div class="v" id="kWeighted">–</div><div class="s">Value × stage probability</div></div>
+    <div class="kpi"><div class="k" id="kWonLbl">Won</div><div class="v" id="kWon">–</div><div class="s" id="kWonN"></div></div>
+    <div class="kpi" id="kDueBox"><div class="k">Follow-ups due</div><div class="v" id="kDue">–</div><div class="s">Next action today or overdue</div></div>
+  </section>
+
+  <div class="tools">
+    <div class="seg" role="group" aria-label="Company" id="coSeg">
+      <button type="button" data-v="" aria-pressed="true">All</button>
+      <button type="button" data-v="Bifold Technologies" aria-pressed="false">Bifold</button>
+      <button type="button" data-v="Tech Hub IT" aria-pressed="false">Tech Hub</button>
+    </div>
+    <select id="ownerF" aria-label="Owner" hidden></select>
+    <select id="closedF" aria-label="Closed deals shown">
+      <option value="30">Closed: last 30 days</option>
+      <option value="90" selected>Closed: last 90 days</option>
+      <option value="ytd">Closed: this year</option>
+      <option value="all">Closed: all time</option>
+    </select>
+    <input id="q" type="search" placeholder="Search deal, customer or owner" aria-label="Search deals">
+    <span class="sp"></span>
+    <div class="seg" role="group" aria-label="View" id="viewSeg">
+      <button type="button" data-v="board" aria-pressed="true">Board</button>
+      <button type="button" data-v="list" aria-pressed="false">List</button>
+    </div>
+  </div>
+
+  <div id="boardView"><div class="board" id="board"></div></div>
+  <div id="listView" hidden>
+    <div class="panel listpanel">
+      <div class="tblwrap">
+        <table class="list">
+          <thead><tr id="lhead"></tr></thead>
+          <tbody id="lrows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="lempty" hidden></div>
+    </div>
+  </div>
+  <p class="empty" id="loading">Loading the pipeline…</p>
+</div>
+
+<!-- deal -->
+<dialog id="dealDlg" aria-labelledby="dTitle">
+  <form id="dealForm" method="dialog" novalidate>
+    <div class="dhead"><div><h3 id="dTitle">New deal</h3><div class="id" id="dId"></div></div><button type="button" class="x" id="dClose" aria-label="Close">×</button></div>
+    <fieldset id="dFields">
+      <div style="display:grid;gap:12px">
+        <label><span class="lbl">Deal *</span><input id="fTitle" maxlength="150" placeholder="e.g. CCTV upgrade, Warehouse 2"></label>
+        <div class="fields">
+          <label><span class="lbl">Company</span><select id="fCompany"><option>Bifold Technologies</option><option>Tech Hub IT</option></select></label>
+          <label style="grid-column:span 2"><span class="lbl">Customer *</span><span class="custrow"><select id="fCustomer"></select><button type="button" id="newCustBtn">+ New</button></span></label>
+        </div>
+        <div><span class="lbl">Stage</span><div class="stagebar" id="fStage" role="group" aria-label="Stage"></div></div>
+        <div class="lostbox" id="lostBox" hidden><label><span class="lbl">Why was it lost? *</span><input id="fLost" maxlength="300" placeholder="e.g. Price, went with competitor, project cancelled"></label></div>
+        <div class="fields">
+          <label><span class="lbl">Value (AED, excl. VAT)</span><input id="fValue" class="num" inputmode="decimal" placeholder="0"></label>
+          <label><span class="lbl">Probability (%)</span><input id="fProb" class="num" inputmode="numeric"><span class="weighted" id="fWeighted"></span></label>
+          <label><span class="lbl">Expected close</span><input id="fClose" type="date"></label>
+        </div>
+        <div class="fields">
+          <label style="grid-column:span 2"><span class="lbl">Next action</span><input id="fNext" maxlength="200" placeholder="e.g. Send revised quote"></label>
+          <label><span class="lbl">By</span><input id="fNextDate" type="date"></label>
+        </div>
+        <div class="fields">
+          <label><span class="lbl">Source</span><select id="fSource"><option></option><option>Existing customer</option><option>Referral</option><option>Website</option><option>Walk-in</option><option>Tender / RFQ</option><option>Cold call</option><option>Vendor / partner</option><option>Social media</option><option>Other</option></select></label>
+          <label style="grid-column:span 2" id="ownerWrap"><span class="lbl">Owner</span><input id="fOwner" type="email" list="ownerList" maxlength="150"><datalist id="ownerList"></datalist></label>
+        </div>
+        <label><span class="lbl">Notes</span><textarea id="fNotes" maxlength="4000" placeholder="Scope, decision makers, competitors…"></textarea></label>
+      </div>
+    </fieldset>
+    <div class="err" id="dErr"></div>
+    <div class="foot">
+      <button type="button" class="danger" id="dDel" hidden style="margin-right:auto">Delete</button>
+      <button type="button" id="dCancel">Cancel</button><button class="primary" type="submit" id="dSave">Save</button>
+    </div>
+    <section class="activity" id="activity" hidden>
+      <h4>Activity</h4>
+      <div class="noteadd"><input id="noteIn" maxlength="1000" placeholder="Add a note, e.g. called the FM, survey on Tuesday" aria-label="New note"><button type="button" id="noteBtn">Add note</button></div>
+      <ul class="log" id="log"></ul>
+    </section>
+  </form>
+</dialog>
+
+<!-- lost reason when dragging to Lost -->
+<dialog id="lostDlg">
+  <form id="lostForm" method="dialog">
+    <h3>Mark as lost</h3>
+    <p class="sub" id="lostWhat" style="margin:0"></p>
+    <label><span class="lbl">Why was it lost? *</span><input id="lostIn" maxlength="300" required placeholder="e.g. Price, went with competitor"></label>
+    <div class="foot"><button type="button" id="lostCancel">Cancel</button><button class="primary" type="submit">Mark lost</button></div>
+  </form>
+</dialog>
+
+<!-- new customer -->
+<dialog id="custDlg">
+  <form id="custForm" method="dialog">
+    <h3>New customer</h3>
+    <p class="hint" style="margin:0">Added to the shared customer list for every Bifold tool.</p>
+    <label><span class="lbl">Customer name *</span><input id="cName" required maxlength="150"></label>
+    <div class="fields">
+      <label><span class="lbl">Contact person</span><input id="cContact" maxlength="100"></label>
+      <label><span class="lbl">Phone</span><input id="cPhone" maxlength="50"></label>
+    </div>
+    <div class="fields">
+      <label><span class="lbl">Email</span><input id="cEmail" type="email" maxlength="150"></label>
+      <label><span class="lbl">Emirate</span><select id="cEmirate"><option></option><option>Abu Dhabi</option><option>Dubai</option><option>Sharjah</option><option>Ajman</option><option>Umm Al Quwain</option><option>Ras Al Khaimah</option><option>Fujairah</option><option>Outside UAE</option></select></label>
+    </div>
+    <div class="err" id="cErr"></div>
+    <div class="foot"><button type="button" id="cCancel">Cancel</button><button class="primary" type="submit" id="cSave">Add customer</button></div>
+  </form>
+</dialog>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num=v=>{const n=parseFloat(String(v??"").replace(/,/g,""));return isFinite(n)?n:0};
+const aed=v=>"AED "+Math.round(v).toLocaleString("en-US");
+const aedShort=v=>v>=1e6?"AED "+(v/1e6).toFixed(v>=1e7?1:2)+"M":v>=1e4?"AED "+(v/1e3).toFixed(0)+"K":aed(v);
+const day=s=>s?new Date(s.length===10?s+"T00:00":s).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"";
+const dayShort=s=>s?new Date(s+"T00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short"}):"";
+const when=s=>new Date(s).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+const todayStr=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+const initials=e=>{const n=String(e||"").split("@")[0].split(/[._-]/).filter(Boolean);return ((n[0]||"?")[0]+(n[1]?n[1][0]:"")).toUpperCase()};
+
+const STAGES=[["lead","Lead",10],["survey","Site survey",20],["proposal","Proposal sent",40],["negotiation","Negotiation",60],["po","PO received",90],["won","Won",100],["lost","Lost",0]];
+const SNAME=Object.fromEntries(STAGES.map(s=>[s[0],s[1]])),SPROB=Object.fromEntries(STAGES.map(s=>[s[0],s[2]]));
+const OPEN=new Set(["lead","survey","proposal","negotiation","po"]);
+
+let ME=null,DEALS=[],CUSTOMERS=[],CUR=null,dStage="lead",probTouched=false;
+const F={company:"",owner:"",closed:"90",q:"",view:"board",sort:"updatedAt",dir:-1};
+try{const s=JSON.parse(localStorage.getItem("pipelineView")||"{}");Object.assign(F,{company:s.company??"",view:s.view||"board",closed:s.closed||"90",owner:s.owner||""})}catch{}
+const remember=()=>{try{localStorage.setItem("pipelineView",JSON.stringify({company:F.company,view:F.view,closed:F.closed,owner:F.owner}))}catch{}};
+
+function toast(m,e){const t=document.createElement("div");t.className="toast"+(e?" err":"");t.setAttribute("role","status");t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),e?6000:2600)}
+async function api(method,path,body){
+  let r;try{r=await fetch("/api/"+path,{method,headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,cache:"no-store"})}catch{throw new Error("Can't reach the server. Check your connection and try again.")}
+  const ct=r.headers.get("content-type")||"";
+  if(r.redirected||(r.ok&&r.status!==204&&!ct.includes("json")))throw new Error("Your session has ended. Reload the page to sign in again.");
+  let j=null;if(r.status!==204){try{j=await r.json()}catch{}}
+  if(!r.ok){const e=new Error((j&&j.error)||"The request failed.");e.status=r.status;e.data=j;throw e}return j;
+}
+
+/* ---------- filtering ---------- */
+function closedCutoff(){
+  if(F.closed==="all")return "";
+  if(F.closed==="ytd")return new Date().getFullYear()+"-01-01";
+  return new Date(Date.now()-num(F.closed)*864e5).toISOString();
+}
+function filtered(){
+  const q=F.q.trim().toLowerCase(),cut=closedCutoff();
+  return DEALS.filter(d=>(!F.company||d.company===F.company)&&(!F.owner||d.owner===F.owner)
+    &&(OPEN.has(d.stage)||!cut||(d.closedAt||d.updatedAt)>=cut)
+    &&(!q||[d.title,d.customerName,d.owner,d.id,d.nextAction,d.source].join(" ").toLowerCase().includes(q)));
+}
+function dueClass(d){if(!d.nextActionDate||!OPEN.has(d.stage))return "";const t=todayStr();return d.nextActionDate<t?"late":d.nextActionDate===t?"today":""}
+
+/* ---------- render ---------- */
+function render(){
+  const rows=filtered();
+  const open=rows.filter(d=>OPEN.has(d.stage));
+  const won=rows.filter(d=>d.stage==="won"),lost=rows.filter(d=>d.stage==="lost");
+  $("kOpen").textContent=aedShort(open.reduce((a,d)=>a+d.value,0));
+  $("kOpenN").textContent=open.length+(open.length===1?" open deal":" open deals");
+  $("kWeighted").textContent=aedShort(open.reduce((a,d)=>a+d.value*d.probability/100,0));
+  $("kWonLbl").textContent="Won · "+$("closedF").selectedOptions[0].textContent.replace("Closed: ","");
+  $("kWon").textContent=aedShort(won.reduce((a,d)=>a+d.value,0));
+  $("kWonN").textContent=won.length+lost.length?`${won.length} won, ${lost.length} lost · ${Math.round(won.length/(won.length+lost.length)*100)}% win rate`:"No deals closed in this period";
+  const due=open.filter(d=>dueClass(d)).length;$("kDue").textContent=due;$("kDueBox").classList.toggle("alert",due>0);
+  F.view==="board"?renderBoard(rows):renderList(rows);
+  $("boardView").hidden=F.view!=="board";$("listView").hidden=F.view!=="list";$("loading").hidden=true;
+}
+function cardHtml(d){
+  const dc=dueClass(d);
+  const meta=[];
+  if(d.nextActionDate&&OPEN.has(d.stage))meta.push(`<span class="due ${dc}" title="${esc(d.nextAction)}">${dc==="late"?"Overdue · ":dc==="today"?"Today · ":"Next · "}${esc(dayShort(d.nextActionDate))}</span>`);
+  else if(d.nextAction&&OPEN.has(d.stage))meta.push(`<span>Next: ${esc(d.nextAction.slice(0,40))}</span>`);
+  if(d.expectedClose&&OPEN.has(d.stage))meta.push(`<span>Close ${esc(dayShort(d.expectedClose))}</span>`);
+  if(d.stage==="lost"&&d.lostReason)meta.push(`<span>${esc(d.lostReason.slice(0,60))}</span>`);
+  if(d.stage==="won"&&d.closedAt)meta.push(`<span>Won ${esc(day(d.closedAt))}</span>`);
+  return `<div class="card" role="button" tabindex="0" draggable="true" data-id="${esc(d.id)}" aria-label="${esc(d.title+", "+d.customerName+", "+aed(d.value))}">
+    <span class="t">${esc(d.title)}</span>
+    <span class="c">${esc(d.customerName)}</span>
+    <span class="row"><span class="val">${esc(aed(d.value))}</span><span style="display:flex;gap:6px;align-items:center"><span class="co ${d.company==="Tech Hub IT"?"th":""}">${d.company==="Tech Hub IT"?"TECH HUB":"BIFOLD"}</span>${ME.isManager?`<span class="av" title="${esc(d.owner)}">${esc(initials(d.owner))}</span>`:""}</span></span>
+    ${meta.length?`<span class="meta">${meta.join("")}</span>`:""}
+  </div>`;
+}
+function renderBoard(rows){
+  $("board").innerHTML=STAGES.map(([s,name])=>{
+    const ds=rows.filter(d=>d.stage===s).sort((a,b)=>OPEN.has(s)?(a.nextActionDate||"9999").localeCompare(b.nextActionDate||"9999")||b.value-a.value:String(b.closedAt).localeCompare(String(a.closedAt)));
+    const tot=ds.reduce((a,d)=>a+d.value,0);
+    return `<section class="col" data-stage="${s}" aria-label="${esc(name)}"><h3>${esc(name)} <span class="n">${ds.length}</span></h3>
+      <div class="tot">${esc(aed(tot))}${OPEN.has(s)?` · ${SPROB[s]}%`:""}</div>
+      <div class="cards">${ds.map(cardHtml).join("")||`<div class="none">${s==="lead"?"No leads. Add one with + New deal.":"Drag a deal here"}</div>`}</div></section>`;
+  }).join("");
+  $("board").querySelectorAll(".card").forEach(c=>{
+    c.onclick=()=>openDeal(c.dataset.id);
+    c.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openDeal(c.dataset.id)}};
+    c.ondragstart=e=>{e.dataTransfer.setData("text/plain",c.dataset.id);e.dataTransfer.effectAllowed="move";c.classList.add("dragging")};
+    c.ondragend=()=>c.classList.remove("dragging");
+  });
+  $("board").querySelectorAll(".col").forEach(col=>{
+    col.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect="move";col.classList.add("over")};
+    col.ondragleave=e=>{if(!col.contains(e.relatedTarget))col.classList.remove("over")};
+    col.ondrop=e=>{e.preventDefault();col.classList.remove("over");moveDeal(e.dataTransfer.getData("text/plain"),col.dataset.stage)};
+  });
+}
+const COLS=[["stage","Stage"],["title","Deal"],["company","Company"],["value","Value",1],["probability","Prob.",1],["weighted","Weighted",1],["expectedClose","Exp. close"],["nextActionDate","Next action"],["owner","Owner"],["updatedAt","Updated"]];
+function renderList(rows){
+  const key=F.sort,dir=F.dir,ord=Object.fromEntries(STAGES.map((s,i)=>[s[0],i]));
+  const val=d=>key==="weighted"?d.value*d.probability/100:key==="stage"?ord[d.stage]:key==="title"?(d.customerName+" "+d.title).toLowerCase():d[key]??"";
+  rows=rows.slice().sort((a,b)=>{const x=val(a),y=val(b);return (typeof x==="number"?x-y:String(x||"￿").localeCompare(String(y||"￿")))*dir});
+  $("lhead").innerHTML=COLS.map(([k,l,r])=>`<th class="sortable ${r?"r":""}" data-k="${k}" ${k===key?`aria-sort="${dir>0?"ascending":"descending"}"`:""} tabindex="0"><span class="ar">${l}</span></th>`).join("");
+  $("lhead").querySelectorAll("th").forEach(th=>{th.onclick=()=>{if(F.sort===th.dataset.k)F.dir*=-1;else{F.sort=th.dataset.k;F.dir=["value","probability","weighted","updatedAt"].includes(th.dataset.k)?-1:1}render()};th.onkeydown=e=>{if(e.key==="Enter")th.onclick()}});
+  $("lrows").innerHTML=rows.map(d=>{const dc=dueClass(d);return `<tr data-id="${esc(d.id)}" tabindex="0">
+    <td><span class="st ${d.stage}">${esc(SNAME[d.stage])}</span></td>
+    <td><div class="t">${esc(d.title)}</div><div class="s">${esc(d.customerName)}</div></td>
+    <td>${d.company==="Tech Hub IT"?"Tech Hub":"Bifold"}</td>
+    <td class="r mono">${esc(aed(d.value))}</td><td class="r mono">${d.probability}%</td><td class="r mono">${esc(aed(d.value*d.probability/100))}</td>
+    <td class="mono">${esc(dayShort(d.expectedClose))}</td>
+    <td><div class="${dc?"due "+dc:""}">${esc(dayShort(d.nextActionDate))}</div><div class="s">${esc(d.nextAction)}</div></td>
+    <td class="s">${esc(d.owner)}</td><td class="s">${esc(day(d.updatedAt))}</td></tr>`}).join("");
+  $("lrows").querySelectorAll("tr").forEach(tr=>{tr.onclick=()=>openDeal(tr.dataset.id);tr.onkeydown=e=>{if(e.key==="Enter")tr.onclick()}});
+  $("lempty").hidden=rows.length>0;$("lempty").textContent=DEALS.length?"No deals match these filters.":"No deals yet. Add the first one with + New deal.";
+}
+function renderOwners(){
+  const owners=[...new Set(DEALS.map(d=>d.owner).concat(ME.managers||[],[ME.email]))].sort();
+  $("ownerList").innerHTML=owners.map(o=>`<option value="${esc(o)}">`).join("");
+  if(!ME.isManager){$("ownerF").hidden=true;F.owner="";return}
+  if(F.owner&&!owners.includes(F.owner))F.owner="";
+  $("ownerF").hidden=false;
+  $("ownerF").innerHTML=`<option value="">All owners</option>`+owners.map(o=>`<option value="${esc(o)}">${o===ME.email?"Mine · ":""}${esc(o)}</option>`).join("");
+  $("ownerF").value=F.owner;
+}
+function renderCustomerSel(){
+  const sel=$("fCustomer"),v=sel.value||(CUR&&CUR.customerId)||"";
+  let opts=`<option value="">Choose a customer…</option>`+CUSTOMERS.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+  if(CUR&&CUR.customerId&&!CUSTOMERS.some(c=>c.id===CUR.customerId))opts+=`<option value="${esc(CUR.customerId)}">${esc(CUR.customerName||"Removed customer")} (removed)</option>`;
+  sel.innerHTML=opts;sel.value=v;
+}
+function upsert(d){const s={...d};delete s.log;delete s.etag;DEALS=DEALS.filter(x=>x.id!==d.id).concat(s)}
+
+/* ---------- moving by drag ---------- */
+async function moveDeal(id,stage){
+  const d=DEALS.find(x=>x.id===id);if(!d||d.stage===stage)return;
+  let lostReason="";
+  if(stage==="lost"){lostReason=await askLost(d);if(!lostReason)return}
+  const prev={...d};
+  Object.assign(d,{stage,probability:SPROB[stage]});render();
+  try{
+    const full=await api("GET","deals/"+encodeURIComponent(id));
+    const saved=await api("PUT","deals/"+encodeURIComponent(id),{...full,stage,probability:"",lostReason:stage==="lost"?lostReason:full.lostReason,etag:full.etag});
+    upsert(saved);render();toast(`Moved to ${SNAME[stage]}`);
+  }catch(e){DEALS=DEALS.filter(x=>x.id!==id).concat(prev);render();toast(e.message,true)}
+}
+function askLost(d){return new Promise(res=>{const dl=$("lostDlg");$("lostForm").reset();$("lostWhat").textContent=`${d.title} · ${d.customerName}`;dl.returnValue="";
+  dl.onclose=()=>res(dl.returnValue==="ok"?$("lostIn").value.trim():"");dl.showModal();$("lostIn").focus()})}
+$("lostForm").onsubmit=e=>{e.preventDefault();if(!$("lostIn").value.trim()){$("lostIn").focus();return}$("lostDlg").close("ok")};
+$("lostCancel").onclick=()=>$("lostDlg").close("");
+
+/* ---------- deal dialog ---------- */
+$("fStage").innerHTML=STAGES.map(([s,n])=>`<button type="button" data-s="${s}" aria-pressed="false">${esc(n)}</button>`).join("");
+$("fStage").querySelectorAll("button").forEach(b=>b.onclick=()=>setStage(b.dataset.s,true));
+function setStage(s,user){
+  dStage=s;$("fStage").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.s===s)));
+  $("lostBox").hidden=s!=="lost";
+  if(s==="won"||s==="lost"){$("fProb").value=SPROB[s];$("fProb").disabled=true}else{$("fProb").disabled=!canEditCur();if(user&&!probTouched)$("fProb").value=SPROB[s]}
+  if(user&&s==="lost")$("fLost").focus();
+  weighted();
+}
+function weighted(){const v=num($("fValue").value),p=num($("fProb").value);$("fWeighted").textContent=v?"Weighted "+aed(v*p/100):""}
+function canEditCur(){return true}
+$("fProb").oninput=()=>{probTouched=true;weighted()};
+$("fValue").oninput=weighted;
+$("fValue").onblur=()=>{if($("fValue").value.trim())$("fValue").value=num($("fValue").value).toLocaleString("en-US",{maximumFractionDigits:2})};
+
+async function openDeal(id){
+  let d=null;
+  if(id){try{d=await api("GET","deals/"+encodeURIComponent(id))}catch(e){toast(e.message,true);if(e.status===404){DEALS=DEALS.filter(x=>x.id!==id);render()}return}}
+  CUR=d;probTouched=false;$("dealForm").reset();$("dErr").textContent="";
+  $("dTitle").textContent=d?d.title:"New deal";
+  $("dId").textContent=d?`${d.id} · created by ${d.createdBy} on ${day(d.createdAt)}`:"";
+  $("dSave").textContent=d?"Save changes":"Create deal";
+  renderCustomerSel();
+  const v=d||{company:F.company||"Bifold Technologies",stage:"lead",probability:SPROB.lead,owner:ME.email};
+  $("fTitle").value=v.title||"";$("fCompany").value=v.company;$("fCustomer").value=v.customerId||"";
+  $("fValue").value=v.value?Number(v.value).toLocaleString("en-US",{maximumFractionDigits:2}):"";
+  $("fProb").value=v.probability;$("fClose").value=v.expectedClose||"";$("fNext").value=v.nextAction||"";$("fNextDate").value=v.nextActionDate||"";
+  $("fSource").value=v.source||"";$("fOwner").value=v.owner||ME.email;$("fNotes").value=v.notes||"";$("fLost").value=v.lostReason||"";
+  $("fOwner").disabled=!ME.isManager;$("ownerWrap").title=ME.isManager?"":"Only managers can reassign deals";
+  probTouched=d?d.probability!==SPROB[d.stage]:false;
+  setStage(v.stage,false);
+  $("dDel").hidden=!d;$("dDel").textContent="Delete";$("dDel").dataset.armed="";
+  $("activity").hidden=!d;renderLog(d);
+  $("dealDlg").showModal();if(!d)$("fTitle").focus();
+}
+function renderLog(d){
+  const log=(d&&d.log||[]).slice().reverse();
+  $("log").innerHTML=log.map(l=>`<li class="${esc(l.kind)}"><div>${esc(l.text)}</div><div class="w">${esc(l.by)} · ${esc(when(l.at))}</div></li>`).join("")||`<li class="w">No activity yet.</li>`;
+}
+function body(){
+  const c=CUSTOMERS.find(x=>x.id===$("fCustomer").value);
+  return {title:$("fTitle").value,company:$("fCompany").value,customerId:$("fCustomer").value,customerName:c?c.name:(CUR&&CUR.customerName)||"",
+    value:num($("fValue").value),stage:dStage,probability:$("fProb").value.trim()===""?"":num($("fProb").value),expectedClose:$("fClose").value,
+    nextAction:$("fNext").value,nextActionDate:$("fNextDate").value,source:$("fSource").value,owner:$("fOwner").value.trim(),
+    notes:$("fNotes").value,lostReason:$("fLost").value,etag:CUR&&CUR.etag};
+}
+$("dealForm").onsubmit=async e=>{
+  e.preventDefault();$("dErr").textContent="";
+  if(!$("fTitle").value.trim()){$("dErr").textContent="Enter what the deal is for.";$("fTitle").focus();return}
+  if(!$("fCustomer").value){$("dErr").textContent="Choose a customer, or add one with + New.";$("fCustomer").focus();return}
+  if(dStage==="lost"&&!$("fLost").value.trim()){$("dErr").textContent="Say why the deal was lost.";$("fLost").focus();return}
+  $("dSave").disabled=true;
+  try{
+    const d=CUR?await api("PUT","deals/"+encodeURIComponent(CUR.id),body()):await api("POST","deals",body());
+    upsert(d);renderOwners();render();$("dealDlg").close();
+    toast(CUR?"Deal saved":`${d.title} added to ${SNAME[d.stage]}`+(d.owner!==ME.email?` for ${d.owner}`:""));
+  }catch(err){$("dErr").textContent=err.message}finally{$("dSave").disabled=false}
+};
+$("dCancel").onclick=$("dClose").onclick=()=>$("dealDlg").close();
+$("dDel").onclick=async()=>{
+  const b=$("dDel");
+  if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Click again to delete";setTimeout(()=>{b.dataset.armed="";b.textContent="Delete"},4000);return}
+  try{await api("DELETE","deals/"+encodeURIComponent(CUR.id));DEALS=DEALS.filter(x=>x.id!==CUR.id);render();$("dealDlg").close();toast("Deal deleted")}catch(err){$("dErr").textContent=err.message}
+};
+async function addNote(){
+  const t=$("noteIn").value.trim();if(!t||!CUR)return;$("noteBtn").disabled=true;
+  try{const d=await api("POST","deals/"+encodeURIComponent(CUR.id)+"/notes",{text:t});CUR.log=d.log;CUR.etag=d.etag;$("noteIn").value="";renderLog(d);upsert(d);render()}
+  catch(e){$("dErr").textContent=e.message}finally{$("noteBtn").disabled=false}
+}
+$("noteBtn").onclick=addNote;$("noteIn").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();addNote()}};
+
+/* ---------- new customer ---------- */
+$("newCustBtn").onclick=()=>{$("custForm").reset();$("cErr").textContent="";$("custDlg").showModal();$("cName").focus()};
+$("cCancel").onclick=()=>$("custDlg").close();
+$("custForm").onsubmit=async e=>{
+  e.preventDefault();$("cErr").textContent="";$("cSave").disabled=true;
+  const b={name:$("cName").value,contactName:$("cContact").value,phone:$("cPhone").value,email:$("cEmail").value,emirate:$("cEmirate").value};
+  const pick=c=>{if(!CUSTOMERS.some(x=>x.id===c.id))CUSTOMERS.push(c);CUSTOMERS.sort((a,b)=>a.name.localeCompare(b.name));renderCustomerSel();$("fCustomer").value=c.id};
+  try{const c=await api("POST","customers",b);pick(c);toast(`${c.name} added to customers`);$("custDlg").close()}
+  catch(err){if(err.status===409&&err.data&&err.data.customer){pick(err.data.customer);toast(err.message+" It's now selected.");$("custDlg").close()}else $("cErr").textContent=err.message}
+  finally{$("cSave").disabled=false}
+};
+
+/* ---------- toolbar ---------- */
+function seg(id,key){$(id).querySelectorAll("button").forEach(b=>{b.setAttribute("aria-pressed",String(b.dataset.v===F[key]));b.onclick=()=>{F[key]=b.dataset.v;remember();seg(id,key);render()}})}
+$("ownerF").onchange=e=>{F.owner=e.target.value;remember();render()};
+$("closedF").onchange=e=>{F.closed=e.target.value;remember();render()};
+$("q").oninput=e=>{F.q=e.target.value;render()};
+$("addBtn").onclick=()=>openDeal(null);
+$("csvBtn").onclick=()=>{
+  const rows=filtered(),q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const head=["Deal no.","Company","Customer","Deal","Stage","Value (AED)","Probability %","Weighted (AED)","Expected close","Next action","Next action date","Source","Owner","Lost reason","Created","Updated"];
+  const lines=rows.map(d=>[d.id,d.company,d.customerName,d.title,SNAME[d.stage],d.value,d.probability,Math.round(d.value*d.probability/100),d.expectedClose,d.nextAction,d.nextActionDate,d.source,d.owner,d.lostReason,d.createdAt.slice(0,10),d.updatedAt.slice(0,10)].map(q).join(","));
+  const blob=new Blob(["﻿"+[head.map(q).join(",")].concat(lines).join("\r\n")],{type:"text/csv"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`sales-pipeline-${todayStr()}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+
+(async()=>{
+  try{
+    [ME,DEALS,CUSTOMERS]=await Promise.all([api("GET","me"),api("GET","deals"),api("GET","customers")]);
+    $("who").textContent=ME.email;
+    $("sub").textContent=ME.isManager?"Every deal across Bifold and Tech Hub, from first lead to PO.":"Your deals across Bifold and Tech Hub, from first lead to PO.";
+    $("closedF").value=F.closed;seg("coSeg","company");seg("viewSeg","view");renderOwners();render();
+    const m=/^#(DEAL-[\w-]+)$/.exec(location.hash);if(m)openDeal(m[1]);
+  }catch(e){$("loading").textContent=e.message}
+})();
+</script>
+</body>
+</html>

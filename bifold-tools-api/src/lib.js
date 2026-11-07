@@ -1,4 +1,4 @@
-// Bifold Tools API: shared customers, saved PnL documents and per-document sharing.
+// Bifold Tools API: shared customers, saved PnL documents with per-document sharing, and the sales pipeline.
 // Storage: Azure Table Storage (setting STORAGE_CONNECTION).
 // Settings:
 //   STORAGE_CONNECTION  connection string of the storage account (required)
@@ -228,6 +228,146 @@ async function setAccess(user, id, b) {
   return { access: acl };
 }
 
+// ---------- sales pipeline (deals) ----------
+// A deal is visible to its owner (the salesperson) and to managers. Managers can reassign the owner.
+const DEALS = "deals", DPK = "deal";
+const STAGES = ["lead", "survey", "proposal", "negotiation", "po", "won", "lost"];
+const STAGE_NAMES = { lead: "Lead", survey: "Site survey", proposal: "Proposal sent", negotiation: "Negotiation", po: "PO received", won: "Won", lost: "Lost" };
+const STAGE_PROB = { lead: 10, survey: 20, proposal: 40, negotiation: 60, po: 90, won: 100, lost: 0 };
+const COMPANIES = ["Bifold Technologies", "Tech Hub IT"];
+const DEAL_COLS = ["RowKey", "title", "company", "customerId", "customerName", "value", "stage", "probability", "expectedClose",
+  "source", "nextAction", "nextActionDate", "lostReason", "notes", "owner", "closedAt", "stageAt", "createdBy", "createdAt", "updatedAt", "updatedBy"];
+const LOG_MAX = 200;
+const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s));
+
+function dealOut(e) {
+  return {
+    id: e.rowKey || e.RowKey, title: e.title || "", company: e.company || "", customerId: e.customerId || "", customerName: e.customerName || "",
+    value: num(e.value), stage: e.stage, probability: num(e.probability), expectedClose: e.expectedClose || "",
+    source: e.source || "", nextAction: e.nextAction || "", nextActionDate: e.nextActionDate || "", lostReason: e.lostReason || "",
+    notes: e.notes || "", owner: e.owner, closedAt: e.closedAt || "", stageAt: e.stageAt || "",
+    createdBy: e.createdBy, createdAt: e.createdAt, updatedAt: e.updatedAt, updatedBy: e.updatedBy,
+  };
+}
+const dealVisible = (e, user) => user.isManager || e.owner === user.email;
+
+function dealIn(b, user, cur) {
+  const f = {
+    title: clean(b.title, 150), company: clean(b.company, 80), customerId: clean(b.customerId, 60), customerName: clean(b.customerName, 150),
+    value: Math.max(0, num(b.value)), stage: String(b.stage || "lead"), expectedClose: clean(b.expectedClose, 10),
+    source: clean(b.source, 60), nextAction: clean(b.nextAction, 200), nextActionDate: clean(b.nextActionDate, 10),
+    lostReason: clean(b.lostReason, 300), notes: clean(b.notes, 4000),
+  };
+  if (!f.title) fail(400, "Enter what the deal is for.");
+  if (!f.customerId) fail(400, "Choose a customer.");
+  if (!COMPANIES.includes(f.company)) fail(400, "Choose Bifold Technologies or Tech Hub IT.");
+  if (!STAGES.includes(f.stage)) fail(400, "Choose a valid stage.");
+  if (f.value > 1e10) fail(400, "The deal value is too large.");
+  if (f.expectedClose && !isDate(f.expectedClose)) fail(400, "The expected close date is not valid.");
+  if (f.nextActionDate && !isDate(f.nextActionDate)) fail(400, "The next action date is not valid.");
+  if (f.stage === "lost" && !f.lostReason) fail(400, "Say why the deal was lost.");
+  if (f.stage !== "lost") f.lostReason = "";
+  const p = b.probability === "" || b.probability == null ? STAGE_PROB[f.stage] : num(b.probability);
+  f.probability = f.stage === "won" ? 100 : f.stage === "lost" ? 0 : Math.min(100, Math.max(0, Math.round(p)));
+  // Owner: salespeople always own what they create; managers can assign anyone on an allowed domain.
+  let owner = cur ? cur.owner : user.email;
+  const want = clean(b.owner, 150).toLowerCase();
+  if (want && want !== owner) {
+    if (!user.isManager) fail(403, "Only managers can reassign a deal.");
+    if (!emailOk(want)) fail(400, `Enter a valid ${domains().map(d => "@" + d).join(" or ")} email for the owner.`);
+    owner = want;
+  }
+  f.owner = owner;
+  return f;
+}
+
+function dealId() {
+  const t = new Date(Date.now() + 4 * 3600e3).toISOString();
+  return `DEAL-${t.slice(0, 4)}${t.slice(5, 7)}${t.slice(8, 10)}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+}
+const logEntry = (user, kind, text) => ({ at: new Date().toISOString(), by: user.email, kind, text: clean(text, 1000) });
+const addLog = (log, entry) => { log.push(entry); return log.slice(-LOG_MAX); };
+
+async function listDeals(user) {
+  const rows = await all(await table(DEALS), DPK, DEAL_COLS);
+  return rows.filter(e => dealVisible(e, user)).map(dealOut).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+async function loadDeal(user, id) {
+  const e = await getOrNull(await table(DEALS), DPK, id);
+  if (!e || !dealVisible(e, user)) fail(404, "This deal doesn't exist, was deleted, or isn't assigned to you.");
+  return e;
+}
+const dealFull = e => ({ ...dealOut(e), log: unpackJson(e).log || [], etag: e.etag });
+async function getDeal(user, id) { return dealFull(await loadDeal(user, id)); }
+
+function describeChanges(cur, f) {
+  const out = [];
+  if (cur.stage !== f.stage) out.push(["stage", `Moved from ${STAGE_NAMES[cur.stage]} to ${STAGE_NAMES[f.stage]}` + (f.stage === "lost" ? `: ${f.lostReason}` : "")]);
+  if (num(cur.value) !== f.value) out.push(["edit", `Value changed from AED ${num(cur.value).toLocaleString("en-US")} to AED ${f.value.toLocaleString("en-US")}`]);
+  if (cur.owner !== f.owner) out.push(["edit", `Reassigned from ${cur.owner} to ${f.owner}`]);
+  if ((cur.expectedClose || "") !== f.expectedClose) out.push(["edit", `Expected close changed to ${f.expectedClose || "not set"}`]);
+  return out;
+}
+
+// The customer name always comes from the shared customer list, so renames there show up on the next save.
+async function resolveCustomer(f, cur) {
+  const c = await getOrNull(await table(CUST), CPK, f.customerId);
+  if (c) f.customerName = c.name;
+  else if (cur && cur.customerId === f.customerId) f.customerName = cur.customerName || f.customerName;
+  else fail(400, "That customer is no longer in the customer list. Choose another.");
+}
+async function createDeal(user, b) {
+  const f = dealIn(b, user, null);
+  await resolveCustomer(f, null);
+  const now = new Date().toISOString();
+  const closed = f.stage === "won" || f.stage === "lost";
+  const log = [logEntry(user, "create", `Created at ${STAGE_NAMES[f.stage]}` + (f.owner !== user.email ? `, assigned to ${f.owner}` : ""))];
+  const e = { partitionKey: DPK, rowKey: dealId(), ...f, closedAt: closed ? now : "", stageAt: now, createdBy: user.email, createdAt: now, updatedAt: now, updatedBy: user.email, ...packJson({ log }) };
+  await (await table(DEALS)).createEntity(e);
+  return getDeal(user, e.rowKey);
+}
+async function updateDeal(user, id, b) {
+  const cur = await loadDeal(user, id);
+  const f = dealIn(b, user, cur);
+  await resolveCustomer(f, cur);
+  const now = new Date().toISOString();
+  let log = unpackJson(cur).log || [];
+  for (const [kind, text] of describeChanges(cur, f)) log = addLog(log, logEntry(user, kind, text));
+  const stageChanged = cur.stage !== f.stage;
+  const closed = f.stage === "won" || f.stage === "lost";
+  const next = {
+    partitionKey: DPK, rowKey: id, ...f,
+    closedAt: closed ? (stageChanged || !cur.closedAt ? now : cur.closedAt) : "",
+    stageAt: stageChanged ? now : (cur.stageAt || cur.createdAt),
+    createdBy: cur.createdBy, createdAt: cur.createdAt, updatedAt: now, updatedBy: user.email, ...packJson({ log }),
+  };
+  try {
+    await (await table(DEALS)).updateEntity(next, "Replace", { etag: b.etag || cur.etag });
+  } catch (err) {
+    if (err.statusCode === 412) fail(409, "Someone else changed this deal after you opened it. Reload to see their changes, then make yours again.");
+    throw err;
+  }
+  return getDeal(user, id);
+}
+async function addDealNote(user, id, b) {
+  const text = clean(b.text, 1000);
+  if (!text) fail(400, "Write a note first.");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const cur = await loadDeal(user, id);
+    const log = addLog(unpackJson(cur).log || [], logEntry(user, "note", text));
+    try {
+      await (await table(DEALS)).updateEntity({ partitionKey: DPK, rowKey: id, ...packJson({ log }), updatedAt: new Date().toISOString(), updatedBy: user.email }, "Merge", { etag: cur.etag });
+      return getDeal(user, id);
+    } catch (err) { if (err.statusCode !== 412) throw err; }
+  }
+  fail(409, "The deal kept changing while you added the note. Try again.");
+}
+async function deleteDeal(user, id) {
+  const cur = await loadDeal(user, id);
+  if (!user.isManager && cur.owner !== user.email) fail(403, "Only the owner or a manager can delete this deal.");
+  await (await table(DEALS)).deleteEntity(DPK, id);
+}
+
 // ---------- routing ----------
 async function route(method, seg, user, body) {
   const [a, id, sub] = seg;
@@ -245,6 +385,14 @@ async function route(method, seg, user, body) {
     if (id && !sub && method === "GET") return getPnl(user, id);
     if (id && !sub && method === "PUT") return updatePnl(user, id, body);
     if (id && !sub && method === "DELETE") return deletePnl(user, id);
+  }
+  if (a === "deals") {
+    if (!id && method === "GET") return listDeals(user);
+    if (!id && method === "POST") return createDeal(user, body);
+    if (id && sub === "notes" && method === "POST") return addDealNote(user, id, body);
+    if (id && !sub && method === "GET") return getDeal(user, id);
+    if (id && !sub && method === "PUT") return updateDeal(user, id, body);
+    if (id && !sub && method === "DELETE") return deleteDeal(user, id);
   }
   fail(404, "Unknown request.");
 }

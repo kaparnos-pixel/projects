@@ -27,6 +27,6 @@
     "Cache-Control": "no-cache"
   },
   "platform": {
-    "apiRuntime": "node:20"
+    "apiRuntime": "node:22"
   }
 }

@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PDC Cheque Log · Bifold Tools</title>
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
+<style>
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:18px}
+header.top .acts{display:flex;gap:8px;flex-wrap:wrap}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.kpi .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.kpi .v{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:21px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .s{font-size:12px;color:var(--muted)}
+.kpi.alert{border-color:var(--bad)}.kpi.alert .v{color:var(--bad)}
+.kpi.soon .v{color:var(--warn)}
+@media (max-width:640px){.kpis{grid-template-columns:1fr 1fr;gap:8px}.kpi{padding:10px 12px}.kpi .v{font-size:16px}}
+.tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;border-radius:0;background:none;padding:7px 12px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.seg button[aria-pressed="true"]:hover{color:var(--on-accent)}
+.tools select,.tools input{width:auto}
+.tools input[type=search]{flex:1 1 200px;max-width:340px}
+.tools .cnt{margin-left:auto;font-size:13px;color:var(--muted)}
+.listpanel{padding:0;overflow:hidden}
+table.list{min-width:1060px}
+td .t{font-weight:700} td .s{font-size:12px;color:var(--muted)}
+tr.late td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
+tr.soon td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+.dt{font-weight:700;white-space:nowrap}
+.when{display:inline-block;margin-top:2px;font-size:11px;font-weight:700;border-radius:99px;padding:1px 8px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.when.late{background:var(--bad-soft);color:var(--bad)}.when.soon{background:var(--warn-soft);color:var(--warn)}
+.co{font-size:10px;font-weight:700;letter-spacing:.05em;border-radius:4px;padding:1px 6px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.co.th{background:var(--good-soft);color:var(--good)}
+.st{display:inline-block;font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px;white-space:nowrap;background:var(--accent-soft);color:var(--accent)}
+.st.cleared{background:var(--good-soft);color:var(--good)}.st.bounced{background:var(--bad-soft);color:var(--bad)}.st.cancelled{background:var(--sunk);color:var(--muted);text-decoration:line-through}
+td .act{padding:4px 9px;font-size:12px}
+#chqDlg{width:min(640px,calc(100% - 32px))}
+.dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.full{grid-column:1/-1}
+dialog .foot{justify-content:space-between}
+dialog .foot .r2{display:flex;gap:8px;margin-left:auto}
+button.armed{background:var(--bad);border-color:var(--bad);color:#fff}
+.note{font-size:12px;color:var(--muted);margin-top:12px;max-width:80ch}
+</style>
+</head>
+<body>
+<div class="brandbar"><div class="in">
+  <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
+  <nav><a href="/">All tools</a><a href="/pnl/">PnL Calculator</a><a href="/pipeline/">Sales Pipeline</a><span id="who"></span><a href="/.auth/logout">Sign out</a></nav>
+</div></div>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1><span class="tag">Bifold Tools</span>PDC Cheque Log</h1>
+      <p class="sub">Post-dated cheques issued to suppliers and vendors by Bifold and Tech Hub. Seven days before a cheque clears, a reminder goes to the person who logged it and to Ranjan.</p>
+    </div>
+    <div class="acts">
+      <button type="button" id="csvBtn">Download CSV</button>
+      <button class="primary" type="button" id="addBtn">+ Log a cheque</button>
+    </div>
+  </header>
+
+  <section class="kpis" aria-label="Totals">
+    <div class="kpi"><div class="k">Pending, both companies</div><div class="v" id="kPend">–</div><div class="s" id="kPendN"></div></div>
+    <div class="kpi soon"><div class="k">Clearing in next 7 days</div><div class="v" id="kSoon">–</div><div class="s" id="kSoonN"></div></div>
+    <div class="kpi" id="kLateBox"><div class="k">Past date, not cleared</div><div class="v" id="kLate">–</div><div class="s" id="kLateAmt"></div></div>
+    <div class="kpi"><div class="k">Pending by company</div><div class="s" style="font-size:13px;margin-top:6px" id="kBif">–</div><div class="s" style="font-size:13px" id="kTh"></div></div>
+  </section>
+
+  <div class="tools">
+    <div class="seg" role="group" aria-label="Company" id="coSeg">
+      <button type="button" data-v="" aria-pressed="true">All</button>
+      <button type="button" data-v="Bifold Technologies" aria-pressed="false">Bifold</button>
+      <button type="button" data-v="Tech Hub IT" aria-pressed="false">Tech Hub</button>
+    </div>
+    <select id="stF" aria-label="Status">
+      <option value="pending">Pending</option>
+      <option value="">All statuses</option>
+      <option value="cleared">Cleared</option>
+      <option value="bounced">Bounced</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+    <input id="q" type="search" placeholder="Search payee, cheque no., reference" aria-label="Search cheques">
+    <span class="cnt" id="cnt"></span>
+  </div>
+
+  <div class="panel listpanel"><div class="tblwrap">
+    <table class="list">
+      <thead><tr><th>Clearance date</th><th>Company</th><th>Payee</th><th>Cheque</th><th>Reference</th><th class="r">Amount (AED)</th><th>Status</th><th>Reminder</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty">Loading cheques…</div>
+  </div></div>
+  <p class="note">Reminders go out each morning at about 7:40 Dubai time for pending cheques clearing within 7 days that haven't had one yet. Changing a cheque's clearance date sets up a new reminder.</p>
+</div>
+
+<dialog id="chqDlg">
+  <form id="chqForm" novalidate>
+    <div class="dhead"><h3 id="dTitle">Log a PDC cheque</h3><button type="button" class="x" id="xBtn" aria-label="Close">×</button></div>
+    <div class="fields">
+      <label><span class="lbl">Company</span>
+        <select id="f_company"><option>Bifold Technologies</option><option>Tech Hub IT</option></select></label>
+      <label><span class="lbl">Payee type</span>
+        <select id="f_payeeType"><option>Supplier</option><option>Vendor</option></select></label>
+      <label class="full"><span class="lbl">Payee name *</span><input id="f_payee" autocomplete="off" placeholder="As written on the cheque"></label>
+      <label><span class="lbl">Cheque number *</span><input id="f_chequeNo" class="num" style="text-align:left" autocomplete="off" placeholder="e.g. 000482"></label>
+      <label><span class="lbl">Drawn on bank</span><input id="f_bank" autocomplete="off" placeholder="e.g. Emirates NBD"></label>
+      <label><span class="lbl">Amount (AED) *</span><input id="f_amount" class="num" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
+      <label><span class="lbl">Cheque date</span><input id="f_chequeDate" type="date"></label>
+      <label><span class="lbl">Clearance date *</span><input id="f_clearanceDate" type="date"></label>
+      <label><span class="lbl">Status</span>
+        <select id="f_status"><option value="pending">Pending</option><option value="cleared">Cleared</option><option value="bounced">Bounced</option><option value="cancelled">Cancelled</option></select></label>
+      <label class="full"><span class="lbl">Reference (PO / invoice no.)</span><input id="f_reference" autocomplete="off" placeholder="e.g. PO-2026-118 / INV-5521"></label>
+      <label class="full"><span class="lbl">Notes</span><textarea id="f_notes" rows="2"></textarea></label>
+    </div>
+    <div class="hint" id="meta"></div>
+    <div class="err" id="fErr" role="alert"></div>
+    <div class="foot">
+      <button type="button" class="danger" id="delBtn" hidden>Delete</button>
+      <div class="r2"><button type="button" id="cancelBtn">Cancel</button><button type="submit" class="primary" id="saveBtn">Save cheque</button></div>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $=id=>document.getElementById(id);
+const STN={pending:"Pending",cleared:"Cleared",bounced:"Bounced",cancelled:"Cancelled"};
+let ME=null,ROWS=[],EDIT=null,BUSY=false;
+const F={co:"",st:"pending",q:""};
+const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
+const aed=n=>num(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const pad=n=>String(n).padStart(2,"0");
+function todayStr(){const d=new Date(Date.now()+4*3600e3);return d.toISOString().slice(0,10)} // Gulf time
+const dnum=s=>{const[y,m,d]=String(s).split("-").map(Number);return Date.UTC(y,(m||1)-1,d||1)/864e5};
+const daysTo=s=>Math.round(dnum(s)-dnum(todayStr()));
+const addDays=(s,n)=>new Date((dnum(s)+n)*864e5).toISOString().slice(0,10);
+const fdate=s=>{if(!s)return "—";const[y,m,d]=s.split("-").map(Number);return new Date(Date.UTC(y,m-1,d)).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"})};
+const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
+function toast(m,e){const t=document.createElement("div");t.className="toast"+(e?" err":"");t.setAttribute("role","status");t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),e?6000:2600)}
+async function api(method,path,body){
+  let r;try{r=await fetch("/api/"+path,{method,headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,cache:"no-store"})}catch{throw new Error("Can't reach the server. Check your connection and try again.")}
+  const ct=r.headers.get("content-type")||"";
+  if(r.redirected||(r.ok&&r.status!==204&&!ct.includes("json")))throw new Error("Your session has ended. Reload the page to sign in again.");
+  let j=null;if(r.status!==204){try{j=await r.json()}catch{}}
+  if(!r.ok){const e=new Error((j&&j.error)||"The request failed.");e.status=r.status;throw e}return j;
+}
+
+function timing(c){
+  if(c.status!=="pending")return null;
+  const n=daysTo(c.clearanceDate);
+  if(n<0)return{cls:"late",t:"Overdue "+(-n)+"d"};
+  if(n===0)return{cls:"soon",t:"Today"};
+  if(n<=7)return{cls:"soon",t:"In "+n+(n===1?" day":" days")};
+  return{cls:"",t:"In "+n+" days"};
+}
+function reminder(c){
+  if(c.reminderSentAt)return "Sent "+fdate(c.reminderSentAt.slice(0,10));
+  if(c.status!=="pending")return "—";
+  return daysTo(c.clearanceDate)<=7?"Goes out next morning":"On "+fdate(addDays(c.clearanceDate,-7));
+}
+function filtered(){
+  const q=F.q.trim().toLowerCase();
+  return ROWS.filter(c=>(!F.co||c.company===F.co)&&(!F.st||c.status===F.st)&&
+    (!q||[c.payee,c.chequeNo,c.reference,c.bank,c.notes,c.createdBy].join(" ").toLowerCase().includes(q)));
+}
+function kpis(){
+  const p=ROWS.filter(c=>c.status==="pending"),sum=a=>a.reduce((s,c)=>s+num(c.amount),0);
+  const soon=p.filter(c=>{const n=daysTo(c.clearanceDate);return n>=0&&n<=7}),late=p.filter(c=>daysTo(c.clearanceDate)<0);
+  const n=a=>a.length+(a.length===1?" cheque":" cheques");
+  $("kPend").textContent="AED "+aed(sum(p));$("kPendN").textContent=n(p);
+  $("kSoon").textContent="AED "+aed(sum(soon));$("kSoonN").textContent=n(soon);
+  $("kLate").textContent=late.length;$("kLateAmt").textContent="AED "+aed(sum(late));$("kLateBox").classList.toggle("alert",late.length>0);
+  $("kBif").textContent="Bifold AED "+aed(sum(p.filter(c=>c.company==="Bifold Technologies")));
+  $("kTh").textContent="Tech Hub AED "+aed(sum(p.filter(c=>c.company==="Tech Hub IT")));
+}
+function render(){
+  kpis();
+  const list=filtered(),tb=$("rows");tb.textContent="";
+  $("cnt").textContent=list.length+" of "+ROWS.length;
+  $("empty").hidden=list.length>0;
+  if(!list.length)$("empty").textContent=ROWS.length?"No cheques match these filters. Try All statuses or clear the search.":"No cheques logged yet. Use “Log a cheque” to add the first one.";
+  for(const c of list){
+    const tr=el("tr"),t=timing(c);if(t&&t.cls)tr.className=t.cls;
+    tr.onclick=()=>openDlg(c);
+    const d1=el("td");d1.append(el("div","dt",fdate(c.clearanceDate)));if(t)d1.append(el("span","when "+t.cls,t.t));
+    const d2=el("td");d2.append(el("span","co"+(c.company==="Tech Hub IT"?" th":""),c.company==="Tech Hub IT"?"TECH HUB":"BIFOLD"));
+    const d3=el("td");d3.append(el("div","t",c.payee));d3.append(el("div","s",c.payeeType+" · logged by "+c.createdBy));
+    const d4=el("td");d4.append(el("div","mono",c.chequeNo));d4.append(el("div","s",[c.bank,c.chequeDate?"dated "+fdate(c.chequeDate):""].filter(Boolean).join(" · ")));
+    const d5=el("td");d5.append(el("div",null,c.reference||"—"));if(c.notes)d5.append(el("div","s",c.notes));
+    const d6=el("td","r mono",aed(c.amount));
+    const d7=el("td");d7.append(el("span","st "+c.status,STN[c.status]||c.status));
+    const d8=el("td");d8.append(el("div",null,reminder(c)));
+    const d9=el("td","r");
+    if(c.status==="pending"){const b=el("button","act","Mark cleared");b.type="button";b.onclick=ev=>{ev.stopPropagation();quick(c,"cleared")};d9.append(b)}
+    tr.append(d1,d2,d3,d4,d5,d6,d7,d8,d9);tb.append(tr);
+  }
+}
+async function load(){
+  try{ROWS=await api("GET","cheques");render()}
+  catch(e){$("empty").hidden=false;$("empty").textContent=e.message}
+}
+
+const FIELDS=["company","payeeType","payee","chequeNo","bank","amount","chequeDate","clearanceDate","status","reference","notes"];
+function openDlg(c){
+  EDIT=c||null;
+  $("dTitle").textContent=c?"Cheque "+c.chequeNo:"Log a PDC cheque";
+  for(const k of FIELDS)$("f_"+k).value=c?(c[k]??""):"";
+  if(!c){$("f_company").value=F.co||"Bifold Technologies";$("f_payeeType").value="Supplier";$("f_status").value="pending"}
+  $("meta").textContent=c?("Logged by "+c.createdBy+" on "+fdate(c.createdAt.slice(0,10))+(c.updatedBy&&c.updatedAt!==c.createdAt?" · last changed by "+c.updatedBy:"")):"The reminder email goes to you"+(ME?" ("+ME.email+")":"")+" and to Ranjan.";
+  $("fErr").textContent="";
+  const del=$("delBtn");del.hidden=!(c&&ME&&(ME.isManager||c.createdBy===ME.email));del.classList.remove("armed");del.textContent="Delete";
+  $("chqDlg").showModal();setTimeout(()=>$("f_payee").focus(),30);
+}
+function body(){const b={};for(const k of FIELDS)b[k]=$("f_"+k).value.trim();if(EDIT)b.etag=EDIT.etag;return b}
+$("chqForm").addEventListener("submit",async ev=>{
+  ev.preventDefault();if(BUSY)return;
+  const b=body();
+  if(!b.payee)return void($("fErr").textContent="Enter the payee name.");
+  if(!b.chequeNo)return void($("fErr").textContent="Enter the cheque number.");
+  if(!(num(b.amount)>0))return void($("fErr").textContent="Enter an amount greater than zero.");
+  if(!b.clearanceDate)return void($("fErr").textContent="Pick the clearance date.");
+  BUSY=true;$("saveBtn").disabled=true;
+  try{
+    if(EDIT)await api("PUT","cheques/"+encodeURIComponent(EDIT.id),b);else await api("POST","cheques",b);
+    $("chqDlg").close();toast(EDIT?"Cheque updated":"Cheque logged");await load();
+  }catch(e){$("fErr").textContent=e.message}
+  finally{BUSY=false;$("saveBtn").disabled=false}
+});
+async function quick(c,status){
+  const b={};for(const k of FIELDS)b[k]=c[k];b.status=status;b.etag=c.etag;
+  try{await api("PUT","cheques/"+encodeURIComponent(c.id),b);toast("Marked "+STN[status].toLowerCase());await load()}catch(e){toast(e.message,true)}
+}
+$("delBtn").onclick=async()=>{
+  const d=$("delBtn");if(!d.classList.contains("armed")){d.classList.add("armed");d.textContent="Confirm delete";return}
+  try{await api("DELETE","cheques/"+encodeURIComponent(EDIT.id));$("chqDlg").close();toast("Cheque deleted");await load()}catch(e){$("fErr").textContent=e.message}
+};
+$("cancelBtn").onclick=$("xBtn").onclick=()=>$("chqDlg").close();
+$("addBtn").onclick=()=>openDlg(null);
+$("q").oninput=e=>{F.q=e.target.value;render()};
+$("stF").onchange=e=>{F.st=e.target.value;render()};
+$("coSeg").onclick=e=>{const b=e.target.closest("button[data-v]");if(!b)return;F.co=b.dataset.v;for(const x of $("coSeg").children)x.setAttribute("aria-pressed",String(x===b));render()};
+$("csvBtn").onclick=()=>{
+  const cols=[["company","Company"],["payeeType","Payee type"],["payee","Payee"],["chequeNo","Cheque no."],["bank","Bank"],["amount","Amount (AED)"],["chequeDate","Cheque date"],["clearanceDate","Clearance date"],["status","Status"],["reference","Reference"],["createdBy","Logged by"],["reminderSentAt","Reminder sent"],["notes","Notes"]];
+  const esc=v=>{v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const csv=[cols.map(c=>c[1]).join(",")].concat(filtered().map(r=>cols.map(c=>esc(r[c[0]])).join(","))).join("\r\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv"}));a.download="pdc-cheques-"+todayStr()+".csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+};
+api("GET","me").then(m=>{ME=m;$("who").textContent=m.email}).catch(()=>{});
+load();
+</script>
+</body>
+</html>

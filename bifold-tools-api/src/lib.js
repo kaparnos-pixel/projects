@@ -1,4 +1,4 @@
-// Bifold Tools API: shared customers, saved PnL documents with per-document sharing, and the sales pipeline.
+// Bifold Tools API: shared customers, saved PnL documents with per-document sharing, the sales pipeline and the PDC cheque log.
 // Storage: Azure Table Storage (setting STORAGE_CONNECTION).
 // Settings:
 //   STORAGE_CONNECTION  connection string of the storage account (required)
@@ -368,6 +368,79 @@ async function deleteDeal(user, id) {
   await (await table(DEALS)).deleteEntity(DPK, id);
 }
 
+// ---------- PDC cheques (post-dated cheques issued to suppliers and vendors) ----------
+// Everyone signed in sees every cheque for both companies. Anyone can log and edit; only the
+// person who logged a cheque or a manager can delete it. The daily reminder job
+// (.github/scripts/pdc-reminders.cjs) emails createdBy + PDC_REMINDER_CC 7 days before clearance
+// and stamps reminderSentAt; changing the clearance date clears the stamp so it re-arms.
+const PDC = "pdc", QPK = "cheque";
+const CHQ_STATUS = ["pending", "cleared", "bounced", "cancelled"];
+const PAYEE_TYPES = ["Supplier", "Vendor"];
+
+function chqOut(e) {
+  return {
+    id: e.rowKey, company: e.company || "", payeeType: e.payeeType || "", payee: e.payee || "", chequeNo: e.chequeNo || "",
+    bank: e.bank || "", amount: num(e.amount), chequeDate: e.chequeDate || "", clearanceDate: e.clearanceDate || "",
+    status: e.status || "pending", reference: e.reference || "", notes: e.notes || "",
+    reminderSentAt: e.reminderSentAt || "", createdBy: e.createdBy, createdAt: e.createdAt,
+    updatedBy: e.updatedBy, updatedAt: e.updatedAt, etag: e.etag,
+  };
+}
+function chqIn(b) {
+  const f = {
+    company: clean(b.company, 80), payeeType: clean(b.payeeType, 20) || "Supplier", payee: clean(b.payee, 150),
+    chequeNo: clean(b.chequeNo, 40), bank: clean(b.bank, 80), amount: Math.round(num(b.amount) * 100) / 100,
+    chequeDate: clean(b.chequeDate, 10), clearanceDate: clean(b.clearanceDate, 10), status: clean(b.status, 20) || "pending",
+    reference: clean(b.reference, 150), notes: clean(b.notes, 1000),
+  };
+  if (!COMPANIES.includes(f.company)) fail(400, "Choose Bifold Technologies or Tech Hub IT.");
+  if (!PAYEE_TYPES.includes(f.payeeType)) fail(400, "Choose supplier or vendor.");
+  if (!f.payee) fail(400, "Enter the payee name.");
+  if (!f.chequeNo) fail(400, "Enter the cheque number.");
+  if (!(f.amount > 0) || f.amount > 1e10) fail(400, "Enter an amount greater than zero.");
+  if (!isDate(f.clearanceDate)) fail(400, "Pick the clearance date.");
+  if (f.chequeDate && !isDate(f.chequeDate)) fail(400, "The cheque date is not valid.");
+  if (!CHQ_STATUS.includes(f.status)) fail(400, "Choose a valid status.");
+  return f;
+}
+async function listCheques() {
+  const rows = await all(await table(PDC), QPK);
+  return rows.map(chqOut).sort((a, b) => a.clearanceDate.localeCompare(b.clearanceDate));
+}
+async function findChequeNo(company, chequeNo, exceptId) {
+  const n = chequeNo.toLowerCase();
+  return (await listCheques()).find(c => c.company === company && c.chequeNo.toLowerCase() === n && c.id !== exceptId && c.status !== "cancelled");
+}
+async function createCheque(user, b) {
+  const f = chqIn(b);
+  const dup = await findChequeNo(f.company, f.chequeNo);
+  if (dup) fail(409, `Cheque ${dup.chequeNo} for ${f.company} is already logged (payee ${dup.payee}).`);
+  const now = new Date().toISOString();
+  const e = { partitionKey: QPK, rowKey: crypto.randomUUID(), ...f, reminderSentAt: "", createdBy: user.email, createdAt: now, updatedBy: user.email, updatedAt: now };
+  await (await table(PDC)).createEntity(e);
+  return chqOut(await (await table(PDC)).getEntity(QPK, e.rowKey));
+}
+async function updateCheque(user, id, b) {
+  const t = await table(PDC);
+  const cur = await getOrNull(t, QPK, id);
+  if (!cur) fail(404, "This cheque no longer exists.");
+  const f = chqIn(b);
+  const dup = await findChequeNo(f.company, f.chequeNo, id);
+  if (dup) fail(409, `Cheque ${dup.chequeNo} for ${f.company} is already logged (payee ${dup.payee}).`);
+  const reminderSentAt = cur.clearanceDate === f.clearanceDate ? (cur.reminderSentAt || "") : "";
+  const next = { partitionKey: QPK, rowKey: id, ...f, reminderSentAt, createdBy: cur.createdBy, createdAt: cur.createdAt, updatedBy: user.email, updatedAt: new Date().toISOString() };
+  try { await t.updateEntity(next, "Replace", { etag: b.etag || cur.etag }); }
+  catch (err) { if (err.statusCode === 412) fail(409, "Someone else changed this cheque after you opened it. Reload to see their changes, then make yours again."); throw err; }
+  return chqOut(await t.getEntity(QPK, id));
+}
+async function deleteCheque(user, id) {
+  const t = await table(PDC);
+  const cur = await getOrNull(t, QPK, id);
+  if (!cur) return;
+  if (!user.isManager && cur.createdBy !== user.email) fail(403, "Only the person who logged this cheque or a manager can delete it. Mark it cancelled instead.");
+  await t.deleteEntity(QPK, id);
+}
+
 // ---------- routing ----------
 async function route(method, seg, user, body) {
   const [a, id, sub] = seg;
@@ -393,6 +466,12 @@ async function route(method, seg, user, body) {
     if (id && !sub && method === "GET") return getDeal(user, id);
     if (id && !sub && method === "PUT") return updateDeal(user, id, body);
     if (id && !sub && method === "DELETE") return deleteDeal(user, id);
+  }
+  if (a === "cheques") {
+    if (!id && method === "GET") return listCheques();
+    if (!id && method === "POST") return createCheque(user, body);
+    if (id && method === "PUT") return updateCheque(user, id, body);
+    if (id && method === "DELETE") return deleteCheque(user, id);
   }
   fail(404, "Unknown request.");
 }

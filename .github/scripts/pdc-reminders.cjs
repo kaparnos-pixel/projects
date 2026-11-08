@@ -1,5 +1,6 @@
-// Daily PDC cheque reminders for Bifold Tools.
-// Finds pending cheques clearing within 7 days (Dubai time) that have no reminder yet, emails the person
+// Daily reminders for the Bifold Tools PDC & Guarantees Log.
+// Finds open entries (PDC cheques by clearance date; security deposits and advance payment guarantees by
+// expiry / return date) due within 7 days (Dubai time) that have no reminder yet, emails the person
 // who logged them with PDC_REMINDER_CC in copy (one email per person), then stamps reminderSentAt.
 //
 // Settings (GitHub Actions secrets / env):
@@ -17,6 +18,7 @@ const DRY = env.DRY_RUN === "1";
 const CC = String(env.PDC_REMINDER_CC || "ranjan@bifoldtech.com").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 const URL_ = env.TOOLS_URL || "https://yellow-dune-0607b0710.4.azurestaticapps.net/pdc/";
 const DAYS = 7;
+const KIND = { pdc: "PDC cheque", deposit: "Security deposit", apg: "Advance payment guarantee" };
 
 const dubaiToday = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
 const addDays = (s, n) => new Date(Date.parse(s + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
@@ -59,22 +61,31 @@ async function sendMail(token, to, cc, subject, html) {
 
 function buildEmail(list, today) {
   const latest = list.reduce((m, c) => (c.clearanceDate > m ? c.clearanceDate : m), "");
-  const subject = `PDC reminder: ${list.length} cheque${list.length === 1 ? "" : "s"} clearing by ${fdate(latest)}`;
+  const kinds = new Set(list.map(c => c.kind || "pdc"));
+  const what = kinds.size === 1 && kinds.has("pdc") ? `${list.length} cheque${list.length === 1 ? "" : "s"} clearing`
+    : !kinds.has("pdc") ? `${list.length} deposit${list.length === 1 ? "" : "s"} / guarantee${list.length === 1 ? "" : "s"} expiring`
+    : `${list.length} item${list.length === 1 ? "" : "s"} due`;
+  const subject = `PDC & guarantees reminder: ${what} by ${fdate(latest)}`;
   const td = 'style="padding:6px 10px;border:1px solid #d5dce3"';
   const rows = list.map(c => `<tr>
 <td ${td}>${fdate(c.clearanceDate)}${c.clearanceDate < today ? " <b>OVERDUE</b>" : ""}</td>
+<td ${td}>${esc(KIND[c.kind || "pdc"])}${c.kind && c.kind !== "pdc" && c.form ? " (" + esc(c.form) + ")" : ""}</td>
 <td ${td}>${esc(c.company)}</td><td ${td}>${esc(c.payee)}</td><td ${td}>${esc(c.chequeNo)}</td>
 <td ${td}>${esc(c.bank)}</td><td ${td} align="right">${aed(c.amount)}</td><td ${td}>${esc(c.reference)}</td></tr>`).join("");
   const totals = ["Bifold Technologies", "Tech Hub IT"].map(co => {
     const s = list.filter(c => c.company === co).reduce((a, c) => a + Number(c.amount || 0), 0);
-    return s ? `<tr><td ${td} colspan="5"><b>Total ${esc(co)}</b></td><td ${td} align="right"><b>${aed(s)}</b></td><td ${td}></td></tr>` : "";
+    return s ? `<tr><td ${td} colspan="6"><b>Total ${esc(co)}</b></td><td ${td} align="right"><b>${aed(s)}</b></td><td ${td}></td></tr>` : "";
   }).join("");
   const th = 'style="padding:6px 10px;border:1px solid #d5dce3;background:#1E5A8C;color:#ffffff;text-align:left"';
-  const html = `<p>The following post-dated cheques are due to clear within the next ${DAYS} days. Please make sure the account is funded.</p>
+  const lines = [];
+  if (kinds.has("pdc")) lines.push("PDC cheques due to clear: please make sure the account is funded.");
+  if (kinds.has("deposit")) lines.push("Security deposits reaching their expiry / return date: follow up with the customer for return, or extend.");
+  if (kinds.has("apg")) lines.push("Advance payment guarantees reaching expiry: arrange release from the customer, or extend with the bank.");
+  const html = `<p>The following items are due within the next ${DAYS} days.</p><ul>${lines.map(l => `<li>${l}</li>`).join("")}</ul>
 <table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px">
-<thead><tr><th ${th}>Clearance date</th><th ${th}>Company</th><th ${th}>Payee</th><th ${th}>Cheque no.</th><th ${th}>Bank</th><th ${th}>Amount (AED)</th><th ${th}>Reference</th></tr></thead>
+<thead><tr><th ${th}>Due date</th><th ${th}>Type</th><th ${th}>Company</th><th ${th}>Payee / given to</th><th ${th}>Number</th><th ${th}>Bank</th><th ${th}>Amount (AED)</th><th ${th}>PO / reference</th></tr></thead>
 <tbody>${rows}${totals}</tbody></table>
-<p>Mark cheques as cleared in the PDC Cheque Log: <a href="${URL_}">${URL_}</a></p>
+<p>Update the status in the PDC &amp; Guarantees Log: <a href="${URL_}">${URL_}</a></p>
 <p style="color:#5b6a78;font-size:12px">Automatic reminder from Bifold Tools.</p>`;
   return { subject, html };
 }
@@ -93,7 +104,7 @@ async function main() {
       if (!e.reminderSentAt) due.push(e);
     }
   } catch (e) { if (e.statusCode === 404) { console.log("No cheques logged yet."); return; } throw e; }
-  console.log(`${due.length} cheque(s) due a reminder (clearing on or before ${cutoff}).`);
+  console.log(`${due.length} item(s) due a reminder (due on or before ${cutoff}).`);
   if (!due.length) return;
 
   const groups = {};

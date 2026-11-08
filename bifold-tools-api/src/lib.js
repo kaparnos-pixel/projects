@@ -368,38 +368,53 @@ async function deleteDeal(user, id) {
   await (await table(DEALS)).deleteEntity(DPK, id);
 }
 
-// ---------- PDC cheques (post-dated cheques issued to suppliers and vendors) ----------
-// Everyone signed in sees every cheque for both companies. Anyone can log and edit; only the
-// person who logged a cheque or a manager can delete it. The daily reminder job
-// (.github/scripts/pdc-reminders.cjs) emails createdBy + PDC_REMINDER_CC 7 days before clearance
-// and stamps reminderSentAt; changing the clearance date clears the stamp so it re-arms.
+// ---------- PDC log: post-dated cheques, security deposits and advance payment guarantees ----------
+// One record per instrument. kind: "pdc" (post-dated cheque to a supplier/vendor),
+// "deposit" (security deposit given against a PO) or "apg" (advance payment guarantee against a PO).
+// clearanceDate is the date that matters: clearance for a PDC, expiry / return date for a deposit or APG.
+// Status keys are shared: pending = pending / active, cleared = cleared / returned or released,
+// bounced = bounced / encashed, cancelled.
+// Everyone signed in sees every record for both companies. Anyone can log and edit; only the person who
+// logged it or a manager can delete it. The daily reminder job (.github/scripts/pdc-reminders.cjs) emails
+// createdBy + PDC_REMINDER_CC 7 days before clearanceDate and stamps reminderSentAt; changing the date re-arms it.
 const PDC = "pdc", QPK = "cheque";
+const KINDS = { pdc: "PDC cheque", deposit: "Security deposit", apg: "Advance payment guarantee" };
 const CHQ_STATUS = ["pending", "cleared", "bounced", "cancelled"];
-const PAYEE_TYPES = ["Supplier", "Vendor"];
+const PAYEE_TYPES = ["Supplier", "Vendor", "Customer"];
+const FORMS = ["Cheque", "Bank guarantee", "Cash / transfer"];
 
 function chqOut(e) {
   return {
-    id: e.rowKey, company: e.company || "", payeeType: e.payeeType || "", payee: e.payee || "", chequeNo: e.chequeNo || "",
-    bank: e.bank || "", amount: num(e.amount), chequeDate: e.chequeDate || "", clearanceDate: e.clearanceDate || "",
+    id: e.rowKey, kind: e.kind || "pdc", form: e.form || "", company: e.company || "", payeeType: e.payeeType || "", payee: e.payee || "",
+    chequeNo: e.chequeNo || "", bank: e.bank || "", amount: num(e.amount), poValue: num(e.poValue),
+    chequeDate: e.chequeDate || "", clearanceDate: e.clearanceDate || "",
     status: e.status || "pending", reference: e.reference || "", notes: e.notes || "",
     reminderSentAt: e.reminderSentAt || "", createdBy: e.createdBy, createdAt: e.createdAt,
     updatedBy: e.updatedBy, updatedAt: e.updatedAt, etag: e.etag,
   };
 }
 function chqIn(b) {
+  const kind = clean(b.kind, 10) || "pdc";
+  if (!KINDS[kind]) fail(400, "Choose PDC cheque, security deposit or advance payment guarantee.");
+  const pdc = kind === "pdc";
   const f = {
-    company: clean(b.company, 80), payeeType: clean(b.payeeType, 20) || "Supplier", payee: clean(b.payee, 150),
+    kind, form: pdc ? "Cheque" : (clean(b.form, 30) || (kind === "apg" ? "Bank guarantee" : "Cheque")),
+    company: clean(b.company, 80), payeeType: clean(b.payeeType, 20) || (pdc ? "Supplier" : "Customer"), payee: clean(b.payee, 150),
     chequeNo: clean(b.chequeNo, 40), bank: clean(b.bank, 80), amount: Math.round(num(b.amount) * 100) / 100,
+    poValue: pdc ? 0 : Math.max(0, Math.round(num(b.poValue) * 100) / 100),
     chequeDate: clean(b.chequeDate, 10), clearanceDate: clean(b.clearanceDate, 10), status: clean(b.status, 20) || "pending",
     reference: clean(b.reference, 150), notes: clean(b.notes, 1000),
   };
   if (!COMPANIES.includes(f.company)) fail(400, "Choose Bifold Technologies or Tech Hub IT.");
-  if (!PAYEE_TYPES.includes(f.payeeType)) fail(400, "Choose supplier or vendor.");
-  if (!f.payee) fail(400, "Enter the payee name.");
-  if (!f.chequeNo) fail(400, "Enter the cheque number.");
+  if (!PAYEE_TYPES.includes(f.payeeType)) fail(400, "Choose supplier, vendor or customer.");
+  if (!FORMS.includes(f.form)) fail(400, "Choose cheque, bank guarantee or cash / transfer.");
+  if (!f.payee) fail(400, pdc ? "Enter the payee name." : "Enter who the " + KINDS[kind].toLowerCase() + " was given to.");
+  if (!f.chequeNo && f.form !== "Cash / transfer") fail(400, f.form === "Bank guarantee" ? "Enter the guarantee number." : "Enter the cheque number.");
+  if (!pdc && !f.reference) fail(400, "Enter the purchase order number.");
   if (!(f.amount > 0) || f.amount > 1e10) fail(400, "Enter an amount greater than zero.");
-  if (!isDate(f.clearanceDate)) fail(400, "Pick the clearance date.");
-  if (f.chequeDate && !isDate(f.chequeDate)) fail(400, "The cheque date is not valid.");
+  if (f.poValue > 1e11) fail(400, "The PO value is too large.");
+  if (!isDate(f.clearanceDate)) fail(400, pdc ? "Pick the clearance date." : "Pick the expiry / return date.");
+  if (f.chequeDate && !isDate(f.chequeDate)) fail(400, "The issue date is not valid.");
   if (!CHQ_STATUS.includes(f.status)) fail(400, "Choose a valid status.");
   return f;
 }
@@ -407,14 +422,16 @@ async function listCheques() {
   const rows = await all(await table(PDC), QPK);
   return rows.map(chqOut).sort((a, b) => a.clearanceDate.localeCompare(b.clearanceDate));
 }
-async function findChequeNo(company, chequeNo, exceptId) {
-  const n = chequeNo.toLowerCase();
-  return (await listCheques()).find(c => c.company === company && c.chequeNo.toLowerCase() === n && c.id !== exceptId && c.status !== "cancelled");
+async function findChequeNo(f, exceptId) {
+  if (!f.chequeNo) return null;
+  const n = f.chequeNo.toLowerCase();
+  return (await listCheques()).find(c => c.company === f.company && c.kind === f.kind && c.chequeNo.toLowerCase() === n && c.id !== exceptId && c.status !== "cancelled");
 }
+const dupMsg = (d, f) => `${KINDS[d.kind]} ${d.chequeNo} for ${f.company} is already logged (${d.payee}).`;
 async function createCheque(user, b) {
   const f = chqIn(b);
-  const dup = await findChequeNo(f.company, f.chequeNo);
-  if (dup) fail(409, `Cheque ${dup.chequeNo} for ${f.company} is already logged (payee ${dup.payee}).`);
+  const dup = await findChequeNo(f);
+  if (dup) fail(409, dupMsg(dup, f));
   const now = new Date().toISOString();
   const e = { partitionKey: QPK, rowKey: crypto.randomUUID(), ...f, reminderSentAt: "", createdBy: user.email, createdAt: now, updatedBy: user.email, updatedAt: now };
   await (await table(PDC)).createEntity(e);
@@ -423,21 +440,21 @@ async function createCheque(user, b) {
 async function updateCheque(user, id, b) {
   const t = await table(PDC);
   const cur = await getOrNull(t, QPK, id);
-  if (!cur) fail(404, "This cheque no longer exists.");
+  if (!cur) fail(404, "This entry no longer exists.");
   const f = chqIn(b);
-  const dup = await findChequeNo(f.company, f.chequeNo, id);
-  if (dup) fail(409, `Cheque ${dup.chequeNo} for ${f.company} is already logged (payee ${dup.payee}).`);
+  const dup = await findChequeNo(f, id);
+  if (dup) fail(409, dupMsg(dup, f));
   const reminderSentAt = cur.clearanceDate === f.clearanceDate ? (cur.reminderSentAt || "") : "";
   const next = { partitionKey: QPK, rowKey: id, ...f, reminderSentAt, createdBy: cur.createdBy, createdAt: cur.createdAt, updatedBy: user.email, updatedAt: new Date().toISOString() };
   try { await t.updateEntity(next, "Replace", { etag: b.etag || cur.etag }); }
-  catch (err) { if (err.statusCode === 412) fail(409, "Someone else changed this cheque after you opened it. Reload to see their changes, then make yours again."); throw err; }
+  catch (err) { if (err.statusCode === 412) fail(409, "Someone else changed this entry after you opened it. Reload to see their changes, then make yours again."); throw err; }
   return chqOut(await t.getEntity(QPK, id));
 }
 async function deleteCheque(user, id) {
   const t = await table(PDC);
   const cur = await getOrNull(t, QPK, id);
   if (!cur) return;
-  if (!user.isManager && cur.createdBy !== user.email) fail(403, "Only the person who logged this cheque or a manager can delete it. Mark it cancelled instead.");
+  if (!user.isManager && cur.createdBy !== user.email) fail(403, "Only the person who logged this entry or a manager can delete it. Mark it cancelled instead.");
   await t.deleteEntity(QPK, id);
 }
 

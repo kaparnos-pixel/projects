@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PDC Cheque Log · Bifold Tools</title>
+<title>PDC & Guarantees Log · Bifold Tools</title>
 <link rel="icon" href="/assets/bifold_logo.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/assets/bifold.css">
@@ -46,6 +46,12 @@ td .act{padding:4px 9px;font-size:12px}
 dialog .foot{justify-content:space-between}
 dialog .foot .r2{display:flex;gap:8px;margin-left:auto}
 button.armed{background:var(--bad);border-color:var(--bad);color:#fff}
+.ty{font-size:10px;font-weight:700;letter-spacing:.05em;border-radius:4px;padding:1px 6px;white-space:nowrap;border:1px solid var(--line);color:var(--fg)}
+.ty.deposit{border-color:var(--warn);color:var(--warn)}.ty.apg{border-color:var(--red);color:var(--red)}
+.kindseg{display:flex;flex-wrap:wrap;gap:6px}
+.kindseg button{flex:1 1 140px;justify-content:center}
+.kindseg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.pct{font-size:12px;color:var(--muted);margin-top:4px;min-height:1em}
 .note{font-size:12px;color:var(--muted);margin-top:12px;max-width:80ch}
 </style>
 </head>
@@ -58,20 +64,20 @@ button.armed{background:var(--bad);border-color:var(--bad);color:#fff}
 <div class="wrap">
   <header class="top">
     <div>
-      <h1><span class="tag">Bifold Tools</span>PDC Cheque Log</h1>
-      <p class="sub">Post-dated cheques issued to suppliers and vendors by Bifold and Tech Hub. Seven days before a cheque clears, a reminder goes to the person who logged it and to Ranjan.</p>
+      <h1><span class="tag">Bifold Tools</span>PDC &amp; Guarantees Log</h1>
+      <p class="sub">Post-dated cheques to suppliers and vendors, and security deposits and advance payment guarantees given against purchase orders, for Bifold and Tech Hub. Seven days before a cheque clears or a deposit or guarantee expires, a reminder goes to the person who logged it and to Ranjan.</p>
     </div>
     <div class="acts">
       <button type="button" id="csvBtn">Download CSV</button>
-      <button class="primary" type="button" id="addBtn">+ Log a cheque</button>
+      <button class="primary" type="button" id="addBtn">+ Log an entry</button>
     </div>
   </header>
 
   <section class="kpis" aria-label="Totals">
-    <div class="kpi"><div class="k">Pending, both companies</div><div class="v" id="kPend">–</div><div class="s" id="kPendN"></div></div>
-    <div class="kpi soon"><div class="k">Clearing in next 7 days</div><div class="v" id="kSoon">–</div><div class="s" id="kSoonN"></div></div>
-    <div class="kpi" id="kLateBox"><div class="k">Past date, not cleared</div><div class="v" id="kLate">–</div><div class="s" id="kLateAmt"></div></div>
-    <div class="kpi"><div class="k">Pending by company</div><div class="s" style="font-size:13px;margin-top:6px" id="kBif">–</div><div class="s" style="font-size:13px" id="kTh"></div></div>
+    <div class="kpi"><div class="k">PDCs pending</div><div class="v" id="kPend">–</div><div class="s" id="kPendN"></div></div>
+    <div class="kpi soon"><div class="k">Due in next 7 days</div><div class="v" id="kSoon">–</div><div class="s" id="kSoonN"></div></div>
+    <div class="kpi" id="kLateBox"><div class="k">Past date, still open</div><div class="v" id="kLate">–</div><div class="s" id="kLateAmt"></div></div>
+    <div class="kpi"><div class="k">Deposits &amp; APGs outstanding</div><div class="v" id="kGua">–</div><div class="s" id="kGuaN"></div></div>
   </section>
 
   <div class="tools">
@@ -80,64 +86,82 @@ button.armed{background:var(--bad);border-color:var(--bad);color:#fff}
       <button type="button" data-v="Bifold Technologies" aria-pressed="false">Bifold</button>
       <button type="button" data-v="Tech Hub IT" aria-pressed="false">Tech Hub</button>
     </div>
+    <div class="seg" role="group" aria-label="Type" id="kSeg">
+      <button type="button" data-v="" aria-pressed="true">All types</button>
+      <button type="button" data-v="pdc" aria-pressed="false">PDC</button>
+      <button type="button" data-v="deposit" aria-pressed="false">Security deposits</button>
+      <button type="button" data-v="apg" aria-pressed="false">APGs</button>
+    </div>
     <select id="stF" aria-label="Status">
-      <option value="pending">Pending</option>
+      <option value="pending">Open (pending / active)</option>
       <option value="">All statuses</option>
-      <option value="cleared">Cleared</option>
-      <option value="bounced">Bounced</option>
+      <option value="cleared">Cleared / returned</option>
+      <option value="bounced">Bounced / encashed</option>
       <option value="cancelled">Cancelled</option>
     </select>
-    <input id="q" type="search" placeholder="Search payee, cheque no., reference" aria-label="Search cheques">
+    <input id="q" type="search" placeholder="Search name, number, PO, reference" aria-label="Search entries">
     <span class="cnt" id="cnt"></span>
   </div>
 
   <div class="panel listpanel"><div class="tblwrap">
     <table class="list">
-      <thead><tr><th>Clearance date</th><th>Company</th><th>Payee</th><th>Cheque</th><th>Reference</th><th class="r">Amount (AED)</th><th>Status</th><th>Reminder</th><th></th></tr></thead>
+      <thead><tr><th>Due date</th><th>Type</th><th>Company</th><th>Given to</th><th>Number</th><th>PO / reference</th><th class="r">Amount (AED)</th><th>Status</th><th>Reminder</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
-    <div class="empty" id="empty">Loading cheques…</div>
+    <div class="empty" id="empty">Loading entries…</div>
   </div></div>
-  <p class="note">Reminders go out each morning at about 7:40 Dubai time for pending cheques clearing within 7 days that haven't had one yet. Changing a cheque's clearance date sets up a new reminder.</p>
+  <p class="note">Reminders go out each morning at about 7:40 Dubai time for open entries due within 7 days that haven't had one yet: the clearance date for a PDC, the expiry or return date for a security deposit or APG. Changing that date sets up a new reminder.</p>
 </div>
 
 <dialog id="chqDlg">
   <form id="chqForm" novalidate>
-    <div class="dhead"><h3 id="dTitle">Log a PDC cheque</h3><button type="button" class="x" id="xBtn" aria-label="Close">×</button></div>
+    <div class="dhead"><h3 id="dTitle">Log an entry</h3><button type="button" class="x" id="xBtn" aria-label="Close">×</button></div>
+    <div class="kindseg" role="group" aria-label="Type" id="f_kindSeg">
+      <button type="button" data-k="pdc" aria-pressed="true">PDC cheque</button>
+      <button type="button" data-k="deposit" aria-pressed="false">Security deposit</button>
+      <button type="button" data-k="apg" aria-pressed="false">Advance payment guarantee</button>
+    </div>
     <div class="fields">
       <label><span class="lbl">Company</span>
         <select id="f_company"><option>Bifold Technologies</option><option>Tech Hub IT</option></select></label>
-      <label><span class="lbl">Payee type</span>
-        <select id="f_payeeType"><option>Supplier</option><option>Vendor</option></select></label>
-      <label class="full"><span class="lbl">Payee name *</span><input id="f_payee" autocomplete="off" placeholder="As written on the cheque"></label>
-      <label><span class="lbl">Cheque number *</span><input id="f_chequeNo" class="num" style="text-align:left" autocomplete="off" placeholder="e.g. 000482"></label>
-      <label><span class="lbl">Drawn on bank</span><input id="f_bank" autocomplete="off" placeholder="e.g. Emirates NBD"></label>
-      <label><span class="lbl">Amount (AED) *</span><input id="f_amount" class="num" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
-      <label><span class="lbl">Cheque date</span><input id="f_chequeDate" type="date"></label>
-      <label><span class="lbl">Clearance date *</span><input id="f_clearanceDate" type="date"></label>
-      <label><span class="lbl">Status</span>
-        <select id="f_status"><option value="pending">Pending</option><option value="cleared">Cleared</option><option value="bounced">Bounced</option><option value="cancelled">Cancelled</option></select></label>
-      <label class="full"><span class="lbl">Reference (PO / invoice no.)</span><input id="f_reference" autocomplete="off" placeholder="e.g. PO-2026-118 / INV-5521"></label>
+      <label><span class="lbl" id="l_payeeType">Payee type</span>
+        <select id="f_payeeType"><option>Supplier</option><option>Vendor</option><option>Customer</option></select></label>
+      <label class="full"><span class="lbl" id="l_payee">Payee name *</span><input id="f_payee" list="custList" autocomplete="off"></label>
+      <label id="w_form" hidden><span class="lbl">Given as</span>
+        <select id="f_form"><option>Cheque</option><option>Bank guarantee</option><option>Cash / transfer</option></select></label>
+      <label><span class="lbl" id="l_chequeNo">Cheque number *</span><input id="f_chequeNo" class="num" style="text-align:left" autocomplete="off"></label>
+      <label><span class="lbl" id="l_bank">Drawn on bank</span><input id="f_bank" autocomplete="off" placeholder="e.g. Emirates NBD"></label>
+      <label id="w_ref" class="full"><span class="lbl" id="l_reference">Reference (PO / invoice no.)</span><input id="f_reference" autocomplete="off" placeholder="e.g. PO-2026-118 / INV-5521"></label>
+      <label id="w_po" hidden><span class="lbl">PO value (AED)</span><input id="f_poValue" class="num" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
+      <label><span class="lbl">Amount (AED) *</span><input id="f_amount" class="num" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"><div class="pct" id="pct"></div></label>
+      <label><span class="lbl" id="l_chequeDate">Cheque date</span><input id="f_chequeDate" type="date"></label>
+      <label><span class="lbl" id="l_clearanceDate">Clearance date *</span><input id="f_clearanceDate" type="date"></label>
+      <label><span class="lbl">Status</span><select id="f_status"></select></label>
       <label class="full"><span class="lbl">Notes</span><textarea id="f_notes" rows="2"></textarea></label>
     </div>
+    <datalist id="custList"></datalist>
     <div class="hint" id="meta"></div>
     <div class="err" id="fErr" role="alert"></div>
     <div class="foot">
       <button type="button" class="danger" id="delBtn" hidden>Delete</button>
-      <div class="r2"><button type="button" id="cancelBtn">Cancel</button><button type="submit" class="primary" id="saveBtn">Save cheque</button></div>
+      <div class="r2"><button type="button" id="cancelBtn">Cancel</button><button type="submit" class="primary" id="saveBtn">Save</button></div>
     </div>
   </form>
 </dialog>
 
 <script>
 const $=id=>document.getElementById(id);
-const STN={pending:"Pending",cleared:"Cleared",bounced:"Bounced",cancelled:"Cancelled"};
-let ME=null,ROWS=[],EDIT=null,BUSY=false;
-const F={co:"",st:"pending",q:""};
+const KIND={pdc:"PDC cheque",deposit:"Security deposit",apg:"Advance payment guarantee"};
+const KSHORT={pdc:"PDC",deposit:"SEC. DEPOSIT",apg:"APG"};
+const STN={
+  pdc:{pending:"Pending",cleared:"Cleared",bounced:"Bounced",cancelled:"Cancelled"},
+  gua:{pending:"Active",cleared:"Returned / released",bounced:"Encashed",cancelled:"Cancelled"}};
+const stName=(c,s)=>(c.kind==="pdc"?STN.pdc:STN.gua)[s||c.status]||s;
+let ME=null,ROWS=[],EDIT=null,BUSY=false,KIND_SEL="pdc",CUST=null;
+const F={co:"",kind:"",st:"pending",q:""};
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const aed=n=>num(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
-const pad=n=>String(n).padStart(2,"0");
-function todayStr(){const d=new Date(Date.now()+4*3600e3);return d.toISOString().slice(0,10)} // Gulf time
+function todayStr(){return new Date(Date.now()+4*3600e3).toISOString().slice(0,10)} // Gulf time
 const dnum=s=>{const[y,m,d]=String(s).split("-").map(Number);return Date.UTC(y,(m||1)-1,d||1)/864e5};
 const daysTo=s=>Math.round(dnum(s)-dnum(todayStr()));
 const addDays=(s,n)=>new Date((dnum(s)+n)*864e5).toISOString().slice(0,10);
@@ -154,8 +178,8 @@ async function api(method,path,body){
 
 function timing(c){
   if(c.status!=="pending")return null;
-  const n=daysTo(c.clearanceDate);
-  if(n<0)return{cls:"late",t:"Overdue "+(-n)+"d"};
+  const n=daysTo(c.clearanceDate),g=c.kind!=="pdc";
+  if(n<0)return{cls:"late",t:(g?"Expired ":"Overdue ")+(-n)+"d"};
   if(n===0)return{cls:"soon",t:"Today"};
   if(n<=7)return{cls:"soon",t:"In "+n+(n===1?" day":" days")};
   return{cls:"",t:"In "+n+" days"};
@@ -167,39 +191,44 @@ function reminder(c){
 }
 function filtered(){
   const q=F.q.trim().toLowerCase();
-  return ROWS.filter(c=>(!F.co||c.company===F.co)&&(!F.st||c.status===F.st)&&
-    (!q||[c.payee,c.chequeNo,c.reference,c.bank,c.notes,c.createdBy].join(" ").toLowerCase().includes(q)));
+  return ROWS.filter(c=>(!F.co||c.company===F.co)&&(!F.kind||c.kind===F.kind)&&(!F.st||c.status===F.st)&&
+    (!q||[c.payee,c.chequeNo,c.reference,c.bank,c.notes,c.createdBy,KIND[c.kind]].join(" ").toLowerCase().includes(q)));
 }
 function kpis(){
-  const p=ROWS.filter(c=>c.status==="pending"),sum=a=>a.reduce((s,c)=>s+num(c.amount),0);
-  const soon=p.filter(c=>{const n=daysTo(c.clearanceDate);return n>=0&&n<=7}),late=p.filter(c=>daysTo(c.clearanceDate)<0);
-  const n=a=>a.length+(a.length===1?" cheque":" cheques");
-  $("kPend").textContent="AED "+aed(sum(p));$("kPendN").textContent=n(p);
-  $("kSoon").textContent="AED "+aed(sum(soon));$("kSoonN").textContent=n(soon);
+  const open=ROWS.filter(c=>c.status==="pending"),sum=a=>a.reduce((s,c)=>s+num(c.amount),0);
+  const p=open.filter(c=>c.kind==="pdc"),g=open.filter(c=>c.kind!=="pdc");
+  const soon=open.filter(c=>{const n=daysTo(c.clearanceDate);return n>=0&&n<=7}),late=open.filter(c=>daysTo(c.clearanceDate)<0);
+  const n=(a,w)=>a.length+" "+w+(a.length===1?"":"s");
+  $("kPend").textContent="AED "+aed(sum(p));
+  $("kPendN").textContent="Bifold "+aed(sum(p.filter(c=>c.company==="Bifold Technologies")))+" · Tech Hub "+aed(sum(p.filter(c=>c.company==="Tech Hub IT")));
+  $("kSoon").textContent="AED "+aed(sum(soon));$("kSoonN").textContent=n(soon,"entry").replace("entrys","entries");
   $("kLate").textContent=late.length;$("kLateAmt").textContent="AED "+aed(sum(late));$("kLateBox").classList.toggle("alert",late.length>0);
-  $("kBif").textContent="Bifold AED "+aed(sum(p.filter(c=>c.company==="Bifold Technologies")));
-  $("kTh").textContent="Tech Hub AED "+aed(sum(p.filter(c=>c.company==="Tech Hub IT")));
+  const dep=g.filter(c=>c.kind==="deposit"),apg=g.filter(c=>c.kind==="apg");
+  $("kGua").textContent="AED "+aed(sum(g));$("kGuaN").textContent=n(dep,"deposit")+" · "+n(apg,"APG");
 }
 function render(){
   kpis();
   const list=filtered(),tb=$("rows");tb.textContent="";
   $("cnt").textContent=list.length+" of "+ROWS.length;
   $("empty").hidden=list.length>0;
-  if(!list.length)$("empty").textContent=ROWS.length?"No cheques match these filters. Try All statuses or clear the search.":"No cheques logged yet. Use “Log a cheque” to add the first one.";
+  if(!list.length)$("empty").textContent=ROWS.length?"Nothing matches these filters. Try All types and All statuses, or clear the search.":"Nothing logged yet. Use “Log an entry” to add a PDC cheque, security deposit or advance payment guarantee.";
   for(const c of list){
-    const tr=el("tr"),t=timing(c);if(t&&t.cls)tr.className=t.cls;
+    const tr=el("tr"),t=timing(c),g=c.kind!=="pdc";if(t&&t.cls)tr.className=t.cls;
     tr.onclick=()=>openDlg(c);
-    const d1=el("td");d1.append(el("div","dt",fdate(c.clearanceDate)));if(t)d1.append(el("span","when "+t.cls,t.t));
+    const d1=el("td");d1.append(el("div","dt",fdate(c.clearanceDate)));d1.append(el("div","s",g?"Expiry / return":"Clearance"));if(t)d1.append(el("span","when "+t.cls,t.t));
+    const d0=el("td");d0.append(el("span","ty "+c.kind,KSHORT[c.kind]));if(g)d0.append(el("div","s",c.form));
     const d2=el("td");d2.append(el("span","co"+(c.company==="Tech Hub IT"?" th":""),c.company==="Tech Hub IT"?"TECH HUB":"BIFOLD"));
     const d3=el("td");d3.append(el("div","t",c.payee));d3.append(el("div","s",c.payeeType+" · logged by "+c.createdBy));
-    const d4=el("td");d4.append(el("div","mono",c.chequeNo));d4.append(el("div","s",[c.bank,c.chequeDate?"dated "+fdate(c.chequeDate):""].filter(Boolean).join(" · ")));
-    const d5=el("td");d5.append(el("div",null,c.reference||"—"));if(c.notes)d5.append(el("div","s",c.notes));
+    const d4=el("td");d4.append(el("div","mono",c.chequeNo||"—"));d4.append(el("div","s",[c.bank,c.chequeDate?(g?"issued ":"dated ")+fdate(c.chequeDate):""].filter(Boolean).join(" · ")));
+    const d5=el("td");d5.append(el("div",null,c.reference||"—"));
+    if(g&&c.poValue)d5.append(el("div","s","PO AED "+aed(c.poValue)+" · "+(c.amount/c.poValue*100).toFixed(1)+"%"));
+    if(c.notes)d5.append(el("div","s",c.notes));
     const d6=el("td","r mono",aed(c.amount));
-    const d7=el("td");d7.append(el("span","st "+c.status,STN[c.status]||c.status));
+    const d7=el("td");d7.append(el("span","st "+c.status,stName(c)));
     const d8=el("td");d8.append(el("div",null,reminder(c)));
     const d9=el("td","r");
-    if(c.status==="pending"){const b=el("button","act","Mark cleared");b.type="button";b.onclick=ev=>{ev.stopPropagation();quick(c,"cleared")};d9.append(b)}
-    tr.append(d1,d2,d3,d4,d5,d6,d7,d8,d9);tb.append(tr);
+    if(c.status==="pending"){const b=el("button","act",g?"Mark returned":"Mark cleared");b.type="button";b.onclick=ev=>{ev.stopPropagation();quick(c,"cleared")};d9.append(b)}
+    tr.append(d1,d0,d2,d3,d4,d5,d6,d7,d8,d9);tb.append(tr);
   }
 }
 async function load(){
@@ -207,50 +236,96 @@ async function load(){
   catch(e){$("empty").hidden=false;$("empty").textContent=e.message}
 }
 
-const FIELDS=["company","payeeType","payee","chequeNo","bank","amount","chequeDate","clearanceDate","status","reference","notes"];
+/* ---------- form ---------- */
+const FIELDS=["company","payeeType","payee","form","chequeNo","bank","reference","poValue","amount","chequeDate","clearanceDate","status","notes"];
+const setL=(id,t)=>{$("l_"+id).textContent=t};
+function applyKind(k,keep){
+  KIND_SEL=k;
+  for(const b of $("f_kindSeg").children)b.setAttribute("aria-pressed",String(b.dataset.k===k));
+  const g=k!=="pdc";
+  $("w_form").hidden=!g;$("w_po").hidden=!g;
+  $("w_ref").classList.toggle("full",!g);
+  if(!keep){$("f_payeeType").value=g?"Customer":"Supplier";if(g)$("f_form").value=k==="apg"?"Bank guarantee":"Cheque"}
+  setL("payeeType",g?"Given to (type)":"Payee type");
+  setL("payee",g?"Given to *":"Payee name *");
+  $("f_payee").placeholder=g?"Customer or party holding it":"As written on the cheque";
+  setL("reference",g?"Purchase order no. *":"Reference (PO / invoice no.)");
+  $("f_reference").placeholder=g?"e.g. PO-4500012345":"e.g. PO-2026-118 / INV-5521";
+  setL("chequeDate",g?"Issue date":"Cheque date");
+  setL("clearanceDate",g?"Expiry / return date *":"Clearance date *");
+  const cur=$("f_status").value||"pending",map=g?STN.gua:STN.pdc;
+  $("f_status").textContent="";for(const[v,t]of Object.entries(map)){const o=el("option",null,t);o.value=v;$("f_status").append(o)}
+  $("f_status").value=cur;
+  applyForm();
+}
+function applyForm(){
+  const g=KIND_SEL!=="pdc",f=g?$("f_form").value:"Cheque";
+  setL("chequeNo",f==="Bank guarantee"?"Guarantee number *":f==="Cash / transfer"?"Receipt / transfer ref.":"Cheque number *");
+  setL("bank",f==="Bank guarantee"?"Issuing bank":f==="Cash / transfer"?"Paid from bank":"Drawn on bank");
+  pct();
+}
+function pct(){
+  const a=num($("f_amount").value),p=num($("f_poValue").value);
+  $("pct").textContent=KIND_SEL!=="pdc"&&a>0&&p>0?(a/p*100).toFixed(1)+"% of PO value":"";
+}
+async function loadCustomers(){
+  if(CUST)return;CUST=[];
+  try{CUST=await api("GET","customers");const dl=$("custList");dl.textContent="";for(const c of CUST){const o=el("option");o.value=c.name;dl.append(o)}}catch{}
+}
 function openDlg(c){
   EDIT=c||null;
-  $("dTitle").textContent=c?"Cheque "+c.chequeNo:"Log a PDC cheque";
   for(const k of FIELDS)$("f_"+k).value=c?(c[k]??""):"";
-  if(!c){$("f_company").value=F.co||"Bifold Technologies";$("f_payeeType").value="Supplier";$("f_status").value="pending"}
-  $("meta").textContent=c?("Logged by "+c.createdBy+" on "+fdate(c.createdAt.slice(0,10))+(c.updatedBy&&c.updatedAt!==c.createdAt?" · last changed by "+c.updatedBy:"")):"The reminder email goes to you"+(ME?" ("+ME.email+")":"")+" and to Ranjan.";
+  if(c&&!c.poValue)$("f_poValue").value="";
+  if(!c){$("f_company").value=F.co||"Bifold Technologies";$("f_status").value="pending"}
+  applyKind(c?c.kind:(F.kind||"pdc"),!!c);
+  if(c){$("f_payeeType").value=c.payeeType;$("f_status").value=c.status;if(c.form)$("f_form").value=c.form;applyForm()}
+  $("dTitle").textContent=c?KIND[c.kind]+(c.chequeNo?" "+c.chequeNo:""):"Log an entry";
+  $("f_kindSeg").hidden=false;
+  $("meta").textContent=c?("Logged by "+c.createdBy+" on "+fdate(c.createdAt.slice(0,10))+(c.updatedBy&&c.updatedAt!==c.createdAt?" · last changed by "+c.updatedBy:"")):"The reminder email goes to you"+(ME?" ("+ME.email+")":"")+" and to Ranjan, 7 days before the due date.";
   $("fErr").textContent="";
   const del=$("delBtn");del.hidden=!(c&&ME&&(ME.isManager||c.createdBy===ME.email));del.classList.remove("armed");del.textContent="Delete";
   $("chqDlg").showModal();setTimeout(()=>$("f_payee").focus(),30);
+  loadCustomers();
 }
-function body(){const b={};for(const k of FIELDS)b[k]=$("f_"+k).value.trim();if(EDIT)b.etag=EDIT.etag;return b}
+function body(){const b={kind:KIND_SEL};for(const k of FIELDS)b[k]=$("f_"+k).value.trim();if(KIND_SEL==="pdc"){b.form="Cheque";b.poValue=0}if(EDIT)b.etag=EDIT.etag;return b}
+$("f_kindSeg").onclick=e=>{const b=e.target.closest("button[data-k]");if(b)applyKind(b.dataset.k,false)};
+$("f_form").onchange=applyForm;
+$("f_amount").oninput=pct;$("f_poValue").oninput=pct;
 $("chqForm").addEventListener("submit",async ev=>{
   ev.preventDefault();if(BUSY)return;
-  const b=body();
-  if(!b.payee)return void($("fErr").textContent="Enter the payee name.");
-  if(!b.chequeNo)return void($("fErr").textContent="Enter the cheque number.");
-  if(!(num(b.amount)>0))return void($("fErr").textContent="Enter an amount greater than zero.");
-  if(!b.clearanceDate)return void($("fErr").textContent="Pick the clearance date.");
+  const b=body(),g=b.kind!=="pdc",err=m=>{$("fErr").textContent=m};
+  if(!b.payee)return err(g?"Enter who it was given to.":"Enter the payee name.");
+  if(!b.chequeNo&&b.form!=="Cash / transfer")return err(b.form==="Bank guarantee"?"Enter the guarantee number.":"Enter the cheque number.");
+  if(g&&!b.reference)return err("Enter the purchase order number.");
+  if(!(num(b.amount)>0))return err("Enter an amount greater than zero.");
+  if(!b.clearanceDate)return err(g?"Pick the expiry / return date.":"Pick the clearance date.");
   BUSY=true;$("saveBtn").disabled=true;
   try{
     if(EDIT)await api("PUT","cheques/"+encodeURIComponent(EDIT.id),b);else await api("POST","cheques",b);
-    $("chqDlg").close();toast(EDIT?"Cheque updated":"Cheque logged");await load();
-  }catch(e){$("fErr").textContent=e.message}
+    $("chqDlg").close();toast(EDIT?"Entry updated":KIND[b.kind]+" logged");await load();
+  }catch(e){err(e.message)}
   finally{BUSY=false;$("saveBtn").disabled=false}
 });
 async function quick(c,status){
-  const b={};for(const k of FIELDS)b[k]=c[k];b.status=status;b.etag=c.etag;
-  try{await api("PUT","cheques/"+encodeURIComponent(c.id),b);toast("Marked "+STN[status].toLowerCase());await load()}catch(e){toast(e.message,true)}
+  const b={kind:c.kind};for(const k of FIELDS)b[k]=c[k];b.status=status;b.etag=c.etag;
+  try{await api("PUT","cheques/"+encodeURIComponent(c.id),b);toast("Marked "+stName(c,status).toLowerCase());await load()}catch(e){toast(e.message,true)}
 }
 $("delBtn").onclick=async()=>{
   const d=$("delBtn");if(!d.classList.contains("armed")){d.classList.add("armed");d.textContent="Confirm delete";return}
-  try{await api("DELETE","cheques/"+encodeURIComponent(EDIT.id));$("chqDlg").close();toast("Cheque deleted");await load()}catch(e){$("fErr").textContent=e.message}
+  try{await api("DELETE","cheques/"+encodeURIComponent(EDIT.id));$("chqDlg").close();toast("Entry deleted");await load()}catch(e){$("fErr").textContent=e.message}
 };
 $("cancelBtn").onclick=$("xBtn").onclick=()=>$("chqDlg").close();
 $("addBtn").onclick=()=>openDlg(null);
 $("q").oninput=e=>{F.q=e.target.value;render()};
 $("stF").onchange=e=>{F.st=e.target.value;render()};
-$("coSeg").onclick=e=>{const b=e.target.closest("button[data-v]");if(!b)return;F.co=b.dataset.v;for(const x of $("coSeg").children)x.setAttribute("aria-pressed",String(x===b));render()};
+const segF=(id,key)=>{$(id).onclick=e=>{const b=e.target.closest("button[data-v]");if(!b)return;F[key]=b.dataset.v;for(const x of $(id).children)x.setAttribute("aria-pressed",String(x===b));render()}};
+segF("coSeg","co");segF("kSeg","kind");
 $("csvBtn").onclick=()=>{
-  const cols=[["company","Company"],["payeeType","Payee type"],["payee","Payee"],["chequeNo","Cheque no."],["bank","Bank"],["amount","Amount (AED)"],["chequeDate","Cheque date"],["clearanceDate","Clearance date"],["status","Status"],["reference","Reference"],["createdBy","Logged by"],["reminderSentAt","Reminder sent"],["notes","Notes"]];
+  const cols=[["kind","Type"],["company","Company"],["payeeType","Party type"],["payee","Payee / given to"],["form","Given as"],["chequeNo","Number"],["bank","Bank"],["reference","PO / reference"],["poValue","PO value (AED)"],["amount","Amount (AED)"],["chequeDate","Cheque / issue date"],["clearanceDate","Clearance / expiry date"],["status","Status"],["createdBy","Logged by"],["reminderSentAt","Reminder sent"],["notes","Notes"]];
   const esc=v=>{v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
-  const csv=[cols.map(c=>c[1]).join(",")].concat(filtered().map(r=>cols.map(c=>esc(r[c[0]])).join(","))).join("\r\n");
-  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv"}));a.download="pdc-cheques-"+todayStr()+".csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  const val=(r,k)=>k==="kind"?KIND[r.kind]:k==="status"?stName(r):k==="poValue"&&!r.poValue?"":r[k];
+  const csv=[cols.map(c=>c[1]).join(",")].concat(filtered().map(r=>cols.map(c=>esc(val(r,c[0]))).join(","))).join("\r\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv"}));a.download="pdc-guarantees-"+todayStr()+".csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 };
 api("GET","me").then(m=>{ME=m;$("who").textContent=m.email}).catch(()=>{});
 load();

@@ -2,63 +2,281 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Bifold Tools</title>
 <link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
 <style>
-:root{--bg:#f3f5f7;--surface:#fff;--line:#d5dce3;--fg:#15222e;--muted:#5b6a78;--blue:#1E5A8C;--red:#D81F2A;--blue-soft:#e2ecf5}
-@media (prefers-color-scheme:dark){:root{--bg:#0f161d;--surface:#16202a;--line:#2a3846;--fg:#e3e9ef;--muted:#93a3b2;--blue:#6fa8db;--red:#f0545c;--blue-soft:#16293a;color-scheme:dark}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 Arial,"Helvetica Neue",Helvetica,sans-serif}
-.bar{background:var(--surface);border-bottom:3px solid var(--red)}
-.in{max-width:960px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-.bar .in{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding-block:10px}
-.logo{display:inline-flex;background:#fff;border-radius:6px;padding:4px 6px}
-.logo img{height:44px;width:auto;display:block}
-.who{font-size:13px;color:var(--muted);display:flex;gap:14px;align-items:center}
-.who a{color:var(--blue);font-weight:600;text-decoration:none}
-.hero{background:var(--blue);color:#fff}
-.hero .in{padding-block:28px}
-.hero .tag{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.85}
-.hero h1{margin:4px 0 4px;font-size:30px;font-weight:700}
-.hero p{margin:0;opacity:.9;max-width:60ch}
-main.in{padding-block:24px 48px}
-h2{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
-a.tool{display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--blue);border-radius:8px;padding:18px;color:inherit;text-decoration:none}
-a.tool:hover,a.tool:focus-visible{border-color:var(--blue);border-top-color:var(--red);outline:none}
-a.tool h3{margin:0;font-size:17px;color:var(--blue)}
-a.tool p{margin:0;color:var(--muted);font-size:14px}
-a.tool .go{margin-top:6px;font-size:13px;font-weight:700;color:var(--red)}
-footer{font-size:12px;color:var(--muted);margin-top:32px}
+/* Layout: navy command band with greeting and quick actions; KPI cards overlap its lower edge; then a two-column
+   operations board (attention feed + pipeline chart | service week + cash commitments) and the application launcher. */
+:root{
+  --sales:#1E5A8C; --sales-soft:#E4EEF8; --service:#0E7C7B; --service-soft:#DEF3F2; --finance:#B26A00; --finance-soft:#FBF0DD;
+  --master:#5B4B9A; --master-soft:#ECE8F7; --admin:#475569; --admin-soft:#E9EDF2;
+  --hi:#C8102E; --hi-soft:#FCE7EA; --md:#B76E00; --md-soft:#FDF1DC; --lo:#2563A6; --lo-soft:#E5EEF9;
+  --card-shadow:0 1px 2px rgba(10,28,51,.06),0 8px 24px rgba(10,28,51,.06);
+}
+@media (prefers-color-scheme:dark){:root{
+  --sales:#6FA8DB; --sales-soft:#16293A; --service:#4FC7C3; --service-soft:#10302F; --finance:#F2B357; --finance-soft:#33270F;
+  --master:#B7A8F0; --master-soft:#29233F; --admin:#A9B6C6; --admin-soft:#1E2934;
+  --hi:#FF6B7A; --hi-soft:#3A1820; --md:#F2B357; --md-soft:#33270F; --lo:#7FB5EA; --lo-soft:#16293A;
+  --card-shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+}}
+body{background:var(--bg)}
+.hero{position:relative;overflow:hidden;color:#fff;background:
+  radial-gradient(900px 340px at 85% -10%,rgba(79,163,224,.35),transparent 60%),
+  radial-gradient(700px 300px at 10% 120%,rgba(216,31,42,.18),transparent 60%),
+  linear-gradient(135deg,#0A1C33 0%,#123A66 60%,#1E5A8C 100%)}
+.hero::before{content:"";position:absolute;inset:0;opacity:.18;background-image:linear-gradient(rgba(255,255,255,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.18) 1px,transparent 1px);background-size:44px 44px;mask-image:linear-gradient(180deg,#000,transparent 85%);-webkit-mask-image:linear-gradient(180deg,#000,transparent 85%)}
+.hero .in{position:relative;max-width:1320px;margin:0 auto;padding-block:34px 92px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px));display:flex;flex-wrap:wrap;gap:20px 32px;align-items:flex-end;justify-content:space-between}
+.eyebrow{font-size:11.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#9EC6EA;display:flex;align-items:center;gap:10px}
+.eyebrow::before{content:"";width:22px;height:2px;background:#D81F2A}
+.hero h1{font-size:clamp(26px,3.4vw,38px);font-weight:700;letter-spacing:-.015em;margin:10px 0 6px;color:#fff}
+.hero p{margin:0;color:#C9D9EA;font-size:14.5px}
+.hero p b{color:#fff;font-weight:600}
+.qa{display:flex;flex-wrap:wrap;gap:10px}
+.qa a{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);color:#fff;text-decoration:none;font-weight:600;font-size:13.5px;backdrop-filter:blur(6px)}
+.qa a:hover{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.4)}
+.qa a.primary{background:#fff;color:#0A1C33;border-color:#fff}
+.qa svg{width:16px;height:16px}
+
+.page{max-width:1320px;margin:-64px auto 0;position:relative;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px));padding-bottom:48px;display:grid;gap:22px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 18px 14px;box-shadow:var(--card-shadow);display:grid;gap:6px;min-width:0;position:relative;overflow:hidden}
+.kpi::after{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:var(--c)}
+.kpi .hd{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.kpi .ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--cs);color:var(--c)}
+.kpi .ic svg{width:17px;height:17px}
+.kpi .v{font-size:28px;font-weight:700;letter-spacing:-.02em;color:var(--fg);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .v small{font-size:14px;font-weight:600;color:var(--muted);margin-right:4px}
+.kpi .s{font-size:12.5px;color:var(--muted);min-height:18px}
+.kpi .s b{color:var(--fg)}
+.kpi .s .bad{color:var(--hi);font-weight:700}
+.kpi a.go{margin-top:6px;padding-top:10px;border-top:1px solid var(--line);font-size:12.5px;font-weight:700;color:var(--c);text-decoration:none;display:flex;justify-content:space-between}
+.kpi a.go:hover{text-decoration:underline}
+.sk{display:inline-block;width:60%;height:26px;border-radius:6px;background:linear-gradient(90deg,var(--sunk),var(--line),var(--sunk));background-size:200% 100%;animation:sk 1.2s linear infinite}
+@keyframes sk{to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.sk{animation:none}}
+
+.board{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:1050px){.board{grid-template-columns:minmax(0,1fr)}}
+.col{display:grid;gap:22px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--card-shadow);min-width:0;overflow:hidden}
+.card>header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.card>header h2{margin:0;font-size:15px;letter-spacing:0;text-transform:none;color:var(--fg)}
+.card>header h2 span{font-weight:400;color:var(--muted);font-size:13px;margin-left:6px}
+.card>header a{font-size:12.5px;font-weight:700;color:var(--accent);text-decoration:none}
+.feed{display:grid}
+.fi{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}
+.fi:last-child{border-bottom:0}
+.fi:hover{background:var(--accent-soft)}
+.fi .tic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center}
+.fi .tic svg{width:17px;height:17px}
+.fi b{display:block;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fi span.t{font-size:12.5px;color:var(--muted)}
+.pill{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.pill.high{background:var(--hi-soft);color:var(--hi)}.pill.medium{background:var(--md-soft);color:var(--md)}.pill.low{background:var(--lo-soft);color:var(--lo)}
+.empty{padding:30px 18px;text-align:center;color:var(--muted);font-size:13.5px}
+.empty strong{display:block;color:var(--fg);font-size:15px;margin-bottom:2px}
+
+.funnel{padding:16px 18px 18px;display:grid;gap:11px}
+.fr{display:grid;grid-template-columns:120px minmax(0,1fr) 120px;gap:12px;align-items:center;font-size:13px}
+.fr .lb{color:var(--muted);font-weight:600}
+.fr .tr{height:22px;border-radius:6px;background:var(--sunk);overflow:hidden}
+.fr .br{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--sales),#4FA3E0);min-width:2px}
+.fr .vl{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.fr .vl small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.ftot{display:flex;flex-wrap:wrap;gap:8px 24px;padding:0 18px 16px;font-size:12.5px;color:var(--muted)}
+.ftot b{color:var(--fg);font-variant-numeric:tabular-nums}
+@media (max-width:560px){.fr{grid-template-columns:90px minmax(0,1fr) 92px}}
+
+.mini{display:grid}
+.mi{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 18px;border-bottom:1px solid var(--line);text-decoration:none;color:inherit}
+.mi:last-child{border-bottom:0}
+.mi:hover{background:var(--accent-soft)}
+.db{border:1px solid var(--line);border-radius:9px;overflow:hidden;text-align:center;background:var(--surface)}
+.db .m{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;background:var(--c);color:#fff;padding:2px 0}
+.db .d{font-size:17px;font-weight:700;padding:3px 0}
+.mi b{display:block;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mi .t{font-size:12.5px;color:var(--muted)}
+.mi .amt{font-weight:700;font-variant-numeric:tabular-nums;font-size:13.5px;white-space:nowrap}
+
+.apps h2.sect{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:6px 0 12px;display:flex;align-items:center;gap:12px}
+.apps h2.sect::after{content:"";flex:1;height:1px;background:var(--line)}
+.agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+a.app{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;color:inherit;text-decoration:none;box-shadow:var(--card-shadow);transition:transform .15s,border-color .15s}
+a.app:hover,a.app:focus-visible{border-color:var(--c);transform:translateY(-2px);outline:none}
+a.app .ic{grid-row:span 3;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--cs);color:var(--c)}
+a.app .ic svg{width:22px;height:22px}
+a.app .k{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--c)}
+a.app h3{margin:0;font-size:16px;color:var(--fg)}
+a.app p{margin:2px 0 0;font-size:13px;color:var(--muted);line-height:1.45}
+a.app .st{grid-column:2;margin-top:8px;font-size:12.5px;font-weight:700;color:var(--fg)}
+@media (prefers-reduced-motion:reduce){a.app{transition:none}a.app:hover{transform:none}}
+footer.ft{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);padding-top:8px;border-top:1px solid var(--line)}
+.sales{--c:var(--sales);--cs:var(--sales-soft)}.service{--c:var(--service);--cs:var(--service-soft)}.finance{--c:var(--finance);--cs:var(--finance-soft)}.master{--c:var(--master);--cs:var(--master-soft)}.admin{--c:var(--admin);--cs:var(--admin-soft)}
 </style>
-<script src="/assets/access.js" data-hold="1"></script>
+<script src="/assets/access.js"></script>
 </head>
 <body>
-<div class="bar"><div class="in">
-  <a class="logo" href="/"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
-  <div class="who"><span id="user"></span><a href="/.auth/logout">Sign out</a></div>
-</div></div>
 <section class="hero"><div class="in">
-  <div class="tag">Internal</div>
-  <h1>Bifold Tools</h1>
-  <p>Working tools for the Bifold team. Sign in with your Bifold Microsoft 365 account.</p>
-</div></section>
-<main class="in">
-  <h2>Available tools</h2>
-  <div class="grid">
-    <a class="tool" href="/pnl/"><h3>Instant PnL Calculator</h3><p>Work out and save the profit on each PO. Share with colleagues and download as PDF or Excel.</p><span class="go">Open →</span></a>
-    <a class="tool" href="/pipeline/"><h3>Sales Pipeline</h3><p>Every open deal for Bifold and Tech Hub, from lead and site survey to PO. Drag deals between stages and see the forecast.</p><span class="go">Open →</span></a>
-    <a class="tool" href="/pdc/"><h3>PDC &amp; Guarantees Log</h3><p>Post-dated cheques to suppliers, plus security deposits and advance payment guarantees against POs. Reminder emails 7 days before each due date.</p><span class="go">Open →</span></a>
-    <a class="tool" href="/amc/"><h3>AMC Tracker</h3><p>Annual maintenance contracts: branded proposals in Word and PDF, awards and expiry alerts, maintenance visits with site photos and customer reports.</p><span class="go">Open →</span></a>
-    <a class="tool" href="/customers/"><h3>Customers</h3><p>The shared customer list used by every Bifold tool. Add or update a customer once.</p><span class="go">Open →</span></a>
+  <div>
+    <div class="eyebrow">Bifold Technologies · Operations</div>
+    <h1 id="greet">Welcome to Bifold Tools</h1>
+    <p id="today"></p>
   </div>
-  <h2 style="margin-top:28px" data-manager>Administration</h2>
-  <div class="grid" data-manager><a class="tool" href="/access/"><h3>Team access</h3><p>Choose which tools and sections each Bifold user can use. Managers only.</p><span class="go">Open →</span></a></div>
-  <footer>Bifold Technologies L.L.C · Al Garhoud, Dubai</footer>
+  <div class="qa" id="qa"></div>
+</div></section>
+
+<main class="page">
+  <div class="kpis" id="kpis"></div>
+  <div class="board">
+    <div class="col">
+      <section class="card"><header><h2>Needs attention<span id="attCount"></span></h2></header><div class="feed" id="feed"><div class="empty">Loading…</div></div></section>
+      <section class="card sales" id="funnelCard" hidden><header><h2>Pipeline by stage</h2><a href="/pipeline/">Open pipeline →</a></header><div class="funnel" id="funnel"></div><div class="ftot" id="ftot"></div></section>
+    </div>
+    <div class="col">
+      <section class="card service" id="weekCard" hidden><header><h2>Service schedule<span>next 14 days</span></h2><a href="/amc/#visits">All visits →</a></header><div class="mini" id="week"></div></section>
+      <section class="card finance" id="cashCard" hidden><header><h2>Cash commitments<span>next 30 days</span></h2><a href="/pdc/">PDC log →</a></header><div class="mini" id="cash"></div></section>
+    </div>
+  </div>
+  <section class="apps">
+    <h2 class="sect">Applications</h2>
+    <div class="agrid" id="apps"></div>
+  </section>
+  <footer class="ft"><span>Bifold Technologies L.L.C · Office A306, Saraya Avenue, Al Garhoud, Dubai</span><span>Internal use only · Signed in with Microsoft 365</span></footer>
 </main>
+
 <script>
-fetch("/.auth/me").then(r=>r.json()).then(d=>{const p=d&&d.clientPrincipal;if(p)document.getElementById("user").textContent=p.userDetails}).catch(()=>{});
+(function(){
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const I=p=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+const ICON={
+  pipeline:I('<path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/>'),pnl:I('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2M8 18h2M12 18h4"/>'),
+  pdc:I('<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h6M6 14h4M15.5 13.5l1.5 1.5 3-3"/>'),amc:I('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>'),
+  visits:I('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4"/>'),customers:I('<path d="M4 21V5a1 1 0 0 1 1-1h9v17"/><path d="M14 9h5a1 1 0 0 1 1 1v11M8 8h2M8 12h2M8 16h2M3 21h18"/>'),
+  access:I('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4M12 15v2"/>'),plus:I('<path d="M12 5v14M5 12h14"/>'),
+};
+const FN={pipeline:"sales",pnl:"sales",amc:"service",visits:"service",pdc:"finance",customers:"master",access:"admin"};
+const aed=n=>Math.round(n||0).toLocaleString("en-US");
+const short=n=>{n=+n||0;return n>=1e6?(n/1e6).toFixed(n>=1e7?1:2)+"M":n>=1e4?Math.round(n/1e3)+"K":aed(n)};
+const dubai=()=>new Date(Date.now()+4*3600e3);
+const today=()=>dubai().toISOString().slice(0,10);
+const plus=n=>new Date(Date.parse(today()+"T00:00:00Z")+n*864e5).toISOString().slice(0,10);
+const days=d=>Math.round((Date.parse(d+"T00:00:00Z")-Date.parse(today()+"T00:00:00Z"))/864e5);
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fd=d=>{const[y,m,dd]=String(d).split("-").map(Number);return dd+" "+MON[m-1]};
+async function api(p){const r=await fetch("/api/"+p,{cache:"no-store"});if(!r.ok)throw new Error(r.status);return r.json()}
+
+function header(m){
+  const h=dubai().getUTCHours(),first=String(m.email).split("@")[0].split(/[._-]/)[0];
+  $("greet").textContent=`Good ${h<12?"morning":h<17?"afternoon":"evening"}, ${first.charAt(0).toUpperCase()+first.slice(1)}`;
+  $("today").innerHTML=`${dubai().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric",timeZone:"UTC"})} · Dubai · <b>${m.isManager?"Manager view: everything across Bifold":"Your workspace"}</b>`;
+}
+const can=(m,k)=>m.isManager||(m.sections||[]).includes(k);
+function quick(m){
+  const a=[];
+  if(can(m,"amc"))a.push(["/amc/#amcs","New AMC proposal","amc",1]);
+  if(can(m,"visits"))a.push(["/amc/#visits","Maintenance visits","visits"]);
+  if(can(m,"pipeline"))a.push(["/pipeline/","Sales pipeline","pipeline"]);
+  if(can(m,"pnl"))a.push(["/pnl/","New PnL","pnl"]);
+  if(can(m,"pdc"))a.push(["/pdc/","Log a cheque","pdc"]);
+  $("qa").innerHTML=a.slice(0,4).map((x,i)=>`<a href="${x[0]}" class="${i===0?"primary":""}">${ICON[x[2]]}${esc(x[1])}</a>`).join("");
+}
+function kpiCard(key,fn,label,icon,href,cta){
+  const d=document.createElement("div");d.className="kpi "+fn;d.id="k_"+key;
+  d.innerHTML=`<div class="hd"><span class="ic">${ICON[icon]}</span>${esc(label)}</div><div class="v"><span class="sk"></span></div><div class="s"></div><a class="go" href="${href}"><span>${esc(cta)}</span><span>→</span></a>`;
+  $("kpis").appendChild(d);return d;
+}
+const setK=(d,v,s)=>{d.querySelector(".v").innerHTML=v;d.querySelector(".s").innerHTML=s};
+const failK=d=>setK(d,"–",`<span class="bad">Couldn't load</span>`);
+
+function apps(m){
+  const list=[
+    ["pipeline","/pipeline/","Sales","Sales Pipeline","Every deal for Bifold and Tech Hub from lead to PO, with the weighted forecast.",["pipeline"]],
+    ["pnl","/pnl/","Sales","PnL Calculator","Profit on each PO before you commit, saved and shared with colleagues.",["pnl"]],
+    ["amc","/amc/","Service","AMC Tracker","Branded AMC proposals, awards, expiry alerts and maintenance visits.",["amc","visits"]],
+    ["pdc","/pdc/","Finance","PDC & Guarantees","Post-dated cheques, security deposits and advance payment guarantees.",["pdc"]],
+    ["customers","/customers/","Master data","Customers","The single customer list every Bifold tool uses.",["customers"]],
+    ["access","/access/","Administration","Team access","Choose which tools and sections each person can use.",["manager"]],
+  ].filter(x=>x[5].some(k=>k==="manager"?m.isManager:can(m,k)));
+  $("apps").innerHTML=list.map(x=>`<a class="app ${FN[x[0]]}" href="${x[1]}"><span class="ic">${ICON[x[0]]}</span><span class="k">${esc(x[2])}</span><h3>${esc(x[3])}</h3><p>${esc(x[4])}</p><span class="st" id="st_${x[0]}"></span></a>`).join("");
+}
+const st=(k,t)=>{const e=$("st_"+k);if(e)e.textContent=t};
+
+function feed(a){
+  const TOOL={pdc:["pdc","Finance"],pipeline:["pipeline","Sales"],amc:["amc","Service"],visits:["visits","Service"]};
+  const items=a.items.slice(0,8);
+  $("attCount").textContent=a.count?` ${a.count} open`:"";
+  $("feed").innerHTML=items.map(x=>{const[t,g]=TOOL[x.tool]||["amc",""];return `<a class="fi ${FN[t]}" href="${esc(x.href)}"><span class="tic" style="background:var(--cs);color:var(--c)">${ICON[t]}</span><span><b>${esc(x.title)}</b><span class="t">${esc(g)} · ${esc(x.text)}</span></span><span class="pill ${esc(x.severity)}">${x.severity==="high"?"Urgent":x.severity==="medium"?"Due":"Upcoming"}</span></a>`}).join("")
+    ||`<div class="empty"><strong>You're all caught up</strong>No overdue cheques, visits, follow-ups or expiring contracts.</div>`;
+}
+
+async function load(m){
+  const t=today();
+  if(can(m,"pipeline")){
+    const k=kpiCard("pipe","sales","Open pipeline","pipeline","/pipeline/","Sales pipeline");
+    api("deals").then(ds=>{
+      const open=ds.filter(d=>!["won","lost"].includes(d.stage));const val=open.reduce((s,d)=>s+d.value,0),w=open.reduce((s,d)=>s+d.value*d.probability/100,0);
+      const q=new Date(Date.parse(t));const qs=t.slice(0,5)+String(Math.floor(q.getUTCMonth()/3)*3+1).padStart(2,"0")+"-01";
+      const won=ds.filter(d=>d.stage==="won"&&(d.closedAt||"").slice(0,10)>=qs).reduce((s,d)=>s+d.value,0);
+      setK(k,`<small>AED</small>${short(val)}`,`<b>${open.length}</b> open deals · weighted <b>AED ${short(w)}</b>`);
+      st("pipeline",`${open.length} open · AED ${short(won)} won this quarter`);
+      const ORDER=[["lead","Lead"],["survey","Site survey"],["proposal","Proposal sent"],["negotiation","Negotiation"],["po","PO received"]];
+      const by=ORDER.map(([s,l])=>{const x=open.filter(d=>d.stage===s);return{l,n:x.length,v:x.reduce((a,d)=>a+d.value,0)}});
+      const max=Math.max(1,...by.map(b=>b.v));
+      $("funnel").innerHTML=by.map(b=>`<div class="fr"><span class="lb">${esc(b.l)}</span><span class="tr"><span class="br" style="display:block;width:${Math.max(b.v?3:0,Math.round(b.v/max*100))}%"></span></span><span class="vl">AED ${short(b.v)}<small>${b.n} deal${b.n===1?"":"s"}</small></span></div>`).join("");
+      $("ftot").innerHTML=`<span>Open value <b>AED ${aed(val)}</b></span><span>Weighted forecast <b>AED ${aed(w)}</b></span><span>Won this quarter <b>AED ${aed(won)}</b></span>`;
+      $("funnelCard").hidden=false;
+    }).catch(()=>failK(k));
+  }
+  if(can(m,"amc")||can(m,"visits")){
+    const k=can(m,"amc")?kpiCard("amc","service","Active AMCs","amc","/amc/#amcs","AMC contracts"):null;
+    const kv=can(m,"visits")?kpiCard("vis","service","Visits this fortnight","visits","/amc/#visits","Maintenance visits"):null;
+    api("amc/bootstrap").then(b=>{
+      const act=b.contracts.filter(c=>c.status==="active"&&c.end>=t);const exp=act.filter(c=>days(c.end)<=(c.alertDays||60));
+      const val=b.amcs.filter(a=>a.status==="awarded"&&act.some(c=>c.amcId===a.id)).reduce((s,a)=>s+a.value,0);
+      if(k)setK(k,`${act.length}`,`<b>AED ${short(val)}</b> annual value${exp.length?` · <span class="bad">${exp.length} expiring</span>`:""}`);
+      const open=b.visits.filter(v=>v.status==="scheduled"||v.status==="in_progress");
+      const due=open.filter(v=>v.scheduledDate>=t&&v.scheduledDate<=plus(14)),late=open.filter(v=>v.scheduledDate<t);
+      const done=b.visits.filter(v=>v.status==="completed"&&(v.completedDate||"").slice(0,7)===t.slice(0,7));
+      if(kv)setK(kv,`${due.length}`,`${late.length?`<span class="bad">${late.length} overdue</span> · `:""}<b>${done.length}</b> completed this month`);
+      st("amc",`${act.length} active contract${act.length===1?"":"s"} · ${due.length} visit${due.length===1?"":"s"} in 14 days`);
+      const list=late.concat(due).sort((a,b)=>a.scheduledDate.localeCompare(b.scheduledDate)).slice(0,6);
+      $("week").innerHTML=list.map(v=>{const[dd,mm]=fd(v.scheduledDate).split(" ");const lt=v.scheduledDate<t;return `<a class="mi" href="/amc/#visits" style="${lt?"--c:var(--hi)":""}"><span class="db"><div class="m">${mm}</div><div class="d">${dd}</div></span><span><b>${esc(v.customerName)}</b><span class="t">${esc({pm:"Preventive maintenance",corrective:"Corrective",emergency:"Emergency call-out",survey:"Site survey"}[v.type]||"Visit")}${v.engineers?" · "+esc(v.engineers):""}</span></span><span class="pill ${lt?"high":"low"}">${lt?"Overdue":v.time||"Planned"}</span></a>`}).join("")||`<div class="empty"><strong>Nothing scheduled</strong>No visits in the next 14 days.</div>`;
+      $("weekCard").hidden=false;
+    }).catch(()=>{if(k)failK(k);if(kv)failK(kv)});
+  }
+  if(can(m,"pdc")){
+    const k=kpiCard("pdc","finance","PDCs due in 7 days","pdc","/pdc/","PDC & guarantees");
+    api("cheques").then(cs=>{
+      const p=cs.filter(c=>c.status==="pending");const wk=p.filter(c=>c.clearanceDate<=plus(7)),late=p.filter(c=>c.clearanceDate<t);
+      const sum=a=>a.reduce((s,c)=>s+c.amount,0);
+      setK(k,`<small>AED</small>${short(sum(wk.filter(c=>c.kind==="pdc"||!c.kind)))}`,`<b>${wk.length}</b> item${wk.length===1?"":"s"}${late.length?` · <span class="bad">${late.length} overdue</span>`:""} · AED ${short(sum(p))} outstanding`);
+      st("pdc",`${p.length} open · AED ${short(sum(p))} outstanding`);
+      const list=p.filter(c=>c.clearanceDate<=plus(30)).slice(0,6);
+      $("cash").innerHTML=list.map(c=>{const[dd,mm]=fd(c.clearanceDate).split(" ");const lt=c.clearanceDate<t;return `<a class="mi" href="/pdc/" style="${lt?"--c:var(--hi)":""}"><span class="db"><div class="m">${mm}</div><div class="d">${dd}</div></span><span><b>${esc(c.payee)}</b><span class="t">${esc({pdc:"Cheque",deposit:"Security deposit",apg:"Guarantee"}[c.kind||"pdc"])} ${esc(c.chequeNo||"")} · ${esc(c.company)}</span></span><span class="amt">AED ${aed(c.amount)}</span></a>`}).join("")||`<div class="empty"><strong>Nothing due</strong>No cheques or guarantees in the next 30 days.</div>`;
+      $("cashCard").hidden=false;
+    }).catch(()=>failK(k));
+  }
+  if(can(m,"pnl")){
+    const k=kpiCard("pnl","sales","PnL margin, 90 days","pnl","/pnl/","PnL calculator");
+    api("pnl").then(ps=>{
+      const since=plus(-90);const r=ps.filter(p=>(p.updatedAt||"").slice(0,10)>=since&&p.poValue>0);
+      const po=r.reduce((s,p)=>s+p.poValue,0),net=r.reduce((s,p)=>s+p.netProfit,0);
+      setK(k,r.length?`${(net/po*100).toFixed(1)}<small style="margin-left:2px">%</small>`:"–",r.length?`Net AED <b>${short(net)}</b> on AED ${short(po)} of POs · ${r.length} PnL${r.length===1?"":"s"}`:"No PnLs in the last 90 days");
+      st("pnl",`${ps.length} saved PnL${ps.length===1?"":"s"}`);
+    }).catch(()=>failK(k));
+  }
+  if(can(m,"customers")||m.isManager)api("customers").then(c=>st("customers",`${c.length} customer${c.length===1?"":"s"}`)).catch(()=>{});
+  if(m.isManager)st("access","Managers only");
+  if(!$("kpis").children.length)$("kpis").hidden=true;
+}
+function start(m){header(m);quick(m);apps(m);load(m);if(window.BIFOLD_ALERTS)feed(window.BIFOLD_ALERTS)}
+document.addEventListener("bifold:alerts",e=>feed(e.detail));
+if(window.BIFOLD_ME)start(window.BIFOLD_ME);else document.addEventListener("bifold:me",e=>start(e.detail),{once:true});
+})();
 </script>
 </body>
 </html>

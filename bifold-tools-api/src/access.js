@@ -49,7 +49,7 @@ module.exports = function makeAccess(H) {
   // Which section a request needs. Returns null when any signed-in user may make it.
   function need(method, seg, body) {
     const [a, b, c] = seg;
-    if (a === "me") return null;
+    if (a === "me" || a === "alerts") return null;
     if (a === "access") return "manager";
     if (a === "customers") {
       if (method === "GET") return "any";

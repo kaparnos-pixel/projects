@@ -467,12 +467,54 @@ const amc = () => amcRoute || (amcRoute = require("./amc")({ table, getOrNull, a
 let accessMod;
 const access = () => accessMod || (accessMod = require("./access")({ table, getOrNull, all, fail, clean, emailOk, domains, managers }));
 
+// ---------- alerts for the top bar and home page ----------
+// Everything that needs someone's attention today, limited to the sections they can use.
+async function alerts(user) {
+  const has = k => user.isManager || (user.sections || []).includes(k);
+  const today = new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+  const plus = n => new Date(Date.parse(today + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+  const days = d => Math.round((Date.parse(d + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 864e5);
+  const fd = d => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const out = [];
+  const jobs = [];
+  if (has("pdc")) jobs.push(listCheques().then(list => list.filter(c => c.status === "pending" && c.clearanceDate <= plus(7)).forEach(c => {
+    const d = days(c.clearanceDate);
+    out.push({ tool: "pdc", severity: d < 0 ? "high" : d <= 2 ? "medium" : "low", when: c.clearanceDate, href: "/pdc/",
+      title: `${c.kind === "pdc" ? "Cheque" : c.kind === "apg" ? "Guarantee" : "Deposit"} ${c.chequeNo || ""} to ${c.payee}`.replace(/\s+/g, " "),
+      text: `AED ${c.amount.toLocaleString("en-US", { maximumFractionDigits: 0 })} · ${d < 0 ? "overdue since " + fd(c.clearanceDate) : d === 0 ? "due today" : "due " + fd(c.clearanceDate)}` });
+  })).catch(() => {}));
+  if (has("pipeline")) jobs.push(listDeals(user).then(list => list.filter(x => !["won", "lost"].includes(x.stage)).forEach(x => {
+    if (x.nextActionDate && x.nextActionDate <= today) out.push({ tool: "pipeline", severity: x.nextActionDate < today ? "medium" : "low", when: x.nextActionDate, href: "/pipeline/",
+      title: x.nextAction || "Follow up", text: `${x.customerName} · ${x.nextActionDate < today ? "was due " + fd(x.nextActionDate) : "due today"}` });
+    else if (x.expectedClose && x.expectedClose < today) out.push({ tool: "pipeline", severity: "low", when: x.expectedClose, href: "/pipeline/",
+      title: `${x.title}: close date passed`, text: `${x.customerName} · expected ${fd(x.expectedClose)}` });
+  })).catch(() => {}));
+  if (has("amc") || has("visits")) jobs.push(amc()("GET", ["bootstrap"], user, {}).then(b => {
+    b.contracts.filter(c => c.status === "active").forEach(c => { const d = days(c.end); if (d <= (c.alertDays || 60) && d > -60)
+      out.push({ tool: "amc", severity: d < 0 ? "high" : d <= 30 ? "medium" : "low", when: c.end, href: "/amc/#amcs", title: `AMC ${d < 0 ? "expired" : "expiring"}: ${c.customerName}`,
+        text: `${c.ref} · ${d < 0 ? "ended " + fd(c.end) : d + " days left"}${c.renewalAmcId ? " · renewal started" : ""}` }); });
+    if (has("visits")) {
+      // One line per contract, however many of its visits are overdue.
+      const late = {}; b.visits.filter(v => v.status === "scheduled" && v.scheduledDate < today).forEach(v => (late[v.amcId] ||= []).push(v));
+      Object.values(late).forEach(vs => { vs.sort((x, y) => x.scheduledDate.localeCompare(y.scheduledDate)); const v = vs[0];
+        out.push({ tool: "visits", severity: vs.length > 1 ? "high" : "medium", when: v.scheduledDate, href: "/amc/#visits",
+          title: vs.length > 1 ? `${vs.length} visits overdue: ${v.customerName}` : `Visit overdue: ${v.customerName}`,
+          text: vs.length > 1 ? `Oldest planned ${fd(v.scheduledDate)} · ${v.ref}` : `Planned ${fd(v.scheduledDate)} · ${v.engineers || "no engineer assigned"}` }); });
+    }
+  }).catch(() => {}));
+  await Promise.all(jobs);
+  const rank = { high: 0, medium: 1, low: 2 };
+  out.sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.when).localeCompare(String(b.when)));
+  return { count: out.length, items: out.slice(0, 40) };
+}
+
 // ---------- routing ----------
 async function route(method, seg, user, body) {
   const [a, id, sub] = seg;
   access().guard(method, seg, body, user);
   if (a === "access") return access().route(method, seg, user, body);
   if (a === "amc") return amc()(method, seg.slice(1), user, body);
+  if (a === "alerts" && method === "GET") return alerts(user);
   if (a === "me" && method === "GET") { access().touch(user.email); return { ...user, managers: managers(), domains: domains(), allSections: access().SECTIONS }; }
   if (a === "customers") {
     if (!id && method === "GET") return listCustomers();

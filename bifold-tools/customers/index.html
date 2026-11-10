@@ -107,7 +107,7 @@ $("delBtn").onclick=async()=>{
   if($("delBtn").dataset.armed!=="1"){$("delBtn").dataset.armed="1";$("delBtn").textContent="Click again to delete";setTimeout(()=>{$("delBtn").dataset.armed="";$("delBtn").textContent="Delete"},4000);return}
   try{await api("DELETE","customers/"+encodeURIComponent(cur.id));LIST=LIST.filter(x=>x.id!==cur.id);render();$("dlg").close();toast("Customer deleted")}catch(err){$("err").textContent=err.message}
 };
-(async()=>{try{[ME,LIST]=await Promise.all([api("GET","me"),api("GET","customers")]);$("who").textContent=ME.email;render()}catch(e){$("empty").textContent=e.message}})();
+(async()=>{try{[ME,LIST]=await Promise.all([api("GET","me"),api("GET","customers")]);const q0=new URLSearchParams(location.search).get("q");if(q0)$("q").value=q0;$("who").textContent=ME.email;render()}catch(e){$("empty").textContent=e.message}})();
 </script>
 </body>
 </html>

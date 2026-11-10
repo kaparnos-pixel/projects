@@ -127,6 +127,41 @@ async function createCustomer(user, b) {
   await (await table(CUST)).createEntity(e);
   return custOut(e);
 }
+// Bulk import from a CSV / Excel file (parsed in the browser). Up to 1,000 rows per request.
+// Rows whose name is already in the list (or repeated in the file) are skipped, or, with update set,
+// their blank-or-changed details are overwritten with the non-empty values from the file.
+async function importCustomers(user, b) {
+  const co = writeCo(user);
+  const rows = Array.isArray(b.rows) ? b.rows : [];
+  if (!rows.length) fail(400, "The file has no customer rows.");
+  if (rows.length > 1000) fail(400, "Import up to 1,000 customers at a time. Split the file and import it in parts.");
+  const t = await table(CUST);
+  const existing = new Map((await all(t, CPK)).filter(e => rowCo(e) === co).map(e => [String(e.name).toLowerCase(), e]));
+  const now = new Date().toISOString();
+  const creates = [], updates = [], skipped = [], invalid = [];
+  const seen = new Set();
+  rows.forEach((r, i) => {
+    const name = clean(r && r.name, 150);
+    if (!name) { invalid.push({ row: i + 1, reason: "No customer name" }); return; }
+    const f = { name, contactName: clean(r.contactName, 100), email: clean(r.email, 150), phone: clean(r.phone, 50), trn: clean(r.trn, 30), emirate: clean(r.emirate, 50), address: clean(r.address, 300) };
+    if (f.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) f.email = "";
+    const key = name.toLowerCase();
+    if (seen.has(key)) { skipped.push({ row: i + 1, name, reason: "Repeated in the file" }); return; }
+    seen.add(key);
+    const cur = existing.get(key);
+    if (cur) {
+      if (!b.update) { skipped.push({ row: i + 1, name, reason: "Already in the list" }); return; }
+      const ch = {}; for (const k of ["contactName", "email", "phone", "trn", "emirate", "address"]) if (f[k] && f[k] !== (cur[k] || "")) ch[k] = f[k];
+      if (!Object.keys(ch).length) { skipped.push({ row: i + 1, name, reason: "No changes" }); return; }
+      updates.push({ partitionKey: CPK, rowKey: cur.rowKey, co, ...ch, updatedBy: user.email, updatedAt: now });
+      return;
+    }
+    creates.push({ partitionKey: CPK, rowKey: crypto.randomUUID(), co, ...f, createdBy: user.email, createdAt: now, updatedBy: user.email, updatedAt: now });
+  });
+  const actions = creates.map(e => ["create", e]).concat(updates.map(e => ["update", e, "Merge"]));
+  for (let i = 0; i < actions.length; i += 100) await t.submitTransaction(actions.slice(i, i + 100));
+  return { added: creates.length, updated: updates.length, skipped, invalid };
+}
 async function updateCustomer(user, id, b) {
   const t = await table(CUST);
   const cur = await getOrNull(t, CPK, id);
@@ -558,6 +593,7 @@ async function route(method, seg, user, body) {
   if (a === "customers") {
     if (!id && method === "GET") return listCustomers(user);
     if (!id && method === "POST") return createCustomer(user, body);
+    if (id === "import" && method === "POST") return importCustomers(user, body);
     if (id && method === "PUT") return updateCustomer(user, id, body);
     if (id && method === "DELETE") return deleteCustomer(user, id);
   }

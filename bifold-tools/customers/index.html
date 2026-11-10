@@ -12,6 +12,20 @@ header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:spac
 .filters{margin-bottom:12px}.filters input{max-width:340px}
 .listpanel{padding:0;overflow:hidden}
 td .t{font-weight:700} td .s{font-size:12px;color:var(--muted)}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+#imp{width:min(860px,calc(100vw - 24px))}
+#imp .drop{display:block;border:1.5px dashed var(--line,#cfd6de);border-radius:12px;padding:22px;text-align:center;cursor:pointer;color:var(--muted)}
+#imp .drop b{color:var(--ink,inherit)} #imp .drop.over{border-color:var(--accent);background:var(--accent-soft)}
+#imp .map{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 12px;margin:12px 0}
+#imp .map label{margin:0}
+#imp .stats{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+#imp .stats span{font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+#imp .stats span.w{background:#FFF3DC;color:#8A5A00} #imp .stats span.x{background:#FDE7E9;color:#A1222D}
+#imp .prev{max-height:260px;overflow:auto;border:1px solid var(--line,#e3e8ee);border-radius:10px}
+#imp .prev table{font-size:12px} #imp .prev td,#imp .prev th{padding:6px 8px;white-space:nowrap}
+#imp tr.dup td{color:var(--muted)} #imp tr.bad td{color:#A1222D}
+#imp .chk{display:flex;gap:8px;align-items:center;font-size:13px;margin:6px 0}
+#imp .chk input{width:auto}
 </style>
 <script src="/assets/access.js" data-section="customers"></script>
 </head>
@@ -26,7 +40,7 @@ td .t{font-weight:700} td .s{font-size:12px;color:var(--muted)}
       <h1><span class="tag">Bifold Tools</span>Customers</h1>
       <p class="sub">One customer list shared by every Bifold tool. Add a customer once and pick it anywhere.</p>
     </div>
-    <button class="primary" type="button" id="addBtn">+ New customer</button>
+    <div class="acts"><button type="button" id="impBtn">Import from Excel / CSV</button><button class="primary" type="button" id="addBtn">+ New customer</button></div>
   </header>
   <div class="filters"><input id="q" type="search" placeholder="Search name, contact, TRN or emirate" aria-label="Search customers"></div>
   <div class="panel listpanel">
@@ -62,6 +76,23 @@ td .t{font-weight:700} td .s{font-size:12px;color:var(--muted)}
       <button type="button" class="danger" id="delBtn" hidden style="margin-right:auto">Delete</button>
       <button type="button" id="cancel">Cancel</button><button class="primary" type="submit" id="saveBtn">Save</button>
     </div>
+  </form>
+</dialog>
+
+<dialog id="imp">
+  <form method="dialog" id="impForm">
+    <h3>Import customers</h3>
+    <p class="hint" style="margin-top:0">Upload an Excel (.xlsx, .xls) or CSV file with one customer per row and a header row. Columns are matched automatically; check them below before importing. <a href="#" id="tplLink">Download a template</a></p>
+    <label class="drop" id="impDrop"><input type="file" id="impFile" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden><b>Choose a file</b> or drop it here</label>
+    <div id="impBody" hidden>
+      <div class="fields" style="align-items:end"><label id="sheetWrap" hidden><span class="lbl">Sheet</span><select id="impSheet"></select></label><p class="hint" id="impName" style="margin:0"></p></div>
+      <div class="map" id="impMap"></div>
+      <label class="chk"><input type="checkbox" id="impUpd"> Update the details of customers already in the list (blank cells don't overwrite)</label>
+      <div class="stats" id="impStats"></div>
+      <div class="prev"><table class="list"><thead id="impHead"></thead><tbody id="impRows"></tbody></table></div>
+    </div>
+    <div class="err" id="impErr"></div>
+    <div class="foot"><button type="button" id="impCancel">Cancel</button><button class="primary" type="submit" id="impGo" disabled>Import</button></div>
   </form>
 </dialog>
 
@@ -106,6 +137,66 @@ $("form").onsubmit=async e=>{
 $("delBtn").onclick=async()=>{
   if($("delBtn").dataset.armed!=="1"){$("delBtn").dataset.armed="1";$("delBtn").textContent="Click again to delete";setTimeout(()=>{$("delBtn").dataset.armed="";$("delBtn").textContent="Delete"},4000);return}
   try{await api("DELETE","customers/"+encodeURIComponent(cur.id));LIST=LIST.filter(x=>x.id!==cur.id);render();$("dlg").close();toast("Customer deleted")}catch(err){$("err").textContent=err.message}
+};
+/* ---------- bulk import ---------- */
+const XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+const IMP_FIELDS=[["name","Customer name *",["customer","customer name","company","company name","name","client","client name","account","account name","organisation","organization"]],
+  ["contactName","Contact person",["contact","contact person","contact name","attention","attn","person"]],
+  ["phone","Phone",["phone","mobile","tel","telephone","contact number","phone number","mobile number","landline"]],
+  ["email","Email",["email","e-mail","email address","mail"]],
+  ["trn","TRN",["trn","vat","trn number","vat number","tax registration","tax registration number","trn no","vat no"]],
+  ["emirate","Emirate",["emirate","city","state","region"]],
+  ["address","Address",["address","location","street","full address"]]];
+const EMIRATES={"abu dhabi":"Abu Dhabi",auh:"Abu Dhabi",dubai:"Dubai",dxb:"Dubai",sharjah:"Sharjah",shj:"Sharjah",ajman:"Ajman","umm al quwain":"Umm Al Quwain",uaq:"Umm Al Quwain","ras al khaimah":"Ras Al Khaimah",rak:"Ras Al Khaimah","ras al-khaimah":"Ras Al Khaimah",fujairah:"Fujairah",fuj:"Fujairah"};
+let IMP={book:null,head:[],rows:[],map:{}};
+function loadX(){return window.XLSX?Promise.resolve(window.XLSX):new Promise((ok,no)=>{const s=document.createElement("script");s.src=XLSX_URL;s.onload=()=>ok(window.XLSX);s.onerror=()=>no(new Error("Couldn't load the spreadsheet reader. Check your connection and try again."));document.head.appendChild(s)})}
+const norm=h=>String(h??"").toLowerCase().replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();
+function guessMap(head){const m={};const used=new Set();IMP_FIELDS.forEach(([k,,syn])=>{let i=head.findIndex((h,j)=>!used.has(j)&&syn.includes(norm(h)));if(i<0)i=head.findIndex((h,j)=>!used.has(j)&&syn.some(x=>x.length>3&&norm(h).includes(x)));if(i>=0){m[k]=i;used.add(i)}});return m}
+function readSheet(name){
+  const X=window.XLSX,ws=IMP.book.Sheets[name];
+  const all=X.utils.sheet_to_json(ws,{header:1,raw:false,defval:"",blankrows:false}).map(r=>r.map(v=>String(v??"").trim()));
+  const hi=Math.max(0,all.findIndex(r=>r.filter(Boolean).length>=1));
+  IMP.head=(all[hi]||[]).map((h,i)=>h||"Column "+(i+1));IMP.rows=all.slice(hi+1).filter(r=>r.some(Boolean));IMP.map=guessMap(IMP.head);
+  $("impMap").innerHTML=IMP_FIELDS.map(([k,l])=>`<label><span class="lbl">${esc(l)}</span><select data-k="${k}"><option value="">Not in file</option>${IMP.head.map((h,i)=>`<option value="${i}"${IMP.map[k]===i?" selected":""}>${esc(h)}</option>`).join("")}</select></label>`).join("");
+  $("impMap").querySelectorAll("select").forEach(s=>s.onchange=()=>{if(s.value==="")delete IMP.map[s.dataset.k];else IMP.map[s.dataset.k]=+s.value;preview()});
+  preview();
+}
+function impRecords(){return IMP.rows.map(r=>{const o={};IMP_FIELDS.forEach(([k])=>{o[k]=IMP.map[k]!=null?String(r[IMP.map[k]]||"").trim():""});const e=EMIRATES[norm(o.emirate)];if(e)o.emirate=e;return o})}
+function preview(){
+  const recs=impRecords(),have=new Set(LIST.map(c=>c.name.toLowerCase())),seen=new Set();let n=0,d=0,b=0,rep=0;
+  const st=recs.map(o=>{const k=o.name.toLowerCase();if(!o.name){b++;return"bad"}if(seen.has(k)){rep++;return"rep"}seen.add(k);if(have.has(k)){d++;return"dup"}n++;return"new"});
+  const upd=$("impUpd").checked;
+  $("impStats").innerHTML=`<span>${n} new</span>${d?`<span class="w">${d} already in the list${upd?", will be updated":", will be skipped"}</span>`:""}${rep?`<span class="w">${rep} repeated in the file, skipped</span>`:""}${b?`<span class="x">${b} without a name, skipped</span>`:""}`;
+  $("impHead").innerHTML="<tr><th></th>"+IMP_FIELDS.map(([,l])=>`<th>${esc(l.replace(" *",""))}</th>`).join("")+"</tr>";
+  $("impRows").innerHTML=recs.slice(0,200).map((o,i)=>`<tr class="${st[i]==="rep"?"dup":st[i]}"><td>${st[i]==="new"?"New":st[i]==="dup"?"Exists":st[i]==="rep"?"Repeat":"No name"}</td>${IMP_FIELDS.map(([k])=>`<td>${esc(o[k])}</td>`).join("")}</tr>`).join("")+(recs.length>200?`<tr><td colspan="8" class="s">and ${recs.length-200} more rows</td></tr>`:"");
+  $("impGo").disabled=IMP.map.name==null||!(n||(upd&&d));
+  $("impGo").textContent=IMP.map.name==null?"Choose the customer name column":`Import ${n+(upd?d:0)} customer${n+(upd?d:0)===1?"":"s"}`;
+}
+async function impFile(f){
+  $("impErr").textContent="";if(!f)return;
+  if(f.size>10e6){$("impErr").textContent="That file is larger than 10 MB.";return}
+  try{
+    const X=await loadX();const buf=await f.arrayBuffer();
+    IMP.book=/\.csv$/i.test(f.name)?X.read(new TextDecoder("utf-8").decode(buf),{type:"string",raw:true}):X.read(buf,{type:"array"});
+    const names=IMP.book.SheetNames;$("impSheet").innerHTML=names.map(n=>`<option>${esc(n)}</option>`).join("");$("sheetWrap").hidden=names.length<2;
+    $("impName").textContent=f.name;$("impBody").hidden=false;readSheet(names[0]);
+  }catch(e){$("impErr").textContent=/reader/.test(e.message)?e.message:"That file couldn't be read. Save it as .xlsx or .csv and try again."}
+}
+$("impBtn").onclick=()=>{IMP={book:null,head:[],rows:[],map:{}};$("impForm").reset();$("impBody").hidden=true;$("impErr").textContent="";$("impGo").disabled=true;$("impGo").textContent="Import";$("imp").showModal()};
+$("impCancel").onclick=()=>$("imp").close();
+$("impFile").onchange=e=>impFile(e.target.files[0]);
+$("impSheet").onchange=()=>readSheet($("impSheet").value);
+$("impUpd").onchange=preview;
+const dz=$("impDrop");dz.ondragover=e=>{e.preventDefault();dz.classList.add("over")};dz.ondragleave=()=>dz.classList.remove("over");dz.ondrop=e=>{e.preventDefault();dz.classList.remove("over");impFile(e.dataTransfer.files[0])};
+$("tplLink").onclick=e=>{e.preventDefault();const csv="Customer name,Contact person,Phone,Email,TRN,Emirate,Address\r\nExample Trading LLC,Ahmed Ali,+971 50 000 0000,ahmed@example.ae,100000000000003,Dubai,Office 101 Business Bay\r\n";const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv"}));a.download="customer-import-template.csv";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
+$("impForm").onsubmit=async e=>{
+  e.preventDefault();$("impErr").textContent="";$("impGo").disabled=true;const label=$("impGo").textContent;$("impGo").textContent="Importing…";
+  try{
+    const rows=impRecords().filter(o=>o.name);let added=0,updated=0,skipped=0;
+    for(let i=0;i<rows.length;i+=1000){const r=await api("POST","customers/import",{rows:rows.slice(i,i+1000),update:$("impUpd").checked});added+=r.added;updated+=r.updated;skipped+=r.skipped.length+r.invalid.length}
+    LIST=await api("GET","customers");render();$("imp").close();
+    toast(`${added} customer${added===1?"":"s"} added${updated?`, ${updated} updated`:""}${skipped?`, ${skipped} skipped`:""}`);
+  }catch(err){$("impErr").textContent=err.message;$("impGo").disabled=false;$("impGo").textContent=label}
 };
 (async()=>{try{[ME,LIST]=await Promise.all([api("GET","me"),api("GET","customers")]);const q0=new URLSearchParams(location.search).get("q");if(q0)$("q").value=q0;$("who").textContent=ME.email;render()}catch(e){$("empty").textContent=e.message}})();
 </script>

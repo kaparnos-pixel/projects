@@ -165,7 +165,7 @@ function todayStr(){return new Date(Date.now()+4*3600e3).toISOString().slice(0,1
 const dnum=s=>{const[y,m,d]=String(s).split("-").map(Number);return Date.UTC(y,(m||1)-1,d||1)/864e5};
 const daysTo=s=>Math.round(dnum(s)-dnum(todayStr()));
 const addDays=(s,n)=>new Date((dnum(s)+n)*864e5).toISOString().slice(0,10);
-const fdate=s=>{if(!s)return "—";const[y,m,d]=s.split("-").map(Number);return new Date(Date.UTC(y,m-1,d)).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"})};
+const fdate=s=>{if(!s)return "-";const[y,m,d]=s.split("-").map(Number);return new Date(Date.UTC(y,m-1,d)).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"})};
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 function toast(m,e){const t=document.createElement("div");t.className="toast"+(e?" err":"");t.setAttribute("role","status");t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),e?6000:2600)}
 async function api(method,path,body){
@@ -186,7 +186,7 @@ function timing(c){
 }
 function reminder(c){
   if(c.reminderSentAt)return "Sent "+fdate(c.reminderSentAt.slice(0,10));
-  if(c.status!=="pending")return "—";
+  if(c.status!=="pending")return "-";
   return daysTo(c.clearanceDate)<=7?"Goes out next morning":"On "+fdate(addDays(c.clearanceDate,-7));
 }
 function filtered(){
@@ -219,8 +219,8 @@ function render(){
     const d0=el("td");d0.append(el("span","ty "+c.kind,KSHORT[c.kind]));if(g)d0.append(el("div","s",c.form));
     const d2=el("td");d2.append(el("span","co"+(c.company==="Tech Hub IT"?" th":""),c.company==="Tech Hub IT"?"TECH HUB":"BIFOLD"));
     const d3=el("td");d3.append(el("div","t",c.payee));d3.append(el("div","s",c.payeeType+" · logged by "+c.createdBy));
-    const d4=el("td");d4.append(el("div","mono",c.chequeNo||"—"));d4.append(el("div","s",[c.bank,c.chequeDate?(g?"issued ":"dated ")+fdate(c.chequeDate):""].filter(Boolean).join(" · ")));
-    const d5=el("td");d5.append(el("div",null,c.reference||"—"));
+    const d4=el("td");d4.append(el("div","mono",c.chequeNo||"-"));d4.append(el("div","s",[c.bank,c.chequeDate?(g?"issued ":"dated ")+fdate(c.chequeDate):""].filter(Boolean).join(" · ")));
+    const d5=el("td");d5.append(el("div",null,c.reference||"-"));
     if(g&&c.poValue)d5.append(el("div","s","PO AED "+aed(c.poValue)+" · "+(c.amount/c.poValue*100).toFixed(1)+"%"));
     if(c.notes)d5.append(el("div","s",c.notes));
     const d6=el("td","r mono",aed(c.amount));

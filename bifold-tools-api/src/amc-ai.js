@@ -15,7 +15,8 @@ const PLAYBOOK = `BIFOLD AMC PLAYBOOK
 - SLA rows [Priority, Description, Response, Action Plan, Restoration] for P1–P4 scaled to size. Small: P1 1 hour / 2 hours / 8 business hours; P2 2 hours / 4 hours / 1 business day; P3 4 hours / next business day / 2 business days; P4 1 business day / 2 business days / 3 business days. Large: P1 15 minutes / 30 minutes / 4 hours; P2 20 minutes / 1 hour / 8 hours; P3 30 minutes / 2 hours / next business day; P4 30 minutes / 4 hours / 2 business days.
 - Payment: small → 100% annual advance on signing; larger → semi-annual 50/50 (signing and month 7), unless instructed otherwise.
 - Exclusion groups always: Scope Exclusions, Future Purchases, Customer Obligations, Security & Responsibility Model (text), Disclaimers & Liability, Confidentiality, System Size Assumption (text naming the baseline footprint).
-- Never invent quantities, models or sites that are not in the systems list. Professional UAE business English. Each bullet one sentence.`;
+- Never invent quantities, models or sites that are not in the systems list. Professional UAE business English. Each bullet one sentence.
+- Never use the em dash character (U+2014). Use a comma, colon or full stop instead.`;
 
 const PARTS = {
   intro: `{"subtitle": string, "planName": string (e.g. "IP Telephony Support"), "letterSubjectTopic": string (e.g. "Avaya IP Office Telephony Support Services"), "letter": [3 paragraphs for the cover letter], "understanding": {"paragraphs": [2 paragraphs], "drivers": [4-6 bullets]}, "lineItemDesc": string (one line naming the plan, the systems and "12 Months"), "paymentTerms": [1-2 strings describing only the payment split]}`,
@@ -53,7 +54,7 @@ Checklist items marked as issues: ${clean(b.issues, 2000) || "none"}.
 Engineer's rough notes (the only source of facts; add nothing the notes don't support):
 ${clean(b.notes, 4000)}
 
-Write clear, professional, customer-facing English. Reply with ONLY JSON: {"findings": [short sentences], "actions": [short sentences], "recommendations": [short sentences]}. Each array may be empty.`;
+Write clear, professional, customer-facing English. Never use the em dash character (U+2014); use a comma, colon or full stop. Reply with ONLY JSON: {"findings": [short sentences], "actions": [short sentences], "recommendations": [short sentences]}. Each array may be empty.`;
 }
 
 function parseJson(text) {

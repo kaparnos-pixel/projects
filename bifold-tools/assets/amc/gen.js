@@ -8,7 +8,7 @@ const GEN = (function () {
     addressLine: "Office A306, Saraya Avenue, Al Garhoud, Dubai, UAE  |  PO Box 554567",
     contactLine: "Tel: +971 04 264 0374  |  bifoldtech.com  |  ranjan@bifoldtech.com",
   };
-  const s = v => (v == null ? "" : String(v));
+  const s = v => (v == null ? "" : String(v)).replace(/\s*\u2014\s*/g, ", ");
   const fitBox = (p, maxW, maxH) => { let w = maxW, h = Math.round(maxW * p.h / p.w); if (h > maxH) { h = maxH; w = Math.round(maxH * p.w / p.h); } return { width: w, height: h }; };
   const lines = t => s(t).split(/\n+/).map(x => x.replace(/^\s*[-•*]\s*/, "").trim()).filter(Boolean);
 
@@ -101,7 +101,7 @@ const GEN = (function () {
       dRow("Attention:", meta.attention || "The Management"), dRow("Proposal No.:", meta.proposalNo), dRow("Date:", meta.date), dRow("Valid Until:", meta.validUntil),
     ], 260));
     cover.push(K.spacer());
-    cover.push(K.blockTable(NAVY, [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "CONFIDENTIAL  —  FOR THE NAMED RECIPIENT ONLY", bold: true, color: "FFFFFF", font: "Arial", size: 18, characterSpacing: 10 })] })], 130));
+    cover.push(K.blockTable(NAVY, [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "CONFIDENTIAL  |  FOR THE NAMED RECIPIENT ONLY", bold: true, color: "FFFFFF", font: "Arial", size: 18, characterSpacing: 10 })] })], 130));
 
     const L = cfg.letter || {}; const B = [];
     B.push(K.h1("1. Introduction"));
@@ -157,11 +157,11 @@ const GEN = (function () {
     if (so.governing) B.push(K.body(so.governing));
     B.push(K.spacer(200));
     B.push(signTable(D, K, ["For and on behalf of " + COMPANY.company, "For and on behalf of " + customer]));
-    B.push(new Paragraph({ spacing: { before: 320 }, alignment: AlignmentType.CENTER, children: [new TextRun({ text: "— End of Proposal —", italics: true, font: "Arial", color: MUTE, size: 20 })] }));
+    B.push(new Paragraph({ spacing: { before: 320 }, alignment: AlignmentType.CENTER, children: [new TextRun({ text: "End of Proposal", italics: true, font: "Arial", color: MUTE, size: 20 })] }));
 
     return K.doc([
       { properties: K.coverProps, children: cover },
-      { properties: K.contentProps, headers: { default: K.header(meta.headerTitle || ("AMC Proposal — " + customer)) }, footers: { default: K.footer() }, children: B },
+      { properties: K.contentProps, headers: { default: K.header(meta.headerTitle || ("AMC Proposal: " + customer)) }, footers: { default: K.footer() }, children: B },
     ]);
   }
 
@@ -210,14 +210,14 @@ const GEN = (function () {
         rows.push(new TableRow({ cantSplit: true, children: [0, 1].map(j => { const p = pair[j];
           return new TableCell({ width: { size: colW, type: WidthType.DXA }, borders: K.noBorders(), margins: { top: 100, bottom: 100, left: 80, right: 80 },
             children: p ? [new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ data: p.bytes, type: p.type || "jpg", transformation: fitBox(p, imgW, 240) })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 60 }, children: [new TextRun({ text: "Photo " + (i + j + 1) + (p.caption ? " — " + p.caption : ""), font: "Arial", size: 18, color: MUTE, italics: true })] })] : [new Paragraph("")] }); }) }));
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 60 }, children: [new TextRun({ text: "Photo " + (i + j + 1) + (p.caption ? ": " + p.caption : ""), font: "Arial", size: 18, color: MUTE, italics: true })] })] : [new Paragraph("")] }); }) }));
       }
       B.push(new Table({ width: { size: CW, type: WidthType.DXA }, columnWidths: [colW, colW], layout: TableLayoutType.FIXED, borders: K.noBorders(), rows }));
     }
     B.push(K.h1((n++) + ". Sign-off"));
     B.push(K.body("Both parties confirm that the maintenance visit described in this report was carried out on the date stated and that the findings above were reviewed on site."));
-    B.push(signTable(D, K, ["Bifold Technologies LLC — Engineer", "Customer Representative"], [v.engineers, v.customerRep]));
-    return K.doc([{ properties: K.contentProps, headers: { default: K.header("Maintenance Report — " + s(v.customerName)) }, footers: { default: K.footer() }, children: B }]);
+    B.push(signTable(D, K, ["Bifold Technologies LLC: Engineer", "Customer Representative"], [v.engineers, v.customerRep]));
+    return K.doc([{ properties: K.contentProps, headers: { default: K.header("Maintenance Report: " + s(v.customerName)) }, footers: { default: K.footer() }, children: B }]);
   }
 
   function contractDocx(D, c, visits, img) {
@@ -232,9 +232,9 @@ const GEN = (function () {
     const withNotes = visits.filter(v => v.status === "completed" && (lines(v.findings).length || lines(v.recommendations).length));
     if (withNotes.length) {
       B.push(K.h1("3. Key Findings & Recommendations"));
-      withNotes.forEach(v => { B.push(K.h2(fmtDate(v.scheduledDate) + " — " + typeLabel(v.type))); lines(v.findings).forEach(x => B.push(K.bullet(x))); lines(v.recommendations).forEach(x => B.push(K.bullet("Recommendation: " + x))); });
+      withNotes.forEach(v => { B.push(K.h2(fmtDate(v.scheduledDate) + ": " + typeLabel(v.type))); lines(v.findings).forEach(x => B.push(K.bullet(x))); lines(v.recommendations).forEach(x => B.push(K.bullet("Recommendation: " + x))); });
     }
-    return K.doc([{ properties: K.contentProps, headers: { default: K.header("Service Report — " + s(c.customerName)) }, footers: { default: K.footer() }, children: B }]);
+    return K.doc([{ properties: K.contentProps, headers: { default: K.header("Service Report: " + s(c.customerName)) }, footers: { default: K.footer() }, children: B }]);
   }
 
   /* ---------------- shared helpers ---------------- */
@@ -243,12 +243,12 @@ const GEN = (function () {
   const TYPES = { pm: "Preventive Maintenance", corrective: "Corrective Maintenance", emergency: "Emergency Call-out", survey: "Site Survey / Audit" };
   const typeLabel = t => TYPES[t] || s(t);
   const visitKindTitle = t => ({ pm: "Preventive Maintenance", corrective: "Corrective Maintenance", emergency: "Emergency Call-out", survey: "Site Survey" })[t] || "Maintenance Visit";
-  const resultLabel = r => ({ ok: "OK", issue: "Issue", na: "N/A" })[r] || "—";
+  const resultLabel = r => ({ ok: "OK", issue: "Issue", na: "N/A" })[r] || "-";
   function statusLabel(v) { return ({ scheduled: "Scheduled", in_progress: "In progress", completed: "Completed", cancelled: "Cancelled" })[v.status] || s(v.status); }
   function visitKv(v, ctx) {
     const time = [v.arrival, v.departure].filter(Boolean).join(" – ");
     return [["Report No.", s(v.reportNo)], ["Customer", s(v.customerName)], ["Site / Location", s(v.site || ctx.site)], ["Contract Ref.", s(v.ref)], ["Service Plan", s(ctx.plan)],
-      ["Visit Type", typeLabel(v.type)], ["Visit Date", fmtDate(v.completedDate || v.scheduledDate)], ["Time on Site", time || "—"], ["Engineer(s)", s(v.engineers) || "—"], ["Customer Representative", s(v.customerRep) || "—"]];
+      ["Visit Type", typeLabel(v.type)], ["Visit Date", fmtDate(v.completedDate || v.scheduledDate)], ["Time on Site", time || "-"], ["Engineer(s)", s(v.engineers) || "-"], ["Customer Representative", s(v.customerRep) || "-"]];
   }
   function contractKv(c, visits) {
     return [["Customer", s(c.customerName)], ["Contract Ref.", s(c.ref)], ["Service Plan", s(c.plan)], ["Contract Period", fmtDate(c.start) + " to " + fmtDate(c.end)],
@@ -263,7 +263,7 @@ const GEN = (function () {
 
   /* ---------------- PDF ---------------- */
   const rgb = h => [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-  const P = t => s(t).replace(/[—–]/g, "-").replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/…/g, "...").replace(/×/g, "x").replace(/[^\x00-\xFF•]/g, "");
+  const P = t => s(t).replace(/[\u2013\u2014]/g, "-").replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/…/g, "...").replace(/×/g, "x").replace(/[^\x00-\xFF•]/g, "");
   function pdfKit(jsPDF, img, headerTitle) {
     const doc = new jsPDF({ unit: "pt", format: "letter" });
     const W = 612, H = 792, M = 54, CWp = W - 2 * M, TOP = 90, BOT = H - 70;

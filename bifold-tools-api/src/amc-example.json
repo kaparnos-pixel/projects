@@ -1,10 +1,10 @@
 {
  "letter": {
   "toLocation": "Dubai, UAE",
-  "subject": "Annual Maintenance Contract Proposal — Avaya IP Office Telephony Support Services (Reference: ITSLA2026-StudioRep01)",
+  "subject": "Annual Maintenance Contract Proposal: Avaya IP Office Telephony Support Services (Reference: ITSLA2026-StudioRep01)",
   "salutation": "Dear Sir/Madam,",
   "body": [
-   "Bifold Technologies LLC is pleased to submit this Annual Maintenance Contract (AMC) proposal for the support and maintenance of your Avaya IP Office telephone system at Studio Republik Fitness Center LLC. Following our review of your environment — an Avaya IP Office PBX serving twelve IP handsets over a single PSTN line — we have structured a telephony support engagement designed to keep your voice communications stable, with rapid fault diagnosis, configuration management, and scheduled preventive maintenance.",
+   "Bifold Technologies LLC is pleased to submit this Annual Maintenance Contract (AMC) proposal for the support and maintenance of your Avaya IP Office telephone system at Studio Republik Fitness Center LLC. Following our review of your environment, an Avaya IP Office PBX serving twelve IP handsets over a single PSTN line, we have structured a telephony support engagement designed to keep your voice communications stable, with rapid fault diagnosis, configuration management, and scheduled preventive maintenance.",
    "This proposal outlines the scope of services, response and restoration commitments, service hours, deliverables, exclusions, and commercial terms for a twelve-month engagement. The terms herein are valid for thirty days from the date of issue.",
    "We look forward to the opportunity of supporting your telephony operations and building a long-term partnership with your team."
   ],
@@ -12,7 +12,7 @@
  },
  "understanding": {
   "paragraphs": [
-   "Studio Republik Fitness Center LLC operates a fitness and wellness facility in Dubai that depends on reliable voice communication for reception, membership services, departmental coordination, and inbound and outbound calling. The voice environment comprises an Avaya IP Office PBX, twelve Avaya IP telephone handsets, and a single PSTN line carrying external calls — each element of which must remain operational to sustain member service and day-to-day operations.",
+   "Studio Republik Fitness Center LLC operates a fitness and wellness facility in Dubai that depends on reliable voice communication for reception, membership services, departmental coordination, and inbound and outbound calling. The voice environment comprises an Avaya IP Office PBX, twelve Avaya IP telephone handsets, and a single PSTN line carrying external calls, each element of which must remain operational to sustain member service and day-to-day operations.",
    "Based on our review of your requirements, the engagement is to be delivered as a telephony support AMC providing scheduled preventive maintenance, remote support during business hours, on-call onsite attendance for major faults, configuration and moves/adds/changes management, and committed response and restoration timelines aligned to incident priority."
   ],
   "drivers": [
@@ -187,28 +187,28 @@
   "rows": [
    [
     "P1",
-    "Emergency — phone system down",
+    "Emergency: phone system down",
     "1 hour",
     "2 hours",
     "8 business hours"
    ],
    [
     "P2",
-    "High — multiple handsets or major feature affected",
+    "High: multiple handsets or major feature affected",
     "2 hours",
     "4 hours",
     "1 business day"
    ],
    [
     "P3",
-    "Medium — single handset or minor feature",
+    "Medium: single handset or minor feature",
     "4 hours",
     "Next business day",
     "2 business days"
    ],
    [
     "P4",
-    "Low — service request / MAC",
+    "Low: service request / MAC",
     "1 business day",
     "2 business days",
     "3 business days"

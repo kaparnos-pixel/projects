@@ -1,4 +1,4 @@
-// Bifold Tools — AMC Tracker. Talks to /api/amc/* (bifold-tools-api/src/amc.js) and the shared /api/customers list.
+// Bifold Tools: AMC Tracker. Talks to /api/amc/* (bifold-tools-api/src/amc.js) and the shared /api/customers list.
 (function(){
 "use strict";
 /* ============ constants ============ */
@@ -28,7 +28,9 @@ async function api(method, path, body) {
 }
 /* ============ utils ============ */
 const $ = id => document.getElementById(id);
-const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const noEm = v => String(v == null ? "" : v).replace(/\s*\u2014\s*/g, ", ");
+const deEm = o => typeof o === "string" ? noEm(o) : Array.isArray(o) ? o.map(deEm) : o && typeof o === "object" ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, deEm(v)])) : o;
+const esc = v => noEm(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = v => { const n = parseFloat(String(v == null ? "" : v).replace(/[^0-9.\-]/g, "")); return isFinite(n) ? n : 0; };
 const money = n => { const r = Math.round(n * 100) / 100; return r.toLocaleString("en-US", { minimumFractionDigits: r % 1 ? 2 : 0, maximumFractionDigits: 2 }); };
 const aed = n => "AED " + money(n);
@@ -125,13 +127,13 @@ function chip(st) {
 }
 function visitState(v) { if (v.status === "scheduled" && v.scheduledDate < today()) return "overdue"; return v.status; }
 function termHTML(c) {
-  if (!c) return '<span class="muted">—</span>';
+  if (!c) return '<span class="muted">-</span>';
   const st = contractState(c); const total = Math.max(1, daysTo(c.end) - daysTo(c.start)); const used = Math.min(total, Math.max(0, -daysTo(c.start)));
   const d = daysTo(c.end);
   const left = st === "renewed" ? "Renewed" : d < 0 ? `Expired ${-d} day${d === -1 ? "" : "s"} ago` : `${d} day${d === 1 ? "" : "s"} left`;
   return `<div class="term ${st}"><span class="small">${esc(fmt(c.start))} – ${esc(fmt(c.end))}</span><div class="track"><div class="fill" style="width:${Math.round(used / total * 100)}%"></div></div><span class="sub">${esc(left)}</span></div>`;
 }
-const nameOf = email => !email ? "—" : email === S.meId ? "You" : String(email).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+const nameOf = email => !email ? "-" : email === S.meId ? "You" : String(email).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
 /* ============ routing ============ */
 const VIEWS = ["overview", "amcs", "visits"];
@@ -175,9 +177,9 @@ function renderOverview() {
   ].map(([k, v, s, hot]) => `<div class="kpi${hot ? " hot" : ""}"><span class="k">${esc(k)}</span><span class="v mono">${esc(v)}</span><span class="s">${esc(s)}</span></div>`).join("");
 
   const att = [];
-  alertContracts().forEach(c => att.push({ when: c.end, html: `<span class="dateblock late"><div class="m">${esc(fmt(c.end).split(" ")[1] || "")}</div><div class="d">${esc(fmt(c.end).split(" ")[0])}</div></span><span><span class="t">${esc(c.customerName)}</span><br><span class="sub">${daysTo(c.end) < 0 ? "Contract expired — start the renewal" : "Contract expires in " + daysTo(c.end) + " days"} · ${esc(c.ref)}</span></span>${chip(contractState(c))}`, open: () => openAmcById(c.amcId) }));
+  alertContracts().forEach(c => att.push({ when: c.end, html: `<span class="dateblock late"><div class="m">${esc(fmt(c.end).split(" ")[1] || "")}</div><div class="d">${esc(fmt(c.end).split(" ")[0])}</div></span><span><span class="t">${esc(c.customerName)}</span><br><span class="sub">${daysTo(c.end) < 0 ? "Contract expired. Start the renewal" : "Contract expires in " + daysTo(c.end) + " days"} · ${esc(c.ref)}</span></span>${chip(contractState(c))}`, open: () => openAmcById(c.amcId) }));
   overdue.forEach(v => att.push({ when: v.scheduledDate, html: visitLiHTML(v), open: () => openVisit(v.id) }));
-  amcs.filter(a => a.status === "sent" && a.sentAt && daysTo(a.sentAt.slice(0, 10)) < -14).forEach(a => att.push({ when: a.sentAt, html: `<span class="dateblock"><div class="m">Sent</div><div class="d">${Math.abs(daysTo(a.sentAt.slice(0, 10)))}d</div></span><span><span class="t">${esc(a.customerName)}</span><br><span class="sub">Proposal sent ${esc(fmt(a.sentAt))} — follow up for a decision</span></span>${chip("sent")}`, open: () => openAmc(a) }));
+  amcs.filter(a => a.status === "sent" && a.sentAt && daysTo(a.sentAt.slice(0, 10)) < -14).forEach(a => att.push({ when: a.sentAt, html: `<span class="dateblock"><div class="m">Sent</div><div class="d">${Math.abs(daysTo(a.sentAt.slice(0, 10)))}d</div></span><span><span class="t">${esc(a.customerName)}</span><br><span class="sub">Proposal sent ${esc(fmt(a.sentAt))}. Follow up for a decision</span></span>${chip("sent")}`, open: () => openAmc(a) }));
   att.sort((a, b) => String(a.when).localeCompare(String(b.when)));
   listInto($("attention"), att.slice(0, 8), S.ready ? "Nothing needs attention right now." : "Loading…");
   const nx = visits.filter(v => v.status === "scheduled" || v.status === "in_progress").filter(v => v.scheduledDate >= t).sort((a, b) => (a.scheduledDate + (a.time || "")).localeCompare(b.scheduledDate + (b.time || ""))).slice(0, 8);
@@ -244,7 +246,7 @@ function renderVisits() {
   const tb = $("visitRows"); tb.innerHTML = "";
   rows.forEach(v => {
     const tr = document.createElement("tr"); tr.className = "click"; tr.tabIndex = 0;
-    tr.innerHTML = `<td><b>${esc(fmt(v.scheduledDate))}</b>${v.time ? `<div class="sub">${esc(v.time)}</div>` : ""}</td><td><b>${esc(v.customerName)}</b><div class="ref">${esc(v.ref)}</div></td><td class="small">${esc(GEN.typeLabel(v.type))}</td><td class="small">${esc(v.engineers || "—")}</td><td>${chip(visitState(v))}</td><td class="small">${v.status === "completed" ? `<span class="ref">${esc(v.reportNo || "")}</span><div class="sub">${(v.photos || []).length} photo${(v.photos || []).length === 1 ? "" : "s"}</div>` : '<span class="muted">—</span>'}</td>`;
+    tr.innerHTML = `<td><b>${esc(fmt(v.scheduledDate))}</b>${v.time ? `<div class="sub">${esc(v.time)}</div>` : ""}</td><td><b>${esc(v.customerName)}</b><div class="ref">${esc(v.ref)}</div></td><td class="small">${esc(GEN.typeLabel(v.type))}</td><td class="small">${esc(v.engineers || "-")}</td><td>${chip(visitState(v))}</td><td class="small">${v.status === "completed" ? `<span class="ref">${esc(v.reportNo || "")}</span><div class="sub">${(v.photos || []).length} photo${(v.photos || []).length === 1 ? "" : "s"}</div>` : '<span class="muted">-</span>'}</td>`;
     tr.onclick = () => openVisit(v.id); tr.onkeydown = e => { if (e.key === "Enter") openVisit(v.id); };
     tb.appendChild(tr);
   });
@@ -291,10 +293,10 @@ wireDrop($("a_drop"), $("a_fileInput"), async files => {
 });
 /* contract details on the AMC form: defaults follow the template until the creator changes them */
 const PAY_TEXT = {
-  annual: ["Annual advance payment — 100% due on contract signing."],
-  semi: ["Semi-annual payment — 50% on contract signing and 50% at the start of month 7."],
-  quarterly: ["Quarterly payment in advance — four equal instalments of 25%, the first due on contract signing."],
-  monthly: ["Monthly payment in advance — twelve equal instalments, the first due on contract signing."],
+  annual: ["Annual advance payment: 100% due on contract signing."],
+  semi: ["Semi-annual payment: 50% on contract signing and 50% at the start of month 7."],
+  quarterly: ["Quarterly payment in advance: four equal instalments of 25%, the first due on contract signing."],
+  monthly: ["Monthly payment in advance: twelve equal instalments, the first due on contract signing."],
 };
 const PM_TEXT = { monthly: "Monthly", quarterly: "Quarterly", semiannual: "Every 6 months", annual: "Once a year", none: "Not included" };
 const PM_MONTHS = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12, none: 0 };
@@ -349,14 +351,14 @@ $("fAmc").onsubmit = async e => {
       const patch = Object.assign({ customerId: cid, customerName: cust.name, systems, value, files: S.draftFiles }, T);
       const p = editingAmc.proposal;
       if (p && editingAmc.systems === systems && editingAmc.customerId === cid) {
-        patch.proposal = assemble(Object.assign({}, editingAmc, T, { value }), cust, contentFromProposal(p)); patch.proposalSource = editingAmc.proposalSource || "template";
+        patch.proposal = deEm(assemble(Object.assign({}, editingAmc, T, { value }), cust, contentFromProposal(p))); patch.proposalSource = editingAmc.proposalSource || "template";
       }
       await writeAmc(editingAmc, patch, patch.proposal ? "Edited contract details (proposal updated)" : changed ? "Edited systems / value" : "Edited AMC details");
       $("dAmc").close(); toast("AMC updated"); renderAll();
     } else {
       const a = await api("POST", "amc/amcs", Object.assign({ customerId: cid, systems, value, files: S.draftFiles }, T));
       a._full = true; a.proposalStatus = "generating"; S.amcs.set(a.id, a);
-      $("dAmc").close(); toast("AMC saved — drafting the proposal"); renderAll(); openAmc(a);
+      $("dAmc").close(); toast("AMC saved. Drafting the proposal now."); renderAll(); openAmc(a);
       generateProposal(a, "");
     }
   } catch (err) { $("a_err").textContent = errMsg(err); }
@@ -396,8 +398,8 @@ function fallbackContent(a, cust) {
     ["Onsite Support", size === "large" ? "Scheduled + On-Call" : "On-Call + PM Visits", "Major faults and scheduled PM"], ["Configuration Changes", "Included", "Reasonable volume"], ["Firmware & Software Updates", "Included", "As released and validated"], ["Configuration Backup", "Included", "Periodic backup"],
     ["Email & Telephone Support", "Included", "Ticketing and P1 emergency line"], ["Named Engineer Contacts", size === "small" ? "2" : "3", "Primary and secondary engineers"], ["Coverage Hours", size === "large" ? "Mon–Sat, 8 AM – 8 PM" : "Mon–Sat, 9 AM – 6 PM", "P1 best-effort outside hours"],
     ["Hardware & Spare Parts", "Excluded", "Quoted separately"], ["Vendor Licences & Subscriptions", "Excluded", "Client to hold valid entitlements"], ["Service Reports", pm, "Visit report after each PM"]];
-  const sla = size === "large" ? [["P1", "Emergency — service down", "30 minutes", "1 hour", "4 hours"], ["P2", "High — significant impact", "1 hour", "2 hours", "8 hours"], ["P3", "Medium — limited impact", "2 hours", "Next business day", "2 business days"], ["P4", "Low — service request", "4 hours", "2 business days", "3 business days"]]
-    : [["P1", "Emergency — system down", "1 hour", "2 hours", "8 business hours"], ["P2", "High — major feature or multiple users affected", "2 hours", "4 hours", "1 business day"], ["P3", "Medium — single user or minor feature", "4 hours", "Next business day", "2 business days"], ["P4", "Low — service request / change", "1 business day", "2 business days", "3 business days"]];
+  const sla = size === "large" ? [["P1", "Emergency: service down", "30 minutes", "1 hour", "4 hours"], ["P2", "High: significant impact", "1 hour", "2 hours", "8 hours"], ["P3", "Medium: limited impact", "2 hours", "Next business day", "2 business days"], ["P4", "Low: service request", "4 hours", "2 business days", "3 business days"]]
+    : [["P1", "Emergency: system down", "1 hour", "2 hours", "8 business hours"], ["P2", "High: major feature or multiple users affected", "2 hours", "4 hours", "1 business day"], ["P3", "Medium: single user or minor feature", "4 hours", "Next business day", "2 business days"], ["P4", "Low: service request / change", "1 business day", "2 business days", "3 business days"]];
   const short = shortName(cust.name);
   return {
     subtitle: PLAN[cat], planName: PLAN[cat].replace(" Plan", ""), letterSubjectTopic: PLAN[cat].replace(" Plan", " Services"),
@@ -423,8 +425,8 @@ function fallbackContent(a, cust) {
       { heading: "Disclaimers & Liability", bullets: ["No liability for force majeure events outside the reasonable control of either party.", "The customer is responsible for the legality of all software in use.", "No software will be installed without written approval from the customer.", "Bifold is not responsible for cyberattacks, toll fraud, hacking incidents, or resulting loss arising from factors outside its control."] },
       { heading: "Confidentiality", bullets: ["This proposal is confidential and intended solely for the named recipient. It may not be reproduced or disclosed to any third party without the prior written consent of Bifold Technologies LLC.", "All Bifold engineers are bound by confidentiality obligations covering client systems, data, and operational information.", "A non-disclosure agreement (NDA) will be executed before the first onsite visit, if not already in place."] },
       { heading: "System Size Assumption", text: `This agreement is based on the current footprint of ${sysOne}. Scope and commercials may be reviewed if the estate is materially expanded beyond this baseline.` }] },
-    lineItemDesc: `Annual Maintenance Contract — ${PLAN[cat].replace(" Plan", "")} (${sysLines.join(", ").slice(0, 160)}) — ${termMonthsOf(a.proposedStart || defStart(), (a.terms && a.terms.endDate) || endFor(a.proposedStart || defStart(), a.termMonths || 12))} Months`,
-    paymentTerms: size === "small" ? ["Annual advance payment — 100% due on contract signing."] : ["Semi-annual payment — 50% on contract signing and 50% at the start of month 7."],
+    lineItemDesc: `Annual Maintenance Contract: ${PLAN[cat].replace(" Plan", "")} (${sysLines.join(", ").slice(0, 160)}), ${termMonthsOf(a.proposedStart || defStart(), (a.terms && a.terms.endDate) || endFor(a.proposedStart || defStart(), a.termMonths || 12))} Months`,
+    paymentTerms: size === "small" ? ["Annual advance payment: 100% due on contract signing."] : ["Semi-annual payment: 50% on contract signing and 50% at the start of month 7."],
     _short: short,
   };
 }
@@ -444,18 +446,18 @@ function assemble(a, cust, content) {
   if (T.pm && T.pm !== "none") { const r = rows.find(x => /service reports/i.test(x[0])); if (r) r[1] = PM_TEXT[T.pm]; }
   if (T.coverage) setRow(/^coverage hours/i, "Coverage Hours", T.coverage, /24/.test(T.coverage) ? "Round-the-clock cover" : "P1 best-effort outside hours");
   return {
-    meta: { customer: cust.name, attention, proposalNo: a.ref, date: fmt(t), dateISO: t, validUntil: fmt(valid), validISO: valid, subtitle: content.subtitle, headerTitle: "AMC Proposal — " + short },
-    letter: { toName: attention, toLocation: T.location || (cust.emirate && cust.emirate !== "Outside UAE" ? cust.emirate + ", UAE" : "Dubai, UAE"), subject: `Annual Maintenance Contract Proposal — ${content.letterSubjectTopic || content.planName} (Reference: ${a.ref})`, salutation: attention && attention !== "The Management" ? "Dear " + attention.split(",")[0].trim() + "," : "Dear Sir/Madam,", body: content.letter, signoff: "Sincerely," },
+    meta: { customer: cust.name, attention, proposalNo: a.ref, date: fmt(t), dateISO: t, validUntil: fmt(valid), validISO: valid, subtitle: content.subtitle, headerTitle: "AMC Proposal: " + short },
+    letter: { toName: attention, toLocation: T.location || (cust.emirate && cust.emirate !== "Outside UAE" ? cust.emirate + ", UAE" : "Dubai, UAE"), subject: `Annual Maintenance Contract Proposal: ${content.letterSubjectTopic || content.planName} (Reference: ${a.ref})`, salutation: attention && attention !== "The Management" ? "Dear " + attention.split(",")[0].trim() + "," : "Dear Sir/Madam,", body: content.letter, signoff: "Sincerely," },
     about: ABOUT, understanding: content.understanding, scope: content.scope, servicePlan: Object.assign({}, content.servicePlan, { rows }), response: content.response, documentation: content.documentation,
     commercial: { intro: `The commercial terms set out below cover the full ${months}-month engagement from ${fmt(start)} to ${fmt(end)}.`, startISO: start, endISO: end, vatPct: 5, valueNum: v,
-      lineItems: [{ desc: content.lineItemDesc || ("Annual Maintenance Contract — " + content.planName + " — 12 Months"), amount: money(v) }], subtotal: money(v), vat: money(vat), vatLabel: "VAT @ 5%", total: money(total), paymentTerms: pay,
+      lineItems: [{ desc: content.lineItemDesc || ("Annual Maintenance Contract: " + content.planName + ", 12 Months"), amount: money(v) }], subtotal: money(v), vat: money(vat), vatLabel: "VAT @ 5%", total: money(total), paymentTerms: pay,
       validity: ["All values are quoted in UAE Dirhams (AED).", `Proposal validity: ${validDays} days from the date of issue (valid until ${fmt(valid)}).`] },
     exclusions: content.exclusions,
     signoff: { intro: `By signing below, both parties acknowledge agreement to the scope, service levels, commercial terms, and conditions set out in this Annual Maintenance Contract proposal. This document, upon signature, constitutes the binding agreement between Bifold Technologies LLC and ${cust.name} for the contract period stated.`, period: `${fmt(start)} to ${fmt(end)}`, plan: content.planName, total: `${aed(total)} (inclusive of VAT)`, governing: "This agreement is governed by the laws of the United Arab Emirates. Either party may terminate this agreement with two months prior written notice. Any material change in scope requires written approval from both parties." },
   };
 }
 function contentFromProposal(p) {
-  const m = String(p.letter.subject || "").match(/Proposal — (.*) \(Reference/);
+  const m = String(p.letter.subject || "").match(/Proposal(?: \u2014|:) (.*) \(Reference/);
   return { subtitle: p.meta.subtitle, planName: p.signoff.plan, letterSubjectTopic: m ? m[1] : p.signoff.plan, letter: p.letter.body, understanding: p.understanding, scope: p.scope,
     servicePlan: p.servicePlan, response: p.response, documentation: p.documentation, exclusions: p.exclusions, lineItemDesc: (p.commercial.lineItems[0] || {}).desc,
     paymentTerms: (p.commercial.paymentTerms || []).filter(x => !/commences upon|prevailing rate|Additional charges/.test(x)) };
@@ -480,7 +482,7 @@ async function generateProposal(a, notes) {
     if (terms && terms.exclusions && Array.isArray(terms.exclusions.groups) && terms.documentation) { content.documentation = terms.documentation; content.exclusions = terms.exclusions; parts++; }
   }
   const source = parts === 4 ? "claude" : parts ? "mixed" : "template";
-  const cfg = assemble(a, cust, content);
+  const cfg = deEm(assemble(a, cust, content));
   try {
     await writeAmc(S.amcs.get(a.id) || a, { proposal: cfg, proposalSource: source }, (notes ? "Redrafted proposal" : "Drafted proposal") + (source === "claude" ? " with Claude" : source === "mixed" ? " (Claude + template)" : " from template"));
     renderAll(); toast("Proposal ready for " + shortName(cust.name));
@@ -557,8 +559,8 @@ function renderAmcSheet() {
   const body = [];
   body.push(`<div class="sec"><h3>Contract</h3><div class="facts">
     <div class="fact"><div class="k">Annual value</div><div class="v mono">${esc(aed(v))}</div><div class="sub">${esc(aed(v * 1.05))} incl. VAT</div></div>
-    <div class="fact"><div class="k">Plan</div><div class="v">${esc(a.planName || "—")}</div></div>
-    <div class="fact"><div class="k">Contact</div><div class="v">${esc(cust.contactName || "—")}</div><div class="sub">${esc(cust.email || "")}</div></div>
+    <div class="fact"><div class="k">Plan</div><div class="v">${esc(a.planName || "-")}</div></div>
+    <div class="fact"><div class="k">Contact</div><div class="v">${esc(cust.contactName || "-")}</div><div class="sub">${esc(cust.email || "")}</div></div>
     <div class="fact"><div class="k">Created</div><div class="v">${esc(fmt(a.createdAt))}</div><div class="sub">by ${esc(nameOf(a.owner))}</div></div></div>
     <div class="systems">${esc(a.systems)}</div>
     <div class="docrow"><button type="button" class="sm" id="x_edit">Edit</button>${a.status !== "awarded" ? `<button type="button" class="primary sm" id="x_award">Mark as awarded</button>` : ""}${a.status === "draft" ? '<button type="button" class="sm" id="x_sent">Mark as sent</button>' : ""}${a.status === "draft" || a.status === "sent" ? '<button type="button" class="sm" id="x_lost">Mark as lost</button>' : ""}${a.status === "lost" ? '<button type="button" class="sm" id="x_reopen">Reopen</button>' : ""}</div></div>`);
@@ -568,12 +570,12 @@ function renderAmcSheet() {
     const msg = cst === "renewed" ? "This contract was renewed." : d < 0 ? `Expired ${-d} days ago on ${fmt(c.end)}.` : cst === "expiring" ? `Expires in ${d} days on ${fmt(c.end)}. Start the renewal now.` : `${d} days left. Expiry alert goes to ${c.notifyEmail} and ranjan@bifoldtech.com ${c.alertDays} days before ${fmt(c.end)}.`;
     const vs = [...S.visits.values()].filter(x => x.amcId === a.id).sort((x, y) => x.scheduledDate.localeCompare(y.scheduledDate));
     body.push(`<div class="sec"><h3>Awarded contract</h3>${termHTML(c)}<div class="callout ${cls}">${esc(msg)}${(cst === "expiring" || cst === "expired") && !c.renewalAmcId ? '<button type="button" class="sm" id="x_renew" style="margin-left:auto">Start renewal</button>' : ""}${c.renewalAmcId ? `<button type="button" class="linky" id="x_goRenewal" style="margin-left:auto">Open renewal</button>` : ""}</div>
-      <div class="facts"><div class="fact"><div class="k">Awarded</div><div class="v">${esc(fmt(c.awardDate))}</div></div><div class="fact"><div class="k">LPO</div><div class="v mono">${esc(c.lpo || "—")}</div></div><div class="fact"><div class="k">PM cadence</div><div class="v">${esc(PM_LABEL[c.pmMonths] || "—")}</div></div><div class="fact"><div class="k">Visits</div><div class="v">${vs.filter(x => x.status === "completed").length} of ${vs.length} done</div></div></div>
+      <div class="facts"><div class="fact"><div class="k">Awarded</div><div class="v">${esc(fmt(c.awardDate))}</div></div><div class="fact"><div class="k">LPO</div><div class="v mono">${esc(c.lpo || "-")}</div></div><div class="fact"><div class="k">PM cadence</div><div class="v">${esc(PM_LABEL[c.pmMonths] || "-")}</div></div><div class="fact"><div class="k">Visits</div><div class="v">${vs.filter(x => x.status === "completed").length} of ${vs.length} done</div></div></div>
       <div class="docrow"><button type="button" class="primary sm" id="x_visit">Schedule visit</button><span class="muted small">Service report:</span><button type="button" class="sm" id="x_srDocx">Word</button><button type="button" class="sm" id="x_srPdf">PDF</button><button type="button" class="ghost sm" id="x_editAward">Edit award details</button></div>
       <div class="list" style="border:1px solid var(--line);border-radius:8px" id="x_visits"></div></div>`);
   }
   body.push(`<div class="sec"><h3>Proposal</h3>${proposalBlock(a)}</div>`);
-  body.push(`<div class="sec"><h3>Files</h3><div class="files" id="x_files">${filesHTML(a.files, true)}</div><label class="drop" id="x_drop">Drop files here or click to upload — up to 10 MB each<input type="file" id="x_fileInput" multiple></label></div>`);
+  body.push(`<div class="sec"><h3>Files</h3><div class="files" id="x_files">${filesHTML(a.files, true)}</div><label class="drop" id="x_drop">Drop files here or click to upload (up to 10 MB each)<input type="file" id="x_fileInput" multiple></label></div>`);
   body.push(`<div class="sec"><h3>Activity</h3><div class="log">${(a.history || []).slice().reverse().map(h => `<div><time>${esc(fmt(h.at))}</time><span>${esc(h.text)} · ${esc(nameOf(h.by))}</span></div>`).join("") || '<span class="muted">No activity yet.</span>'}</div></div>`);
   if (a.status !== "awarded" || S.isAdmin) body.push(`<div class="sec"><h3>Remove</h3><div><button type="button" class="danger sm" id="x_delete">Delete this AMC</button> <span class="muted small">Removes the record and its proposal. Files stay in storage.</span></div></div>`);
   $("s_body").innerHTML = body.join("");
@@ -730,7 +732,7 @@ $("fEdit").onsubmit = async e => {
   const T = Object.assign({}, a.terms || {}, { endDate: end, attention: g("pe_attn"), location: g("pe_loc"), validDays: [15, 30, 45, 60, 90].includes(validDays) ? validDays : (a.terms || {}).validDays || 30 });
   const btn = $("pe_save"); busy(btn, true, "Saving");
   try {
-    await writeAmc(S.amcs.get(a.id) || a, { proposal: cfg, proposalSource: a.proposalSource || "template", value: v, proposedStart: start, termMonths: [6, 12, 24, 36].includes(months) ? months : (a.termMonths || 12), terms: T }, "Edited proposal");
+    await writeAmc(S.amcs.get(a.id) || a, { proposal: deEm(cfg), proposalSource: a.proposalSource || "template", value: v, proposedStart: start, termMonths: [6, 12, 24, 36].includes(months) ? months : (a.termMonths || 12), terms: T }, "Edited proposal");
     $("sEdit").close(); toast("Proposal saved"); renderAll();
   } catch (x) { err(errMsg(x)); } finally { busy(btn, false); }
 };
@@ -772,7 +774,7 @@ $("fAward").onsubmit = async e => {
       pmMonths: +v("aw_pm"), alertDays: +v("aw_alert"), notifyEmail: v("aw_email"), schedule: !prev && $("aw_schedule").checked, checklist: defaultChecklist(a.systems) });
     r.amc._full = true; S.amcs.set(r.amc.id, r.amc); S.contracts.set(r.contract.amcId, r.contract); r.visits.forEach(x => S.visits.set(x.id, x));
     if (a.renewalOf && S.contracts.get(a.renewalOf)) S.contracts.get(a.renewalOf).status = "renewed";
-    toast(prev ? "Award details updated" : r.visits.length ? `Awarded — ${r.visits.length} PM visit${r.visits.length === 1 ? "" : "s"} scheduled` : "Marked as awarded");
+    toast(prev ? "Award details updated" : r.visits.length ? `Awarded. ${r.visits.length} PM visit${r.visits.length === 1 ? "" : "s"} scheduled` : "Marked as awarded");
     $("dAward").close(); renderAll();
   } catch (err) { $("aw_err").textContent = errMsg(err); }
   finally { busy(btn, false); }
@@ -791,7 +793,7 @@ async function createVisit(c, o) {
 }
 function openNewVisit(amcId) {
   const cs = [...S.contracts.values()].filter(c => ["active", "expiring"].includes(contractState(c))).sort((a, b) => a.customerName.localeCompare(b.customerName));
-  if (!cs.length) { toast("Mark an AMC as awarded first — visits belong to awarded contracts.", 4000); return; }
+  if (!cs.length) { toast("Mark an AMC as awarded first. Visits belong to awarded contracts.", 4000); return; }
   $("nv_contract").innerHTML = cs.map(c => `<option value="${esc(c.amcId)}">${esc(c.customerName)} · ${esc(c.ref)}</option>`).join("");
   if (amcId) $("nv_contract").value = amcId;
   $("nv_type").value = "pm"; $("nv_date").value = today(); $("nv_time").value = ""; $("nv_eng").value = ""; $("nv_notes").value = ""; $("nv_err").textContent = "";
@@ -831,7 +833,7 @@ function renderVisitSheet() {
     <label class="f">Findings &amp; observations <span class="hint">One per line</span><textarea id="vf_find" rows="4">${esc(v.findings)}</textarea></label>
     <label class="f">Actions taken<textarea id="vf_act" rows="3">${esc(v.actions)}</textarea></label>
     <label class="f">Recommendations<textarea id="vf_rec" rows="3">${esc(v.recommendations)}</textarea></label></div>`);
-  B.push(`<div class="sec"><h3>Site photos</h3><div class="photos" id="vf_photos"></div>${'<label class="drop" id="vf_pdrop">Add site photos — drop images or click to choose<input type="file" id="vf_pinput" accept="image/*" multiple></label>'}</div>`);
+  B.push(`<div class="sec"><h3>Site photos</h3><div class="photos" id="vf_photos"></div>${'<label class="drop" id="vf_pdrop">Add site photos: drop images or click to choose<input type="file" id="vf_pinput" accept="image/*" multiple></label>'}</div>`);
   B.push(`<div class="sec"><h3>Documents</h3><div class="files" id="vf_files">${filesHTML(v.files, true)}</div>${'<label class="drop" id="vf_fdrop">Upload signed job sheet or other documents<input type="file" id="vf_finput" multiple></label>'}</div>`);
   B.push(`<div class="sec"><h3>Report</h3><div class="docrow"><button type="button" class="sm" id="vf_docx">Word report</button><button type="button" class="sm" id="vf_pdf">PDF report</button><button type="button" class="accent sm" id="vf_share">Share with customer</button></div>
     ${(v.shares || []).length ? `<div class="log">${v.shares.slice(-3).reverse().map(s => `<div><time>${esc(fmt(s.at))}</time><span>${esc(s.mode === "draft" ? "Outlook draft for" : "Emailed to")} ${esc(s.to)}</span></div>`).join("")}</div>` : ""}</div>`);
@@ -896,7 +898,7 @@ function wireVisit() {
   on("vf_start", async () => { try { await saveVisit({ status: "in_progress", startedAt: nowISO(), arrival: $("vf_arr").value || new Date().toTimeString().slice(0, 5) }, "Visit started"); } catch (e) { err(errMsg(e)); } });
   on("vf_complete", async () => { readVisitForm(); const open = vDraft.checklist.filter(c => !c.result).length;
     if (!vDraft.engineers) { err("Add the engineer name before completing the visit."); return; }
-    try { await saveVisit({ status: "completed", completedAt: nowISO(), completedDate: vDraft.status === "completed" ? vDraft.completedDate : today(), departure: $("vf_dep").value || new Date().toTimeString().slice(0, 5) }, open ? `Visit completed — ${open} checklist item${open === 1 ? "" : "s"} left blank` : "Visit completed"); } catch (e) { err(errMsg(e)); } });
+    try { await saveVisit({ status: "completed", completedAt: nowISO(), completedDate: vDraft.status === "completed" ? vDraft.completedDate : today(), departure: $("vf_dep").value || new Date().toTimeString().slice(0, 5) }, open ? `Visit completed. ${open} checklist item${open === 1 ? "" : "s"} left blank` : "Visit completed"); } catch (e) { err(errMsg(e)); } });
   on("vf_reopen", async () => { try { await saveVisit({ status: "in_progress" }, "Visit reopened"); } catch (e) { err(errMsg(e)); } });
   on("vf_cancel", async () => { try { await saveVisit({ status: "cancelled" }, "Visit cancelled"); } catch (e) { err(errMsg(e)); } });
   arm($("vf_delete"), "Click again to delete", async () => { try { await api("DELETE", "amc/visits/" + encodeURIComponent(vDraft.id)); S.visits.delete(vDraft.id); $("sVisit").close(); toast("Visit deleted"); renderAll(); } catch (e) { err(errMsg(e)); } });
@@ -907,10 +909,10 @@ function wireVisit() {
       const c = S.contracts.get(vDraft.amcId) || {};
       const issues = vDraft.checklist.filter(x => x.result === "issue").map(x => x.item + (x.note ? " (" + x.note + ")" : "")).join("; ");
       const r = await api("POST", "amc/ai", { kind: "visit", customerName: vDraft.customerName, visitType: GEN.typeLabel(vDraft.type), systems: c.systems || "", issues, notes: rough });
-      const j = a => Array.isArray(a) ? a.map(x => "• " + String(x)).join("\n") : "";
+      const j = a => Array.isArray(a) ? a.map(x => "• " + noEm(x)).join("\n") : "";
       const add = (cur, nw) => [cur.trim(), nw].filter(Boolean).join("\n");
       $("vf_find").value = add($("vf_find").value, j(r.findings)); $("vf_act").value = add($("vf_act").value, j(r.actions)); $("vf_rec").value = add($("vf_rec").value, j(r.recommendations)); vDirty = true;
-      toast("Drafted — review and save");
+      toast("Drafted. Review it and save.");
     } catch (e) { err(errMsg(e)); }
     finally { busy(b, false); }
   });
@@ -941,13 +943,13 @@ function openShare(ctx) {
     if (!a.proposal) { toast("Draft the proposal first."); return; }
     $("sh_title").textContent = "Send proposal to " + shortName(a.customerName);
     $("sh_to").value = cust.email || ""; $("sh_cc").value = myEmail !== RANJAN ? RANJAN : "";
-    $("sh_subject").value = `AMC Proposal ${a.ref} — ${a.proposal.meta.subtitle} — Bifold Technologies`;
+    $("sh_subject").value = `AMC Proposal ${a.ref} | ${a.proposal.meta.subtitle} | Bifold Technologies`;
     $("sh_msg").value = `${a.proposal.letter.salutation}\n\nPlease find attached our Annual Maintenance Contract proposal for ${a.customerName}, covering ${GEN.lines(a.systems).join(", ")}.\n\nThe total contract value is AED ${a.proposal.commercial.total} including VAT, and the proposal is valid until ${a.proposal.meta.validUntil}.\n\nWe would be glad to walk you through it at your convenience.`;
   } else {
     const v = ctx.v; const c = S.contracts.get(v.amcId) || {};
     $("sh_title").textContent = "Send visit report to " + shortName(v.customerName);
     $("sh_to").value = c.contactEmail || ""; $("sh_cc").value = "";
-    $("sh_subject").value = `Maintenance Report ${v.reportNo} — ${v.customerName} — ${fmt(v.completedDate || v.scheduledDate)}`;
+    $("sh_subject").value = `Maintenance Report ${v.reportNo} | ${v.customerName} | ${fmt(v.completedDate || v.scheduledDate)}`;
     $("sh_msg").value = `Dear ${v.customerRep || c.contactName || "Sir/Madam"},\n\nThank you for your support during our ${GEN.typeLabel(v.type).toLowerCase()} visit on ${fmt(v.completedDate || v.scheduledDate)}. Please find the visit report attached, with a summary below.\n\nPlease let us know if you have any questions.`;
   }
   $("sh_how").innerHTML = S.features.mail
@@ -965,7 +967,7 @@ function shareBody() {
     const v = shareCtx.v;
     const T = (h, rows) => `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse"><thead><tr>${h.map(x => `<th align="left">${esc(x)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => "<tr>" + r.map(c => `<td>${esc(c)}</td>`).join("") + "</tr>").join("")}</tbody></table>`;
     const UL = t => { const l = GEN.lines(t); return l.length ? "<ul>" + l.map(x => `<li>${esc(x)}</li>`).join("") + "</ul>" : "<p>None.</p>"; };
-    summary = `<hr><h3>Visit summary</h3>${T(["Item", "Detail"], [["Customer", v.customerName], ["Contract", v.ref], ["Visit type", GEN.typeLabel(v.type)], ["Date", fmt(v.completedDate || v.scheduledDate)], ["Engineer(s)", v.engineers || "—"]])}<h3>Findings</h3>${UL(v.findings)}<h3>Recommendations</h3>${UL(v.recommendations)}`;
+    summary = `<hr><h3>Visit summary</h3>${T(["Item", "Detail"], [["Customer", v.customerName], ["Contract", v.ref], ["Visit type", GEN.typeLabel(v.type)], ["Date", fmt(v.completedDate || v.scheduledDate)], ["Engineer(s)", v.engineers || "-"]])}<h3>Findings</h3>${UL(v.findings)}<h3>Recommendations</h3>${UL(v.recommendations)}`;
   }
   return msg + sig + summary;
 }

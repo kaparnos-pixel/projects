@@ -39,18 +39,20 @@ module.exports = function makeAccess(H) {
     return v;
   }
   const seenToday = new Map();
-  async function touch(email) {
+  // Stamps the person's last sign-in (once a day). Returns true the first time today, so the sign-in is logged once.
+  function touch(email) {
     const day = new Date().toISOString().slice(0, 10);
-    if (seenToday.get(email) === day) return;
+    if (seenToday.get(email) === day) return false;
     seenToday.set(email, day);
-    try { await (await table("accessseen")).upsertEntity({ partitionKey: "seen", rowKey: email, lastSeen: new Date().toISOString() }, "Merge"); } catch {}
+    table("accessseen").then(t => t.upsertEntity({ partitionKey: "seen", rowKey: email, lastSeen: new Date().toISOString() }, "Merge")).catch(() => {});
+    return true;
   }
 
   // Which section a request needs. Returns null when any signed-in user may make it.
   function need(method, seg, body) {
     const [a, b, c] = seg;
     if (a === "me" || a === "alerts") return null;
-    if (a === "access") return "manager";
+    if (a === "access" || a === "audit") return "manager";
     if (a === "customers") {
       if (method === "GET") return "any";
       return method === "DELETE" ? "manager" : "customersOrTool";

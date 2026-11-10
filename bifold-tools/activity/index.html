@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bifold Activity Log</title>
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
+<style>
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:20px}
+.filters{display:grid;grid-template-columns:minmax(200px,2fr) repeat(4,minmax(140px,1fr));gap:10px;margin-bottom:12px}
+@media (max-width:900px){.filters{grid-template-columns:1fr 1fr}}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:12px}
+.kpi{padding:12px 14px}
+.kpi .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700}
+.kpi .v{font-size:22px;font-weight:800;margin-top:2px;font-family:var(--f-num)}
+.kpi.bad .v{color:var(--red)}
+.listpanel{padding:0;overflow:hidden}
+table.log{width:100%;border-collapse:collapse}
+.log th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)}
+.log td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13px}
+.log td.w{white-space:nowrap;color:var(--muted);font-size:12px}
+.log .who{font-weight:700;overflow-wrap:anywhere;min-width:190px}
+.log .act{font-weight:600}
+.log .tg{overflow-wrap:anywhere}
+.log .dt{font-size:12px;color:var(--muted);overflow-wrap:anywhere;margin-top:2px}
+.log tr.bad td{background:color-mix(in srgb,var(--red) 7%,transparent)}
+.log tr.bad .act{color:var(--red)}
+.area{font-size:11px;font-weight:700;border-radius:99px;padding:2px 8px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.more{display:block;margin:12px auto}
+.note{font-size:12.5px;color:var(--muted)}
+.tblwrap{max-height:none;overflow:auto}
+@media (max-width:760px){.log thead{display:none}.log tr{display:block;padding:8px 12px;border-bottom:1px solid var(--line)}.log td{display:block;border:0;padding:2px 0}}
+</style>
+<script src="/assets/access.js" data-section="manager"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1><span class="tag">Bifold Tools</span>Activity log</h1>
+      <p class="sub">Everything people do in the tools: what they created, edited, uploaded, opened, downloaded, emailed or deleted, access changes, sign-ins and refused attempts. Entries can't be changed or removed.</p>
+    </div>
+    <button type="button" id="csvBtn">Export CSV</button>
+  </header>
+  <div class="filters">
+    <input id="q" type="search" placeholder="Search person, action, record or detail" aria-label="Search the activity log">
+    <label><span class="lbl">Month</span><input id="month" type="month"></label>
+    <label><span class="lbl">Person</span><select id="who"><option value="">Everyone</option></select></label>
+    <label><span class="lbl">Area</span><select id="area"><option value="">All areas</option></select></label>
+    <label><span class="lbl">Type</span><select id="kind"><option value="">Everything</option><option value="change">Changes</option><option value="delete">Deletions</option><option value="file">Uploads and downloads</option><option value="email">Emails sent</option><option value="access">Access changes</option><option value="signin">Sign-ins</option><option value="bad">Refused or failed</option></select></label>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="panel listpanel"><div class="tblwrap">
+    <table class="log"><thead><tr><th>When</th><th>Person</th><th>Area</th><th>Action</th><th>Record and details</th></tr></thead><tbody id="rows"></tbody></table>
+  </div><div class="empty" id="empty">Loading…</div></div>
+  <button type="button" class="more" id="moreBtn" hidden>Show more</button>
+  <p class="note">Times are shown in your computer's time zone. The network address is the one the request came from.</p>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const when=iso=>{const d=new Date(iso);return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"})+" "+d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"})};
+async function api(method,path){
+  let r;try{r=await fetch("/api/"+path,{method,cache:"no-store"})}catch{throw new Error("Can't reach the server. Check your connection and try again.")}
+  const ct=r.headers.get("content-type")||"";
+  if(r.redirected||(r.ok&&!ct.includes("json")))throw new Error("Your session has ended. Reload the page to sign in again.");
+  const j=await r.json().catch(()=>null);if(!r.ok)throw new Error((j&&j.error)||"The request failed.");return j;
+}
+let ROWS=[],shown=300;
+const kindOf=r=>!r.ok?"bad":/^Signed in|sign-in/i.test(r.action)?"signin":/^Deleted|^Removed/.test(r.action)?"delete":/Uploaded|Downloaded|Opened/.test(r.action)?"file":/^Emailed/.test(r.action)?"email":r.area==="Team access"?"access":"change";
+function filtered(){
+  const q=$("q").value.trim().toLowerCase(),who=$("who").value,area=$("area").value,kind=$("kind").value;
+  return ROWS.filter(r=>(!who||r.email===who)&&(!area||r.area===area)&&(!kind||kindOf(r)===kind)&&(!q||[r.email,r.area,r.action,r.target,r.detail,r.ip].join(" ").toLowerCase().includes(q)));
+}
+function render(){
+  const list=filtered();
+  const people=new Set(list.map(r=>r.email)).size, del=list.filter(r=>kindOf(r)==="delete").length, bad=list.filter(r=>!r.ok).length, files=list.filter(r=>kindOf(r)==="file").length;
+  $("kpis").innerHTML=`<div class="panel kpi"><div class="k">Actions</div><div class="v">${list.length.toLocaleString()}</div></div><div class="panel kpi"><div class="k">People</div><div class="v">${people}</div></div><div class="panel kpi"><div class="k">Uploads and downloads</div><div class="v">${files}</div></div><div class="panel kpi"><div class="k">Deletions</div><div class="v">${del}</div></div><div class="panel kpi${bad?" bad":""}"><div class="k">Refused or failed</div><div class="v">${bad}</div></div>`;
+  $("rows").innerHTML=list.slice(0,shown).map(r=>`<tr class="${r.ok?"":"bad"}"><td class="w">${esc(when(r.at))}</td><td><div class="who">${esc(r.email)}</div>${r.ip?`<div class="dt">${esc(r.ip)}</div>`:""}</td><td><span class="area">${esc(r.area)}</span></td><td class="act">${esc(r.action)}</td><td><div class="tg">${esc(r.target||"")}</div>${r.detail?`<div class="dt">${esc(r.detail)}</div>`:""}</td></tr>`).join("");
+  $("empty").hidden=list.length>0;$("empty").textContent=ROWS.length?"Nothing matches these filters.":"No activity recorded for this month.";
+  $("moreBtn").hidden=list.length<=shown;$("moreBtn").textContent=`Show more (${(list.length-shown).toLocaleString()} left)`;
+}
+function fillSelects(){
+  const opt=(sel,vals,first)=>{const cur=$(sel).value;$(sel).innerHTML=`<option value="">${first}</option>`+vals.map(v=>`<option${v===cur?" selected":""}>${esc(v)}</option>`).join("")};
+  opt("who",[...new Set(ROWS.map(r=>r.email))].sort(),"Everyone");opt("area",[...new Set(ROWS.map(r=>r.area))].sort(),"All areas");
+}
+async function load(){
+  $("empty").hidden=false;$("empty").textContent="Loading…";$("rows").innerHTML="";
+  try{const r=await api("GET","audit/"+$("month").value);ROWS=r.rows;shown=300;fillSelects();render()}catch(e){$("empty").textContent=e.message}
+}
+$("month").value=new Date().toISOString().slice(0,7);$("month").max=$("month").value;
+$("month").onchange=load;["q","who","area","kind"].forEach(id=>$(id)[id==="q"?"oninput":"onchange"]=()=>{shown=300;render()});
+$("moreBtn").onclick=()=>{shown+=300;render()};
+$("csvBtn").onclick=()=>{
+  const cell=v=>{const s=String(v??"");return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+  const csv=["Time,Person,Area,Action,Record,Details,Result,Network address"].concat(filtered().map(r=>[new Date(r.at).toISOString(),r.email,r.area,r.action,r.target,r.detail,r.ok?"OK":"Refused/failed",r.ip].map(cell).join(","))).join("\r\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+csv],{type:"text/csv"}));a.download=`activity-log-${$("month").value}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+};
+let started=false;const start=m=>{if(!started&&m&&m.isManager){started=true;load()}};
+document.addEventListener("bifold:me",e=>start(e.detail));start(window.BIFOLD_ME);
+</script>
+</body>
+</html>

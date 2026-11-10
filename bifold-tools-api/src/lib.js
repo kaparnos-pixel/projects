@@ -172,6 +172,7 @@ async function updateCustomer(user, id, b) {
   const dup = await findDuplicate(f.name, id, co);
   if (dup) fail(409, `${dup.name} is already in the customer list.`, { customer: dup });
   const e = { partitionKey: CPK, rowKey: id, co, ...f, updatedBy: user.email, updatedAt: new Date().toISOString() };
+  if (user.aud) user.aud.changes = audit().diff(cur, e);
   await t.updateEntity(e, "Merge");
   return custOut({ ...cur, ...e });
 }
@@ -181,6 +182,7 @@ async function deleteCustomer(user, id) {
   const t = await table(CUST);
   const cur = await getOrNull(t, CPK, id);
   if (!cur || !inCo(cur, user)) return;
+  if (user.aud) user.aud.name = cur.name;
   try { await t.deleteEntity(CPK, id); } catch (e) { if (e.statusCode !== 404) throw e; }
 }
 
@@ -270,6 +272,7 @@ async function updatePnl(user, id, b) {
     updatedAt: new Date().toISOString(), updatedBy: user.email,
   };
   const t = await table(PNL);
+  if (user.aud) user.aud.changes = audit().diff(e, next);
   try {
     await t.updateEntity(next, "Replace", { etag: b.etag || e.etag });
   } catch (err) {
@@ -284,6 +287,7 @@ async function updatePnl(user, id, b) {
 }
 async function deletePnl(user, id) {
   const { e, role } = await loadDoc(user, id);
+  if (user.aud) user.aud.name = [e.customerName, e.poNo].filter(Boolean).join(", ");
   if (!canShare(role)) fail(403, "Only the owner or a manager can delete this PnL.");
   writeCo(user);
   await (await table(PNL)).deleteEntity(PPK, id);
@@ -421,6 +425,7 @@ async function updateDeal(user, id, b) {
     stageAt: stageChanged ? now : (cur.stageAt || cur.createdAt),
     createdBy: cur.createdBy, createdAt: cur.createdAt, updatedAt: now, updatedBy: user.email, ...packJson({ log }),
   };
+  if (user.aud) { user.aud.changes = audit().diff(cur, next); user.aud.name = cur.title || cur.customerName; }
   try {
     await (await table(DEALS)).updateEntity(next, "Replace", { etag: b.etag || cur.etag });
   } catch (err) {
@@ -444,6 +449,7 @@ async function addDealNote(user, id, b) {
 }
 async function deleteDeal(user, id) {
   const cur = await loadDeal(user, id);
+  if (user.aud) user.aud.name = [cur.title, cur.customerName].filter(Boolean).join(", ");
   writeCo(user);
   if (!user.isManager && cur.owner !== user.email) fail(403, "Only the owner or a manager can delete this deal.");
   await (await table(DEALS)).deleteEntity(DPK, id);
@@ -528,6 +534,7 @@ async function updateCheque(user, id, b) {
   if (dup) fail(409, dupMsg(dup, f));
   const reminderSentAt = cur.clearanceDate === f.clearanceDate ? (cur.reminderSentAt || "") : "";
   const next = { partitionKey: QPK, rowKey: id, ...f, reminderSentAt, createdBy: cur.createdBy, createdAt: cur.createdAt, updatedBy: user.email, updatedAt: new Date().toISOString() };
+  if (user.aud) user.aud.changes = audit().diff(cur, next);
   try { await t.updateEntity(next, "Replace", { etag: b.etag || cur.etag }); }
   catch (err) { if (err.statusCode === 412) fail(409, "Someone else changed this entry after you opened it. Reload to see their changes, then make yours again."); throw err; }
   return chqOut(await t.getEntity(QPK, id));
@@ -536,6 +543,7 @@ async function deleteCheque(user, id) {
   const t = await table(PDC);
   const cur = await getOrNull(t, QPK, id);
   if (!cur || !inCo(cur, user)) return;
+  if (user.aud) user.aud.name = [cur.type, cur.chequeNo || cur.ref, cur.party || cur.customerName, cur.amount ? "AED " + cur.amount : ""].filter(Boolean).join(" ");
   writeCo(user);
   if (!user.isManager && cur.createdBy !== user.email) fail(403, "Only the person who logged this entry or a manager can delete it. Mark it cancelled instead.");
   await t.deleteEntity(QPK, id);
@@ -544,10 +552,12 @@ async function deleteCheque(user, id) {
 // ---------- AMC Tracker (src/amc.js) ----------
 const mailReadyFor = co => ["GRAPH_TENANT_ID", "GRAPH_CLIENT_ID", "GRAPH_CLIENT_SECRET"].every(k => process.env[k]) && !!(co === "techhub" ? process.env.TECHHUB_MAIL_SENDER : co === "bifold" ? process.env.MAIL_SENDER : "");
 let amcRoute;
-const amc = () => amcRoute || (amcRoute = require("./amc")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, emailOk, CUST, CPK, CO, rowCo, inCo, writeCo, sameCoEmail, mailReadyFor }));
+const amc = () => amcRoute || (amcRoute = require("./amc")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, emailOk, CUST, CPK, CO, rowCo, inCo, writeCo, sameCoEmail, mailReadyFor, diff: (a, b) => audit().diff(a, b) }));
 
 // ---------- team access (src/access.js) ----------
 let accessMod;
+let auditMod;
+const audit = () => auditMod || (auditMod = require("./audit")({ table, fail, clean, CO }));
 const access = () => accessMod || (accessMod = require("./access")({ table, getOrNull, all, fail, clean, emailOk, domains, managers, CO, coForEmail, rowCo }));
 
 // ---------- alerts for the top bar and home page ----------
@@ -639,7 +649,7 @@ async function editPnlFile(user, id, fid, b) {
   if (!canEdit(role)) fail(403, "You can view this PnL but not change its documents.");
   writeCo(user);
   let found = false;
-  const out = await changeFiles(id, l => l.map(f => { if (f.id !== fid) return f; found = true; return { ...f, ...fileMeta(b), kind: FILE_KINDS.includes(b.kind) ? b.kind : f.kind }; }));
+  const out = await changeFiles(id, l => l.map(f => { if (f.id !== fid) return f; found = true; const n = { ...f, ...fileMeta(b), kind: FILE_KINDS.includes(b.kind) ? b.kind : f.kind }; if (user.aud) { user.aud.name = f.name; user.aud.changes = audit().diff(f, n); } return n; }));
   if (!found) fail(404, "That document is no longer attached.");
   return out;
 }
@@ -647,7 +657,7 @@ async function removePnlFile(user, id, fid) {
   const { role } = await loadDoc(user, id);
   if (!canEdit(role)) fail(403, "You can view this PnL but not remove its documents.");
   writeCo(user);
-  const out = await changeFiles(id, l => l.filter(f => f.id !== fid));
+  const out = await changeFiles(id, l => l.filter(f => { if (f.id === fid && user.aud) user.aud.name = f.name; return f.id !== fid; }));
   await (await pnlBlobs()).deleteBlob(fid).catch(() => {});
   return out;
 }
@@ -655,6 +665,7 @@ async function getPnlFile(user, id, fid, download) {
   const { e } = await loadDoc(user, id);
   const f = pnlFiles(e).find(x => x.id === fid);
   if (!f) fail(404, "That document is no longer attached.");
+  if (user.aud) user.aud.name = f.name;
   let buf;
   try { buf = await (await pnlBlobs()).getBlockBlobClient(fid).downloadToBuffer(); } catch (err) { if (err.statusCode === 404) fail(404, "That document is no longer available."); throw err; }
   const inline = !download && /^(image\/|application\/pdf$)/.test(f.type);
@@ -668,7 +679,8 @@ async function route(method, seg, user, body) {
   if (a === "access") return access().route(method, seg, user, body);
   if (a === "amc") return amc()(method, seg.slice(1), user, body);
   if (a === "alerts" && method === "GET") return alerts(user);
-  if (a === "me" && method === "GET") { access().touch(user.email);
+  if (a === "audit" && method === "GET") return audit().list(user, id);
+  if (a === "me" && method === "GET") { if (access().touch(user.email) && user.aud) { user.aud.signin = true; user.aud.noAccess = !user.isManager && !user.sections.length; }
     if (!user.isManager && !user.sections.length) return { email: user.email, homeCo: user.homeCo, co: user.co, group: false, isManager: false, sections: [], noAccess: true, managers: [], allSections: [], companies: [], mailReady: false };
     return { ...user, managers: CO[user.homeCo].managers(), domains: domains(), allSections: access().SECTIONS, companies: Object.values(CO).map(c => ({ key: c.key, name: c.name })), mailReady: mailReadyFor(user.co) }; }
   if (a === "customers") {
@@ -710,21 +722,54 @@ async function route(method, seg, user, body) {
   fail(404, "Unknown request.");
 }
 
+const outsiderSeen = new Map();
+// Which requests go in the activity log: every change (and every refused one), every document opened or
+// downloaded, refused reads, the first sign-in of the day, and sign-in attempts from outside accounts.
+function shouldRecord(method, seg, status, user, body) {
+  const [a, b, c] = seg;
+  if (a === "audit") return false;
+  if (a === "me") return !!(user && user.aud && user.aud.signin);
+  const fileGet = method === "GET" && ((a === "pnl" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c));
+  // Refused reads are logged for people who have some access (trying beyond it); people with none are logged at sign-in.
+  if (method === "GET" && !fileGet) return status === 403 && (user.isManager || user.sections.length > 0);
+  if (status >= 400 && status !== 401 && status !== 403 && !(fileGet && status === 404)) return false;
+  // Background bookkeeping from the AMC page (proposal progress flags) is not a person's action.
+  if (a === "amc" && b === "amcs" && method === "PUT" && Object.keys(body || {}).every(k => ["etag", "proposalStatus", "log"].includes(k))) return false;
+  return true;
+}
 async function dispatch(method, path, getHeader, readBody, log = console) {
+  let user = null, body = {}, status = 200, error = "", res;
+  const seg = String(path || "").replace(/^\/+|\/+$/g, "").split("/").filter(Boolean).map(s => { try { return decodeURIComponent(s); } catch { return s; } });
+  const ip = String(getHeader("x-forwarded-for") || getHeader("x-client-ip") || "").split(",")[0].trim();
+  let out;
   try {
-    const user = getUser(getHeader);
+    user = getUser(getHeader);
+    user.aud = {};
     user.sections = await access().sectionsFor(user);
-    const seg = String(path || "").replace(/^\/+|\/+$/g, "").split("/").filter(Boolean).map(decodeURIComponent);
-    let body = {};
     if (method === "POST" || method === "PUT") { try { body = (await readBody()) || {}; } catch { fail(400, "The request could not be read."); } }
-    const out = await route(method, seg, user, body);
-    if (out && out.__binary) return { status: 200, raw: out.__binary, headers: out.headers };
-    return out === undefined ? { status: 204 } : { status: 200, body: out };
+    out = await route(method, seg, user, body);
+    if (out && out.__binary) res = { status: 200, raw: out.__binary, headers: out.headers };
+    else res = out === undefined ? { status: 204 } : { status: 200, body: out };
+    status = res.status;
   } catch (e) {
-    if (e instanceof HttpError) return { status: e.status, body: { error: e.message, ...(e.data || {}) } };
-    log.error(e);
-    return { status: 500, body: { error: "The server hit an error. Try again, and tell IT if it keeps happening." } };
+    if (e instanceof HttpError) { status = e.status; error = e.message; res = { status: e.status, body: { error: e.message, ...(e.data || {}) } }; }
+    else { log.error(e); status = 500; res = { status: 500, body: { error: "The server hit an error. Try again, and tell IT if it keeps happening." } }; }
   }
+  try {
+    if (!user) {
+      // Someone signed in with an account outside both companies: note it once a day per account.
+      let email = "";
+      try { email = String(JSON.parse(Buffer.from(getHeader("x-ms-client-principal") || "", "base64").toString("utf8")).userDetails || "").toLowerCase(); } catch {}
+      const day = new Date().toISOString().slice(0, 10);
+      if (email && status === 403 && outsiderSeen.get(email) !== day) {
+        outsiderSeen.set(email, day);
+        await audit().record({ email, co: "security", method, seg: ["outsider"], body: {}, out: {}, status, error, ip, aud: { name: "Sign-in from an outside account" } });
+      }
+    } else if (shouldRecord(method, seg, status, user, body)) {
+      await audit().record({ user, method, seg, body, out: out && !out.__binary ? out : {}, status, error, ip, aud: user.aud });
+    }
+  } catch (e) { log.error(e); }
+  return res;
 }
 
 module.exports = { dispatch, compute };

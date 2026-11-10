@@ -27,7 +27,7 @@ const VISIT_TYPES = ["pm", "corrective", "emergency", "survey"];
 const MAX_FILE = 10 * 1048576;
 
 module.exports = function makeAmc(H) {
-  const { table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, emailOk, CUST, CPK, CO, rowCo, inCo, writeCo, sameCoEmail, mailReadyFor } = H;
+  const { table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, emailOk, CUST, CPK, CO, rowCo, inCo, writeCo, sameCoEmail, mailReadyFor, diff } = H;
   // Reference prefixes per company: BFT for Bifold, TH for Tech Hub.
   const PFX = { bifold: "BFT", techhub: "TH" };
   const now = () => new Date().toISOString();
@@ -155,11 +155,13 @@ module.exports = function makeAmc(H) {
     d.history = hist.slice(-80);
     Object.assign(next, packJson(d), { updatedAt: now(), updatedBy: user.email });
     delete next.etag; delete next.timestamp;
+    if (user.aud) { user.aud.name = e.ref; user.aud.changes = diff(e, next); }
     await t.updateEntity(next, "Replace", { etag: b.etag || e.etag }).catch(etagFail("AMC"));
     return amcFull(await t.getEntity(APK, id), user);
   }
   async function deleteAmc(user, id) {
     const e = await loadAmc(user, id);
+    if (user.aud) user.aud.name = [e.ref, e.customerName].filter(Boolean).join(", ");
     writeCo(user);
     if (e.status === "awarded" && !user.isManager) fail(403, "Only a manager can delete an awarded AMC.");
     await (await table(AMC)).deleteEntity(APK, id);
@@ -184,6 +186,7 @@ module.exports = function makeAmc(H) {
   const addDays = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
   async function award(user, id, b) {
     const e = await loadAmc(user, id);
+    if (user.aud) user.aud.name = [e.ref, e.customerName].filter(Boolean).join(", ");
     const co = writeCo(user);
     const awardDate = clean(b.awardDate, 10), start = clean(b.start, 10);
     if (!isDate(awardDate) || !isDate(start)) fail(400, "Enter the award date and contract start date.");
@@ -230,6 +233,7 @@ module.exports = function makeAmc(H) {
   }
   async function renew(user, id) {
     const e = await loadAmc(user, id);
+    if (user.aud) user.aud.name = [e.ref, e.customerName].filter(Boolean).join(", ");
     writeCo(user);
     const ct = await table(CON); const c = await getOrNull(ct, KPK, id);
     if (!c) fail(400, "Only an awarded AMC can be renewed.");
@@ -293,11 +297,13 @@ module.exports = function makeAmc(H) {
         photos: b.photos !== undefined ? photosIn(b.photos) : d.photos || [], files: b.files !== undefined ? filesIn(b.files) : d.files || [], shares: d.shares || [],
       }),
     };
+    if (user.aud) { user.aud.name = e.reportNo || e.ref; user.aud.changes = diff(e, next); }
     await t.updateEntity(next, "Replace", { etag: b.etag || e.etag }).catch(etagFail("visit"));
     return visitOut(await t.getEntity(VPK, id));
   }
   async function deleteVisit(user, id) {
     const t = await table(VIS); const e = await getOrNull(t, VPK, id); if (!e || !inCo(e, user)) return;
+    if (user.aud) user.aud.name = [e.reportNo || e.ref, e.customerName, e.scheduledDate].filter(Boolean).join(", ");
     writeCo(user);
     if (!user.isManager && e.createdBy !== user.email && e.status === "completed") fail(403, "Only a manager can delete a completed visit.");
     await t.deleteEntity(VPK, id);
@@ -330,6 +336,7 @@ module.exports = function makeAmc(H) {
     // Files belong to the company that uploaded them (files from before companies existed are Bifold's).
     if (user.co !== "all" && ((props.metadata || {}).co || "bifold") !== user.co) fail(404, "File not found.");
     const name = decodeURIComponent((props.metadata || {}).name || id);
+    if (user.aud) user.aud.name = name;
     const type = props.contentType || "application/octet-stream";
     const inline = !download && /^image\//.test(type);
     return { __binary: buf, headers: { "Content-Type": type, "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(name)}`, "Cache-Control": "private, max-age=86400" } };
@@ -362,6 +369,7 @@ module.exports = function makeAmc(H) {
     if (b.kind === "amc") rec = await loadAmc(user, clean(b.id, 60));
     else if (b.kind === "visit") { rec = await getOrNull(await table(VIS), VPK, clean(b.id, 60)); if (!rec || !inCo(rec, user)) fail(404, "This visit no longer exists."); }
     else fail(400, "Unknown share.");
+    if (user.aud) user.aud.name = [rec.reportNo || rec.ref, rec.customerName].filter(Boolean).join(", ");
     const r = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderFor(co))}/sendMail`, {
       method: "POST", headers: { Authorization: "Bearer " + await graphToken(), "Content-Type": "application/json" },
       body: JSON.stringify({ message: { subject, body: { contentType: "HTML", content: html }, toRecipients: to.map(a => ({ emailAddress: { address: a } })),

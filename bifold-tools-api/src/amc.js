@@ -10,7 +10,8 @@
 //
 // Extra settings (all optional):
 //   ANTHROPIC_API_KEY, ANTHROPIC_MODEL   Claude drafting of proposals and visit write-ups (default model claude-sonnet-5-5)
-//   GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, MAIL_SENDER   send proposals / reports to customers
+//   GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET   send proposals / reports to customers, from
+//   MAIL_SENDER (Bifold) or TECHHUB_MAIL_SENDER (Tech Hub)
 //                                                                        (same Entra app as the PDC reminders)
 
 const crypto = require("crypto");
@@ -26,17 +27,19 @@ const VISIT_TYPES = ["pm", "corrective", "emergency", "survey"];
 const MAX_FILE = 10 * 1048576;
 
 module.exports = function makeAmc(H) {
-  const { table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, emailOk, CUST, CPK } = H;
+  const { table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, emailOk, CUST, CPK, CO, rowCo, inCo, writeCo, sameCoEmail, mailReadyFor } = H;
+  // Reference prefixes per company: BFT for Bifold, TH for Tech Hub.
+  const PFX = { bifold: "BFT", techhub: "TH" };
   const now = () => new Date().toISOString();
   const gulfDay = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
   const json = (s, d) => { try { return s ? JSON.parse(s) : d; } catch { return d; } };
   const etagFail = what => err => { if (err.statusCode === 412) fail(409, `Someone else changed this ${what} after you opened it. Reload to see their changes, then make yours again.`); throw err; };
 
   /* ---------------- AMCs ---------------- */
-  const visible = (e, user) => user.isManager || e.owner === user.email;
+  const visible = (e, user) => inCo(e, user) && (user.isManager || e.owner === user.email);
   function amcSummary(e) {
     return {
-      id: e.rowKey, ref: e.ref, customerId: e.customerId, customerName: e.customerName, systems: e.systems || "", value: num(e.value),
+      id: e.rowKey, co: rowCo(e), ref: e.ref, customerId: e.customerId, customerName: e.customerName, systems: e.systems || "", value: num(e.value),
       status: e.status, owner: e.owner, planName: e.planName || "", subtitle: e.subtitle || "", proposalStatus: e.proposalStatus || "",
       proposalSource: e.proposalSource || "", proposalAt: e.proposalAt || "", proposalStale: !!e.proposalStale, sentAt: e.sentAt || "",
       termMonths: num(e.termMonths) || 12, proposedStart: e.proposedStart || "", renewalOf: e.renewalOf || "", award: json(e.award, null),
@@ -53,8 +56,9 @@ module.exports = function makeAmc(H) {
     return e;
   }
   const log = (user, text) => ({ at: now(), by: user.email, text: clean(text, 300) });
-  async function customerName(id) {
-    const c = await getOrNull(await table(CUST), CPK, id);
+  async function customerName(id, co) {
+    const c0 = await getOrNull(await table(CUST), CPK, id);
+    const c = c0 && rowCo(c0) === co ? c0 : null;
     if (!c) fail(400, "That customer is no longer in the customer list. Choose another.");
     return c;
   }
@@ -80,30 +84,31 @@ module.exports = function makeAmc(H) {
     return start;
   }
   const monthsIn = v => [6, 12, 24, 36].includes(num(v)) ? num(v) : 12;
-  async function nextRef(custName) {
+  async function nextRef(custName, co) {
     const code = String(custName).replace(/\b(LLC|L\.L\.C\.?|FZE|FZ-LLC|FZCO|Co\.?|Company|Limited|Ltd\.?|Est\.?|Establishment|Trading)\b/gi, "").trim()
       .split(/\s+/).filter(Boolean).map((w, i, a) => a.length > 1 ? w.slice(0, i < 2 ? 4 : 1) : w.slice(0, 8)).join("").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) || "CUST";
     const yr = gulfDay().slice(0, 4);
     const rows = await all(await table(AMC), APK, ["RowKey", "ref"]);
-    const prefix = `BFT-AMC-${yr}-${code}-`;
+    const prefix = `${PFX[co]}-AMC-${yr}-${code}-`;
     const n = rows.filter(r => String(r.ref || "").startsWith(prefix)).length + 1;
     return prefix + String(n).padStart(3, "0");
   }
   async function listAmcs(user) {
-    const rows = await all(await table(AMC), APK, ["RowKey", "ref", "customerId", "customerName", "systems", "value", "status", "owner", "planName", "subtitle", "proposalStatus", "proposalSource", "proposalAt", "proposalStale", "sentAt", "termMonths", "proposedStart", "renewalOf", "award", "createdAt", "updatedAt", "updatedBy"]);
+    const rows = await all(await table(AMC), APK, ["RowKey", "co", "ref", "customerId", "customerName", "systems", "value", "status", "owner", "planName", "subtitle", "proposalStatus", "proposalSource", "proposalAt", "proposalStale", "sentAt", "termMonths", "proposedStart", "renewalOf", "award", "createdAt", "updatedAt", "updatedBy"]);
     return rows.map(e => { e.rowKey = e.rowKey || e.RowKey; return e; }).filter(e => visible(e, user)).map(amcSummary);
   }
   async function createAmc(user, b, extra = {}) {
     const customerId = clean(b.customerId, 60); if (!customerId) fail(400, "Choose a customer.");
     const systems = clean(b.systems, 6000); if (!systems) fail(400, "Describe the systems the AMC covers.");
     const value = Math.round(num(b.value) * 100) / 100; if (!(value > 0) || value > 1e9) fail(400, "Enter the annual AMC value in AED, excluding VAT.");
-    const c = await customerName(customerId);
+    const co = writeCo(user);
+    const c = await customerName(customerId, co);
     const terms = termsIn(b.terms), termMonths = monthsIn(b.termMonths);
     const proposedStart = startIn(b.proposedStart || extra.proposedStart, termMonths, terms.endDate);
     const id = crypto.randomUUID();
     const t = now();
     const e = {
-      partitionKey: APK, rowKey: id, ref: await nextRef(c.name), customerId, customerName: c.name, systems, value, status: "draft", owner: user.email,
+      partitionKey: APK, rowKey: id, co, ref: await nextRef(c.name, co), customerId, customerName: c.name, systems, value, status: "draft", owner: user.email,
       planName: "", subtitle: "", proposalStatus: "pending", proposalSource: "", proposalAt: "", proposalStale: false, sentAt: "", termMonths,
       proposedStart, renewalOf: clean(extra.renewalOf, 60), award: "", createdAt: t, updatedAt: t, updatedBy: user.email,
       ...packJson({ proposal: null, terms, files: filesIn(b.files), history: [log(user, extra.logText || "Created AMC")], shares: [] }),
@@ -115,14 +120,15 @@ module.exports = function makeAmc(H) {
   async function updateAmc(user, id, b) {
     const t = await table(AMC);
     const e = await loadAmc(user, id);
+    const co = writeCo(user);
     const d = unpackJson(e);
-    const next = { ...e };
+    const next = { ...e, co };
     const hist = d.history || [];
     if (b.customerId !== undefined || b.systems !== undefined || b.value !== undefined) {
       const customerId = clean(b.customerId ?? e.customerId, 60), systems = clean(b.systems ?? e.systems, 6000), value = Math.round(num(b.value ?? e.value) * 100) / 100;
       if (!systems) fail(400, "Describe the systems the AMC covers.");
       if (!(value > 0) || value > 1e9) fail(400, "Enter the annual AMC value in AED, excluding VAT.");
-      const c = customerId !== e.customerId ? await customerName(customerId) : { name: e.customerName };
+      const c = customerId !== e.customerId ? await customerName(customerId, co) : { name: e.customerName };
       const changed = customerId !== e.customerId || systems !== e.systems || value !== num(e.value);
       Object.assign(next, { customerId, customerName: c.name, systems, value, proposalStale: changed && !!d.proposal ? true : !!e.proposalStale });
     }
@@ -154,6 +160,7 @@ module.exports = function makeAmc(H) {
   }
   async function deleteAmc(user, id) {
     const e = await loadAmc(user, id);
+    writeCo(user);
     if (e.status === "awarded" && !user.isManager) fail(403, "Only a manager can delete an awarded AMC.");
     await (await table(AMC)).deleteEntity(APK, id);
     try { await (await table(CON)).deleteEntity(KPK, id); } catch (err) { if (err.statusCode !== 404) throw err; }
@@ -162,13 +169,13 @@ module.exports = function makeAmc(H) {
   /* ---------------- contracts (awarded AMCs) ---------------- */
   function conOut(e) {
     return {
-      amcId: e.rowKey, ref: e.ref, owner: e.owner, customerId: e.customerId, customerName: e.customerName, site: e.site || "", contactName: e.contactName || "",
+      amcId: e.rowKey, co: rowCo(e), ref: e.ref, owner: e.owner, customerId: e.customerId, customerName: e.customerName, site: e.site || "", contactName: e.contactName || "",
       contactEmail: e.contactEmail || "", systems: e.systems || "", plan: e.plan || "", awardDate: e.awardDate, start: e.start, end: e.end, months: num(e.months),
       pmMonths: num(e.pmMonths), lpo: e.lpo || "", alertDays: num(e.alertDays) || 60, notifyEmail: e.notifyEmail || "", status: e.status || "active",
       alertsSent: json(e.alertsSent, []), renewalAmcId: e.renewalAmcId || "", createdAt: e.createdAt, updatedAt: e.updatedAt,
     };
   }
-  const listContracts = async () => (await all(await table(CON), KPK)).map(conOut);
+  const listContracts = async user => (await all(await table(CON), KPK)).filter(e => inCo(e, user)).map(conOut);
   function addMonths(iso, n) {
     const [y, m, d] = iso.split("-").map(Number); const first = new Date(Date.UTC(y, m - 1 + n, 1));
     const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
@@ -177,13 +184,14 @@ module.exports = function makeAmc(H) {
   const addDays = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
   async function award(user, id, b) {
     const e = await loadAmc(user, id);
+    const co = writeCo(user);
     const awardDate = clean(b.awardDate, 10), start = clean(b.start, 10);
     if (!isDate(awardDate) || !isDate(start)) fail(400, "Enter the award date and contract start date.");
     const months = [6, 12, 24, 36].includes(num(b.months)) ? num(b.months) : 12;
     const pmMonths = [0, 1, 3, 6, 12].includes(num(b.pmMonths)) ? num(b.pmMonths) : 3;
     const alertDays = [30, 45, 60, 90].includes(num(b.alertDays)) ? num(b.alertDays) : 60;
     const notifyEmail = clean(b.notifyEmail, 150).toLowerCase();
-    if (!emailOk(notifyEmail)) fail(400, "Enter a Bifold email address for the expiry alerts.");
+    if (!emailOk(notifyEmail) || !sameCoEmail(notifyEmail, user)) fail(400, "Enter a colleague's email address in your company for the expiry alerts.");
     let end = addDays(addMonths(start, months), -1);
     const wantEnd = clean(b.end, 10);
     if (wantEnd) {
@@ -196,7 +204,7 @@ module.exports = function makeAmc(H) {
     const cust = await getOrNull(await table(CUST), CPK, e.customerId) || {};
     const t = now();
     const c = {
-      partitionKey: KPK, rowKey: id, ref: e.ref, owner: e.owner, customerId: e.customerId, customerName: e.customerName,
+      partitionKey: KPK, rowKey: id, co, ref: e.ref, owner: e.owner, customerId: e.customerId, customerName: e.customerName,
       site: [cust.address, cust.emirate].filter(Boolean).join(", "), contactName: cust.contactName || "", contactEmail: cust.email || "",
       systems: e.systems, plan: e.planName || "", awardDate, start, end, months, pmMonths, lpo: clean(b.lpo, 60), alertDays, notifyEmail,
       status: prev ? prev.status : "active", alertsSent: prev && prev.end === end ? prev.alertsSent : "[]", renewalAmcId: prev ? prev.renewalAmcId || "" : "",
@@ -222,6 +230,7 @@ module.exports = function makeAmc(H) {
   }
   async function renew(user, id) {
     const e = await loadAmc(user, id);
+    writeCo(user);
     const ct = await table(CON); const c = await getOrNull(ct, KPK, id);
     if (!c) fail(400, "Only an awarded AMC can be renewed.");
     if (c.renewalAmcId) fail(409, "A renewal has already been started for this contract.");
@@ -235,17 +244,19 @@ module.exports = function makeAmc(H) {
   function visitOut(e) {
     const d = unpackJson(e);
     return {
-      id: e.rowKey, amcId: e.amcId, ref: e.ref, customerName: e.customerName, site: e.site || "", type: e.type, scheduledDate: e.scheduledDate, time: e.time || "",
+      id: e.rowKey, co: rowCo(e), amcId: e.amcId, ref: e.ref, customerName: e.customerName, site: e.site || "", type: e.type, scheduledDate: e.scheduledDate, time: e.time || "",
       engineers: e.engineers || "", status: e.status, reportNo: e.reportNo || "", completedDate: e.completedDate || "", arrival: e.arrival || "", departure: e.departure || "",
       customerRep: e.customerRep || "", notes: e.notes || "", checklist: d.checklist || [], findings: d.findings || "", actions: d.actions || "", recommendations: d.recommendations || "",
       photos: d.photos || [], files: d.files || [], shares: d.shares || [], createdBy: e.createdBy, createdAt: e.createdAt, updatedAt: e.updatedAt, updatedBy: e.updatedBy, etag: e.etag,
     };
   }
-  const listVisits = async () => (await all(await table(VIS), VPK)).map(visitOut);
+  const listVisits = async user => (await all(await table(VIS), VPK)).filter(e => inCo(e, user)).map(visitOut);
   function checklistIn(arr) { return (Array.isArray(arr) ? arr : []).slice(0, 80).map(c => ({ item: clean(c.item, 200), result: ["ok", "issue", "na"].includes(c.result) ? c.result : "", note: clean(c.note, 400) })).filter(c => c.item); }
   function photosIn(arr) { return (Array.isArray(arr) ? arr : []).slice(0, 60).map(p => ({ id: clean(p.id, 60), caption: clean(p.caption, 200), w: num(p.w), h: num(p.h), by: clean(p.by, 150), at: clean(p.at, 40) })).filter(p => /^[0-9a-f-]{36}$/.test(p.id)); }
   async function createVisit(user, b) {
-    const c = await getOrNull(await table(CON), KPK, clean(b.amcId, 60));
+    const co = writeCo(user);
+    const c0 = await getOrNull(await table(CON), KPK, clean(b.amcId, 60));
+    const c = c0 && rowCo(c0) === co ? c0 : null;
     if (!c) fail(400, "Choose an awarded contract for this visit.");
     const scheduledDate = clean(b.scheduledDate, 10); if (!isDate(scheduledDate)) fail(400, "Choose the visit date.");
     const type = VISIT_TYPES.includes(b.type) ? b.type : "pm";
@@ -253,8 +264,8 @@ module.exports = function makeAmc(H) {
     const code = String(c.ref || "").split("-").slice(3, 4)[0] || "AMC";
     const id = crypto.randomUUID(); const t = now();
     const e = {
-      partitionKey: VPK, rowKey: id, amcId: c.rowKey, ref: c.ref, customerName: c.customerName, site: c.site || "", type, scheduledDate, time: clean(b.time, 5),
-      engineers: clean(b.engineers, 200), status: "scheduled", reportNo: `BFT-MR-${scheduledDate.slice(0, 4)}-${code}-${String(existing + 1).padStart(2, "0")}`, completedDate: "",
+      partitionKey: VPK, rowKey: id, co, amcId: c.rowKey, ref: c.ref, customerName: c.customerName, site: c.site || "", type, scheduledDate, time: clean(b.time, 5),
+      engineers: clean(b.engineers, 200), status: "scheduled", reportNo: `${PFX[co]}-MR-${scheduledDate.slice(0, 4)}-${code}-${String(existing + 1).padStart(2, "0")}`, completedDate: "",
       arrival: "", departure: "", customerRep: c.contactName || "", notes: clean(b.notes, 1000), createdBy: user.email, createdAt: t, updatedAt: t, updatedBy: user.email,
       ...packJson({ checklist: checklistIn(b.checklist), findings: "", actions: "", recommendations: "", photos: [], files: [], shares: [] }),
     };
@@ -262,7 +273,8 @@ module.exports = function makeAmc(H) {
     return visitOut(await (await table(VIS)).getEntity(VPK, id));
   }
   async function updateVisit(user, id, b) {
-    const t = await table(VIS); const e = await getOrNull(t, VPK, id); if (!e) fail(404, "This visit no longer exists.");
+    const t = await table(VIS); const e0 = await getOrNull(t, VPK, id); const e = e0 && inCo(e0, user) ? e0 : null; if (!e) fail(404, "This visit no longer exists.");
+    const co = writeCo(user);
     const d = unpackJson(e);
     const scheduledDate = b.scheduledDate !== undefined ? clean(b.scheduledDate, 10) : e.scheduledDate; if (!isDate(scheduledDate)) fail(400, "Choose the visit date.");
     const status = b.status !== undefined ? String(b.status) : e.status; if (!VISIT_STATUS.includes(status)) fail(400, "Choose a valid visit status.");
@@ -271,7 +283,7 @@ module.exports = function makeAmc(H) {
     if (status === "completed" && !engineers) fail(400, "Add the engineer name before completing the visit.");
     const pick = (k, max) => b[k] !== undefined ? clean(b[k], max) : (e[k] || "");
     const next = {
-      partitionKey: VPK, rowKey: id, amcId: e.amcId, ref: e.ref, customerName: e.customerName, site: pick("site", 300), type, scheduledDate, time: pick("time", 5), engineers, status,
+      partitionKey: VPK, rowKey: id, co, amcId: e.amcId, ref: e.ref, customerName: e.customerName, site: pick("site", 300), type, scheduledDate, time: pick("time", 5), engineers, status,
       reportNo: e.reportNo, completedDate: status === "completed" ? (e.completedDate || gulfDay()) : "", arrival: pick("arrival", 5), departure: pick("departure", 5),
       customerRep: pick("customerRep", 150), notes: pick("notes", 1000), createdBy: e.createdBy, createdAt: e.createdAt, updatedAt: now(), updatedBy: user.email,
       ...packJson({
@@ -285,7 +297,8 @@ module.exports = function makeAmc(H) {
     return visitOut(await t.getEntity(VPK, id));
   }
   async function deleteVisit(user, id) {
-    const t = await table(VIS); const e = await getOrNull(t, VPK, id); if (!e) return;
+    const t = await table(VIS); const e = await getOrNull(t, VPK, id); if (!e || !inCo(e, user)) return;
+    writeCo(user);
     if (!user.isManager && e.createdBy !== user.email && e.status === "completed") fail(403, "Only a manager can delete a completed visit.");
     await t.deleteEntity(VPK, id);
   }
@@ -306,14 +319,16 @@ module.exports = function makeAmc(H) {
     if (!buf.length) fail(400, "The file is empty.");
     if (buf.length > MAX_FILE) fail(413, `${name} is larger than 10 MB.`);
     const id = crypto.randomUUID();
-    await (await blobs()).getBlockBlobClient(id).uploadData(buf, { blobHTTPHeaders: { blobContentType: type }, metadata: { name: encodeURIComponent(name), by: encodeURIComponent(user.email) } });
+    await (await blobs()).getBlockBlobClient(id).uploadData(buf, { blobHTTPHeaders: { blobContentType: type }, metadata: { name: encodeURIComponent(name), by: encodeURIComponent(user.email), co: writeCo(user) } });
     return { id, name, type, size: buf.length, by: user.email, at: now() };
   }
-  async function getFile(id, download) {
+  async function getFile(user, id, download) {
     if (!/^[0-9a-f-]{36}$/.test(id)) fail(404, "File not found.");
     const bc = (await blobs()).getBlockBlobClient(id);
     let buf, props;
     try { [buf, props] = await Promise.all([bc.downloadToBuffer(), bc.getProperties()]); } catch (e) { if (e.statusCode === 404) fail(404, "That file is no longer available."); throw e; }
+    // Files belong to the company that uploaded them (files from before companies existed are Bifold's).
+    if (user.co !== "all" && ((props.metadata || {}).co || "bifold") !== user.co) fail(404, "File not found.");
     const name = decodeURIComponent((props.metadata || {}).name || id);
     const type = props.contentType || "application/octet-stream";
     const inline = !download && /^image\//.test(type);
@@ -321,7 +336,8 @@ module.exports = function makeAmc(H) {
   }
 
   /* ---------------- email (Microsoft Graph, app permission Mail.Send) ---------------- */
-  const mailReady = () => ["GRAPH_TENANT_ID", "GRAPH_CLIENT_ID", "GRAPH_CLIENT_SECRET", "MAIL_SENDER"].every(k => process.env[k]);
+  // Each company sends from its own mailbox: MAIL_SENDER for Bifold, TECHHUB_MAIL_SENDER for Tech Hub.
+  const senderFor = co => co === "techhub" ? process.env.TECHHUB_MAIL_SENDER : process.env.MAIL_SENDER;
   let tok = { v: "", exp: 0 };
   async function graphToken() {
     if (tok.v && tok.exp > Date.now() + 60e3) return tok.v;
@@ -332,20 +348,21 @@ module.exports = function makeAmc(H) {
   }
   const addrs = (v, max) => (Array.isArray(v) ? v : String(v || "").split(/[,;\s]+/)).map(s => String(s).trim().toLowerCase()).filter(Boolean).slice(0, max);
   async function share(user, b) {
-    if (!mailReady()) fail(501, "Email isn't set up on the tools site yet. Download the PDF and send it from Outlook.");
+    const co = writeCo(user);
+    if (!mailReadyFor(co)) fail(501, "Email isn't set up for your company yet. Download the PDF and send it from Outlook.");
     const to = addrs(b.to, 20), cc = addrs(b.cc, 20).filter(a => a !== user.email);
     const bad = to.concat(cc).find(a => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a));
     if (!to.length) fail(400, "Add the customer's email address."); if (bad) fail(400, `${bad} isn't a valid email address.`);
-    const subject = clean(b.subject, 250) || "Bifold Technologies";
+    const subject = clean(b.subject, 250) || CO[co].name;
     const html = String(b.html || "").slice(0, 400000);
     const att = b.attachment && b.attachment.data ? { "@odata.type": "#microsoft.graph.fileAttachment", name: clean(b.attachment.name, 200), contentType: clean(b.attachment.type, 100) || "application/pdf", contentBytes: String(b.attachment.data) } : null;
     if (att && att.contentBytes.length > 4.3e6) fail(413, "The attachment is too large to email (over 3 MB). Download it and share a link instead.");
     // Record the share on the AMC or visit first so access is checked before anything is sent.
     let rec;
     if (b.kind === "amc") rec = await loadAmc(user, clean(b.id, 60));
-    else if (b.kind === "visit") { rec = await getOrNull(await table(VIS), VPK, clean(b.id, 60)); if (!rec) fail(404, "This visit no longer exists."); }
+    else if (b.kind === "visit") { rec = await getOrNull(await table(VIS), VPK, clean(b.id, 60)); if (!rec || !inCo(rec, user)) fail(404, "This visit no longer exists."); }
     else fail(400, "Unknown share.");
-    const r = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(process.env.MAIL_SENDER)}/sendMail`, {
+    const r = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderFor(co))}/sendMail`, {
       method: "POST", headers: { Authorization: "Bearer " + await graphToken(), "Content-Type": "application/json" },
       body: JSON.stringify({ message: { subject, body: { contentType: "HTML", content: html }, toRecipients: to.map(a => ({ emailAddress: { address: a } })),
         ccRecipients: cc.concat([user.email]).map(a => ({ emailAddress: { address: a } })), replyTo: [{ emailAddress: { address: user.email } }], attachments: att ? [att] : [] }, saveToSentItems: true }),
@@ -369,8 +386,8 @@ module.exports = function makeAmc(H) {
     if (a === "bootstrap" && method === "GET") {
       // Without the AMC section the commercial records stay hidden; contracts and visits are still shown for planning.
       const canAmc = user.isManager || (user.sections || []).includes("amc");
-      const [amcs, contracts, visits] = await Promise.all([canAmc ? listAmcs(user) : [], listContracts(), listVisits()]);
-      return { amcs, contracts, visits, features: { ai: AI.ready(), mail: mailReady() }, can: { amc: canAmc, visits: user.isManager || (user.sections || []).includes("visits") } };
+      const [amcs, contracts, visits] = await Promise.all([canAmc ? listAmcs(user) : [], listContracts(user), listVisits(user)]);
+      return { co: user.co, amcs, contracts, visits, features: { ai: AI.ready(), mail: user.co !== "all" && mailReadyFor(user.co) }, can: { amc: canAmc, visits: user.isManager || (user.sections || []).includes("visits") } };
     }
     if (a === "amcs") {
       if (!id && method === "POST") return createAmc(user, body);
@@ -387,9 +404,9 @@ module.exports = function makeAmc(H) {
     }
     if (a === "files") {
       if (!id && method === "POST") return uploadFile(user, body);
-      if (id && method === "GET") return getFile(id, sub === "download");
+      if (id && method === "GET") return getFile(user, id, sub === "download");
     }
-    if (a === "ai" && method === "POST") return AI.run(body, fail, clean);
+    if (a === "ai" && method === "POST") { writeCo(user); return AI.run(Object.assign({}, body, { company: user.co }), fail, clean); }
     if (a === "share" && method === "POST") return share(user, body);
     fail(404, "Unknown request.");
   };

@@ -28,6 +28,9 @@ jobs:
           GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
           GRAPH_CLIENT_SECRET: ${{ secrets.GRAPH_CLIENT_SECRET }}
           MAIL_SENDER: ${{ secrets.MAIL_SENDER }}
+          TECHHUB_MAIL_SENDER: ${{ secrets.TECHHUB_MAIL_SENDER }}
+          TECHHUB_REMINDER_CC: ${{ vars.TECHHUB_REMINDER_CC }}
+          TECHHUB_TOOLS_URL: ${{ vars.TECHHUB_TOOLS_URL }}
           AMC_REMINDER_CC: ranjan@bifoldtech.com
           TOOLS_URL: https://yellow-dune-0607b0710.4.azurestaticapps.net/amc/#amcs
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}

@@ -1,7 +1,10 @@
 // Bifold Tools API: shared customers, saved PnL documents with per-document sharing, the sales pipeline, the PDC cheque log
 // and the AMC Tracker (src/amc.js).
 // Storage: Azure Table Storage (setting STORAGE_CONNECTION).
-// Settings:
+// Settings (see also src/amc.js and src/access.js):
+//   BIFOLD_DOMAINS / TECHHUB_DOMAINS   email domains of each company (bifoldtech.com / techhubrak.ae)
+//   BIFOLD_MANAGERS / TECHHUB_MANAGERS managers of each company (Team access, see everything in their company)
+//   GROUP_ADMINS                       people who may switch company and open the read-only Group view (default: nobody)
 //   STORAGE_CONNECTION  connection string of the storage account (required)
 //   ALLOWED_DOMAINS     comma-separated email domains allowed to use the API (default bifoldtech.com)
 //   BIFOLD_MANAGERS     comma-separated emails who can view, edit and share every PnL (default ranjan@bifoldtech.com)
@@ -15,9 +18,24 @@ class HttpError extends Error {
 const fail = (status, message, data) => { throw new HttpError(status, message, data); };
 
 const list = (v, d) => String(v || d).split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-const domains = () => list(process.env.ALLOWED_DOMAINS, "bifoldtech.com");
-const managers = () => list(process.env.BIFOLD_MANAGERS, "ranjan@bifoldtech.com");
+const domains = () => list(process.env.ALLOWED_DOMAINS, "bifoldtech.com,techhubrak.ae");
 const emailOk = e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) && domains().some(d => e.endsWith("@" + d));
+
+// ---------- companies ----------
+// Each person belongs to the company of their email domain and only ever sees that company's records.
+// GROUP_ADMINS (empty by default) may switch between companies and open the combined Group view (read-only).
+const CO = {
+  bifold: { key: "bifold", name: "Bifold Technologies", domains: () => list(process.env.BIFOLD_DOMAINS, "bifoldtech.com"), managers: () => list(process.env.BIFOLD_MANAGERS, "ranjan@bifoldtech.com") },
+  techhub: { key: "techhub", name: "Tech Hub IT", domains: () => list(process.env.TECHHUB_DOMAINS, "techhubrak.ae"), managers: () => list(process.env.TECHHUB_MANAGERS, "") },
+};
+const groupAdmins = () => String(process.env.GROUP_ADMINS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+const coForEmail = e => (Object.values(CO).find(c => c.domains().some(d => String(e).endsWith("@" + d))) || {}).key || null;
+const managers = () => Object.values(CO).flatMap(c => c.managers());
+// Records written before companies existed belong to Bifold, except Tech Hub items logged under the company field.
+const rowCo = e => e.co || (e.company === "Tech Hub IT" ? "techhub" : "bifold");
+const inCo = (e, user) => user.co === "all" || rowCo(e) === user.co;
+const writeCo = user => { if (user.co === "all") fail(400, "You're in the Group view, which is read-only. Switch to Bifold or Tech Hub in the top bar to make changes."); return user.co; };
+const sameCoEmail = (e, user) => coForEmail(e) === (user.co === "all" ? user.homeCo : user.co);
 
 // ---------- storage ----------
 const clients = {};
@@ -64,8 +82,13 @@ function getUser(getHeader) {
   let p;
   try { p = JSON.parse(Buffer.from(raw, "base64").toString("utf8")); } catch { fail(401, "Your session has ended. Reload the page to sign in again."); }
   const email = String(p.userDetails || "").trim().toLowerCase();
-  if (!emailOk(email)) fail(403, `Only ${domains().map(d => "@" + d).join(", ")} accounts can use Bifold Tools. You are signed in as ${email || "an unknown account"}.`);
-  return { email, isManager: managers().includes(email) };
+  const homeCo = coForEmail(email);
+  if (!emailOk(email) || !homeCo) fail(403, `Only ${domains().map(d => "@" + d).join(", ")} accounts can use these tools. You are signed in as ${email || "an unknown account"}.`);
+  const group = groupAdmins().includes(email);
+  let co = homeCo;
+  const want = String(getHeader("x-bifold-company") || "").toLowerCase();
+  if (group && (CO[want] || want === "all")) co = want;
+  return { email, homeCo, co, group, isManager: group || CO[homeCo].managers().includes(email) };
 }
 
 const clean = (v, max = 200) => String(v ?? "").trim().slice(0, max);
@@ -74,7 +97,7 @@ const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 // ---------- customers (shared by every tool) ----------
 const CUST = "customers", CPK = "customer";
 const custOut = e => ({
-  id: e.rowKey, name: e.name, contactName: e.contactName || "", email: e.email || "", phone: e.phone || "",
+  id: e.rowKey, co: rowCo(e), name: e.name, contactName: e.contactName || "", email: e.email || "", phone: e.phone || "",
   trn: e.trn || "", emirate: e.emirate || "", address: e.address || "",
   createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt,
 });
@@ -86,43 +109,48 @@ function custIn(b) {
   if (!f.name) fail(400, "Enter the customer name.");
   return f;
 }
-async function listCustomers() {
+async function listCustomers(user) {
   const rows = await all(await table(CUST), CPK);
-  return rows.map(custOut).sort((a, b) => a.name.localeCompare(b.name));
+  return rows.filter(e => inCo(e, user)).map(custOut).sort((a, b) => a.name.localeCompare(b.name));
 }
-async function findDuplicate(name, exceptId) {
+async function findDuplicate(name, exceptId, co) {
   const n = name.toLowerCase();
-  return (await listCustomers()).find(c => c.name.toLowerCase() === n && c.id !== exceptId);
+  return (await all(await table(CUST), CPK)).map(custOut).find(c => c.co === co && c.name.toLowerCase() === n && c.id !== exceptId);
 }
 async function createCustomer(user, b) {
   const f = custIn(b);
-  const dup = await findDuplicate(f.name);
+  const co = writeCo(user);
+  const dup = await findDuplicate(f.name, null, co);
   if (dup) fail(409, `${dup.name} is already in the customer list.`, { customer: dup });
   const now = new Date().toISOString();
-  const e = { partitionKey: CPK, rowKey: crypto.randomUUID(), ...f, createdBy: user.email, createdAt: now, updatedBy: user.email, updatedAt: now };
+  const e = { partitionKey: CPK, rowKey: crypto.randomUUID(), co, ...f, createdBy: user.email, createdAt: now, updatedBy: user.email, updatedAt: now };
   await (await table(CUST)).createEntity(e);
   return custOut(e);
 }
 async function updateCustomer(user, id, b) {
   const t = await table(CUST);
   const cur = await getOrNull(t, CPK, id);
-  if (!cur) fail(404, "This customer no longer exists.");
+  if (!cur || !inCo(cur, user)) fail(404, "This customer no longer exists.");
+  const co = writeCo(user);
   const f = custIn(b);
-  const dup = await findDuplicate(f.name, id);
+  const dup = await findDuplicate(f.name, id, co);
   if (dup) fail(409, `${dup.name} is already in the customer list.`, { customer: dup });
-  const e = { partitionKey: CPK, rowKey: id, ...f, updatedBy: user.email, updatedAt: new Date().toISOString() };
+  const e = { partitionKey: CPK, rowKey: id, co, ...f, updatedBy: user.email, updatedAt: new Date().toISOString() };
   await t.updateEntity(e, "Merge");
   return custOut({ ...cur, ...e });
 }
 async function deleteCustomer(user, id) {
   if (!user.isManager) fail(403, "Only managers can delete customers.");
+  writeCo(user);
   const t = await table(CUST);
+  const cur = await getOrNull(t, CPK, id);
+  if (!cur || !inCo(cur, user)) return;
   try { await t.deleteEntity(CPK, id); } catch (e) { if (e.statusCode !== 404) throw e; }
 }
 
 // ---------- PnL documents ----------
 const PNL = "pnl", PPK = "pnl";
-const SUMMARY_COLS = ["RowKey", "title", "company", "customerId", "customerName", "poNo", "poValue", "directCost", "netProfit", "netPct", "owner", "acl", "createdAt", "updatedAt", "updatedBy"];
+const SUMMARY_COLS = ["RowKey", "co", "title", "company", "customerId", "customerName", "poNo", "poValue", "directCost", "netProfit", "netPct", "owner", "acl", "createdAt", "updatedAt", "updatedBy"];
 
 // Same formula as the page, so list figures match the document.
 function compute(d) {
@@ -135,6 +163,7 @@ function compute(d) {
 }
 const aclOf = e => { try { return JSON.parse(e.acl || "{}"); } catch { return {}; } };
 function roleOf(e, user) {
+  if (!inCo(e, user)) return null;
   if (e.owner === user.email) return "owner";
   if (user.isManager) return "manager";
   const r = aclOf(e)[user.email];
@@ -145,7 +174,7 @@ const canShare = r => r === "owner" || r === "manager";
 
 function summaryOut(e, role) {
   return {
-    id: e.rowKey, title: e.title || "", company: e.company || "", customerId: e.customerId || "", customerName: e.customerName || "",
+    id: e.rowKey, co: rowCo(e), title: e.title || "", company: e.company || "", customerId: e.customerId || "", customerName: e.customerName || "",
     poNo: e.poNo || "", poValue: num(e.poValue), directCost: num(e.directCost), netProfit: num(e.netProfit), netPct: num(e.netPct),
     owner: e.owner, createdAt: e.createdAt, updatedAt: e.updatedAt, updatedBy: e.updatedBy, role,
   };
@@ -156,8 +185,9 @@ function fullOut(e, role) {
     canEdit: canEdit(role), canShare: canShare(role), access: canShare(role) ? aclOf(e) : undefined,
   };
 }
-function docFields(b) {
+function docFields(b, co) {
   const d = b && typeof b.data === "object" && b.data ? b.data : fail(400, "Nothing to save.");
+  d.company = CO[co].name;
   if (!Array.isArray(d.lines)) d.lines = [];
   if (d.lines.length > 500) fail(413, "A PnL can have at most 500 cost lines.");
   const s = compute(d);
@@ -190,7 +220,8 @@ async function getPnl(user, id) { const { e, role } = await loadDoc(user, id); r
 async function createPnl(user, b) {
   const t = await table(PNL);
   const now = new Date().toISOString();
-  const e = { partitionKey: PPK, rowKey: newId(), ...docFields(b), owner: user.email, acl: "{}", createdAt: now, updatedAt: now, updatedBy: user.email };
+  const co = writeCo(user);
+  const e = { partitionKey: PPK, rowKey: newId(), co, ...docFields(b, co), owner: user.email, acl: "{}", createdAt: now, updatedAt: now, updatedBy: user.email };
   await t.createEntity(e);
   return getPnl(user, e.rowKey);
 }
@@ -198,7 +229,7 @@ async function updatePnl(user, id, b) {
   const { e, role } = await loadDoc(user, id);
   if (!canEdit(role)) fail(403, "You can view this PnL but not change it. Ask its owner or a manager for edit rights.");
   const next = {
-    partitionKey: PPK, rowKey: id, ...docFields(b), owner: e.owner, acl: e.acl, createdAt: e.createdAt,
+    partitionKey: PPK, rowKey: id, co: rowCo(e), ...docFields(b, writeCo(user)), owner: e.owner, acl: e.acl, createdAt: e.createdAt,
     updatedAt: new Date().toISOString(), updatedBy: user.email,
   };
   try {
@@ -212,6 +243,7 @@ async function updatePnl(user, id, b) {
 async function deletePnl(user, id) {
   const { role } = await loadDoc(user, id);
   if (!canShare(role)) fail(403, "Only the owner or a manager can delete this PnL.");
+  writeCo(user);
   await (await table(PNL)).deleteEntity(PPK, id);
 }
 async function setAccess(user, id, b) {
@@ -219,7 +251,7 @@ async function setAccess(user, id, b) {
   if (!canShare(role)) fail(403, "Only the owner or a manager can change who has access.");
   const email = clean(b.email, 150).toLowerCase();
   const r = String(b.role || "");
-  if (!emailOk(email)) fail(400, `Enter a valid ${domains().map(d => "@" + d).join(" or ")} email address.`);
+  if (!emailOk(email) || !sameCoEmail(email, user)) fail(400, "Enter the email address of a colleague in your company.");
   if (email === e.owner) fail(400, "The owner always has full access.");
   if (!["view", "edit", "none"].includes(r)) fail(400, "Choose view or edit.");
   const acl = aclOf(e);
@@ -236,21 +268,21 @@ const STAGES = ["lead", "survey", "proposal", "negotiation", "po", "won", "lost"
 const STAGE_NAMES = { lead: "Lead", survey: "Site survey", proposal: "Proposal sent", negotiation: "Negotiation", po: "PO received", won: "Won", lost: "Lost" };
 const STAGE_PROB = { lead: 10, survey: 20, proposal: 40, negotiation: 60, po: 90, won: 100, lost: 0 };
 const COMPANIES = ["Bifold Technologies", "Tech Hub IT"];
-const DEAL_COLS = ["RowKey", "title", "company", "customerId", "customerName", "value", "stage", "probability", "expectedClose",
+const DEAL_COLS = ["RowKey", "co", "title", "company", "customerId", "customerName", "value", "stage", "probability", "expectedClose",
   "source", "nextAction", "nextActionDate", "lostReason", "notes", "owner", "closedAt", "stageAt", "createdBy", "createdAt", "updatedAt", "updatedBy"];
 const LOG_MAX = 200;
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s));
 
 function dealOut(e) {
   return {
-    id: e.rowKey || e.RowKey, title: e.title || "", company: e.company || "", customerId: e.customerId || "", customerName: e.customerName || "",
+    id: e.rowKey || e.RowKey, co: rowCo(e), title: e.title || "", company: e.company || "", customerId: e.customerId || "", customerName: e.customerName || "",
     value: num(e.value), stage: e.stage, probability: num(e.probability), expectedClose: e.expectedClose || "",
     source: e.source || "", nextAction: e.nextAction || "", nextActionDate: e.nextActionDate || "", lostReason: e.lostReason || "",
     notes: e.notes || "", owner: e.owner, closedAt: e.closedAt || "", stageAt: e.stageAt || "",
     createdBy: e.createdBy, createdAt: e.createdAt, updatedAt: e.updatedAt, updatedBy: e.updatedBy,
   };
 }
-const dealVisible = (e, user) => user.isManager || e.owner === user.email;
+const dealVisible = (e, user) => inCo(e, user) && (user.isManager || e.owner === user.email);
 
 function dealIn(b, user, cur) {
   const f = {
@@ -261,7 +293,7 @@ function dealIn(b, user, cur) {
   };
   if (!f.title) fail(400, "Enter what the deal is for.");
   if (!f.customerId) fail(400, "Choose a customer.");
-  if (!COMPANIES.includes(f.company)) fail(400, "Choose Bifold Technologies or Tech Hub IT.");
+  f.company = CO[writeCo(user)].name;
   if (!STAGES.includes(f.stage)) fail(400, "Choose a valid stage.");
   if (f.value > 1e10) fail(400, "The deal value is too large.");
   if (f.expectedClose && !isDate(f.expectedClose)) fail(400, "The expected close date is not valid.");
@@ -275,7 +307,7 @@ function dealIn(b, user, cur) {
   const want = clean(b.owner, 150).toLowerCase();
   if (want && want !== owner) {
     if (!user.isManager) fail(403, "Only managers can reassign a deal.");
-    if (!emailOk(want)) fail(400, `Enter a valid ${domains().map(d => "@" + d).join(" or ")} email for the owner.`);
+    if (!emailOk(want) || !sameCoEmail(want, user)) fail(400, "Enter the email address of a colleague in your company as the owner.");
     owner = want;
   }
   f.owner = owner;
@@ -312,32 +344,35 @@ function describeChanges(cur, f) {
 
 // The customer name always comes from the shared customer list, so renames there show up on the next save.
 async function resolveCustomer(f, cur) {
-  const c = await getOrNull(await table(CUST), CPK, f.customerId);
+  const c0 = await getOrNull(await table(CUST), CPK, f.customerId);
+  const c = c0 && rowCo(c0) === f.co ? c0 : null;
   if (c) f.customerName = c.name;
   else if (cur && cur.customerId === f.customerId) f.customerName = cur.customerName || f.customerName;
   else fail(400, "That customer is no longer in the customer list. Choose another.");
 }
 async function createDeal(user, b) {
   const f = dealIn(b, user, null);
-  await resolveCustomer(f, null);
+  f.co = writeCo(user);
+  await resolveCustomer(f, null); delete f.co;
   const now = new Date().toISOString();
   const closed = f.stage === "won" || f.stage === "lost";
   const log = [logEntry(user, "create", `Created at ${STAGE_NAMES[f.stage]}` + (f.owner !== user.email ? `, assigned to ${f.owner}` : ""))];
-  const e = { partitionKey: DPK, rowKey: dealId(), ...f, closedAt: closed ? now : "", stageAt: now, createdBy: user.email, createdAt: now, updatedAt: now, updatedBy: user.email, ...packJson({ log }) };
+  const e = { partitionKey: DPK, rowKey: dealId(), co: writeCo(user), ...f, closedAt: closed ? now : "", stageAt: now, createdBy: user.email, createdAt: now, updatedAt: now, updatedBy: user.email, ...packJson({ log }) };
   await (await table(DEALS)).createEntity(e);
   return getDeal(user, e.rowKey);
 }
 async function updateDeal(user, id, b) {
   const cur = await loadDeal(user, id);
   const f = dealIn(b, user, cur);
-  await resolveCustomer(f, cur);
+  f.co = rowCo(cur);
+  await resolveCustomer(f, cur); delete f.co;
   const now = new Date().toISOString();
   let log = unpackJson(cur).log || [];
   for (const [kind, text] of describeChanges(cur, f)) log = addLog(log, logEntry(user, kind, text));
   const stageChanged = cur.stage !== f.stage;
   const closed = f.stage === "won" || f.stage === "lost";
   const next = {
-    partitionKey: DPK, rowKey: id, ...f,
+    partitionKey: DPK, rowKey: id, co: rowCo(cur), ...f,
     closedAt: closed ? (stageChanged || !cur.closedAt ? now : cur.closedAt) : "",
     stageAt: stageChanged ? now : (cur.stageAt || cur.createdAt),
     createdBy: cur.createdBy, createdAt: cur.createdAt, updatedAt: now, updatedBy: user.email, ...packJson({ log }),
@@ -365,6 +400,7 @@ async function addDealNote(user, id, b) {
 }
 async function deleteDeal(user, id) {
   const cur = await loadDeal(user, id);
+  writeCo(user);
   if (!user.isManager && cur.owner !== user.email) fail(403, "Only the owner or a manager can delete this deal.");
   await (await table(DEALS)).deleteEntity(DPK, id);
 }
@@ -386,7 +422,7 @@ const FORMS = ["Cheque", "Bank guarantee", "Cash / transfer"];
 
 function chqOut(e) {
   return {
-    id: e.rowKey, kind: e.kind || "pdc", form: e.form || "", company: e.company || "", payeeType: e.payeeType || "", payee: e.payee || "",
+    id: e.rowKey, co: rowCo(e), kind: e.kind || "pdc", form: e.form || "", company: e.company || "", payeeType: e.payeeType || "", payee: e.payee || "",
     chequeNo: e.chequeNo || "", bank: e.bank || "", amount: num(e.amount), poValue: num(e.poValue),
     chequeDate: e.chequeDate || "", clearanceDate: e.clearanceDate || "",
     status: e.status || "pending", reference: e.reference || "", notes: e.notes || "",
@@ -406,7 +442,6 @@ function chqIn(b) {
     chequeDate: clean(b.chequeDate, 10), clearanceDate: clean(b.clearanceDate, 10), status: clean(b.status, 20) || "pending",
     reference: clean(b.reference, 150), notes: clean(b.notes, 1000),
   };
-  if (!COMPANIES.includes(f.company)) fail(400, "Choose Bifold Technologies or Tech Hub IT.");
   if (!PAYEE_TYPES.includes(f.payeeType)) fail(400, "Choose supplier, vendor or customer.");
   if (!FORMS.includes(f.form)) fail(400, "Choose cheque, bank guarantee or cash / transfer.");
   if (!f.payee) fail(400, pdc ? "Enter the payee name." : "Enter who the " + KINDS[kind].toLowerCase() + " was given to.");
@@ -419,18 +454,19 @@ function chqIn(b) {
   if (!CHQ_STATUS.includes(f.status)) fail(400, "Choose a valid status.");
   return f;
 }
-async function listCheques() {
+async function listCheques(user) {
   const rows = await all(await table(PDC), QPK);
-  return rows.map(chqOut).sort((a, b) => a.clearanceDate.localeCompare(b.clearanceDate));
+  return rows.filter(e => inCo(e, user)).map(chqOut).sort((a, b) => a.clearanceDate.localeCompare(b.clearanceDate));
 }
 async function findChequeNo(f, exceptId) {
   if (!f.chequeNo) return null;
   const n = f.chequeNo.toLowerCase();
-  return (await listCheques()).find(c => c.company === f.company && c.kind === f.kind && c.chequeNo.toLowerCase() === n && c.id !== exceptId && c.status !== "cancelled");
+  return (await all(await table(PDC), QPK)).map(chqOut).find(c => c.co === f.co && c.kind === f.kind && c.chequeNo.toLowerCase() === n && c.id !== exceptId && c.status !== "cancelled");
 }
 const dupMsg = (d, f) => `${KINDS[d.kind]} ${d.chequeNo} for ${f.company} is already logged (${d.payee}).`;
 async function createCheque(user, b) {
   const f = chqIn(b);
+  f.co = writeCo(user); f.company = CO[f.co].name;
   const dup = await findChequeNo(f);
   if (dup) fail(409, dupMsg(dup, f));
   const now = new Date().toISOString();
@@ -441,8 +477,9 @@ async function createCheque(user, b) {
 async function updateCheque(user, id, b) {
   const t = await table(PDC);
   const cur = await getOrNull(t, QPK, id);
-  if (!cur) fail(404, "This entry no longer exists.");
+  if (!cur || !inCo(cur, user)) fail(404, "This entry no longer exists.");
   const f = chqIn(b);
+  f.co = writeCo(user); f.company = CO[f.co].name;
   const dup = await findChequeNo(f, id);
   if (dup) fail(409, dupMsg(dup, f));
   const reminderSentAt = cur.clearanceDate === f.clearanceDate ? (cur.reminderSentAt || "") : "";
@@ -454,18 +491,20 @@ async function updateCheque(user, id, b) {
 async function deleteCheque(user, id) {
   const t = await table(PDC);
   const cur = await getOrNull(t, QPK, id);
-  if (!cur) return;
+  if (!cur || !inCo(cur, user)) return;
+  writeCo(user);
   if (!user.isManager && cur.createdBy !== user.email) fail(403, "Only the person who logged this entry or a manager can delete it. Mark it cancelled instead.");
   await t.deleteEntity(QPK, id);
 }
 
 // ---------- AMC Tracker (src/amc.js) ----------
+const mailReadyFor = co => ["GRAPH_TENANT_ID", "GRAPH_CLIENT_ID", "GRAPH_CLIENT_SECRET"].every(k => process.env[k]) && !!(co === "techhub" ? process.env.TECHHUB_MAIL_SENDER : co === "bifold" ? process.env.MAIL_SENDER : "");
 let amcRoute;
-const amc = () => amcRoute || (amcRoute = require("./amc")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, emailOk, CUST, CPK }));
+const amc = () => amcRoute || (amcRoute = require("./amc")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, emailOk, CUST, CPK, CO, rowCo, inCo, writeCo, sameCoEmail, mailReadyFor }));
 
 // ---------- team access (src/access.js) ----------
 let accessMod;
-const access = () => accessMod || (accessMod = require("./access")({ table, getOrNull, all, fail, clean, emailOk, domains, managers }));
+const access = () => accessMod || (accessMod = require("./access")({ table, getOrNull, all, fail, clean, emailOk, domains, managers, CO, coForEmail, rowCo }));
 
 // ---------- alerts for the top bar and home page ----------
 // Everything that needs someone's attention today, limited to the sections they can use.
@@ -477,7 +516,7 @@ async function alerts(user) {
   const fd = d => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
   const out = [];
   const jobs = [];
-  if (has("pdc")) jobs.push(listCheques().then(list => list.filter(c => c.status === "pending" && c.clearanceDate <= plus(7)).forEach(c => {
+  if (has("pdc")) jobs.push(listCheques(user).then(list => list.filter(c => c.status === "pending" && c.clearanceDate <= plus(7)).forEach(c => {
     const d = days(c.clearanceDate);
     out.push({ tool: "pdc", severity: d < 0 ? "high" : d <= 2 ? "medium" : "low", when: c.clearanceDate, href: "/pdc/",
       title: `${c.kind === "pdc" ? "Cheque" : c.kind === "apg" ? "Guarantee" : "Deposit"} ${c.chequeNo || ""} to ${c.payee}`.replace(/\s+/g, " "),
@@ -515,9 +554,9 @@ async function route(method, seg, user, body) {
   if (a === "access") return access().route(method, seg, user, body);
   if (a === "amc") return amc()(method, seg.slice(1), user, body);
   if (a === "alerts" && method === "GET") return alerts(user);
-  if (a === "me" && method === "GET") { access().touch(user.email); return { ...user, managers: managers(), domains: domains(), allSections: access().SECTIONS }; }
+  if (a === "me" && method === "GET") { access().touch(user.email); return { ...user, managers: CO[user.homeCo].managers(), domains: domains(), allSections: access().SECTIONS, companies: Object.values(CO).map(c => ({ key: c.key, name: c.name })), mailReady: mailReadyFor(user.co) }; }
   if (a === "customers") {
-    if (!id && method === "GET") return listCustomers();
+    if (!id && method === "GET") return listCustomers(user);
     if (!id && method === "POST") return createCustomer(user, body);
     if (id && method === "PUT") return updateCustomer(user, id, body);
     if (id && method === "DELETE") return deleteCustomer(user, id);
@@ -539,7 +578,7 @@ async function route(method, seg, user, body) {
     if (id && !sub && method === "DELETE") return deleteDeal(user, id);
   }
   if (a === "cheques") {
-    if (!id && method === "GET") return listCheques();
+    if (!id && method === "GET") return listCheques(user);
     if (!id && method === "POST") return createCheque(user, body);
     if (id && method === "PUT") return updateCheque(user, id, body);
     if (id && method === "DELETE") return deleteCheque(user, id);

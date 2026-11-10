@@ -9,6 +9,29 @@
   document.documentElement.style.visibility = "hidden";
   const reveal = () => { document.documentElement.style.visibility = ""; };
   const failsafe = setTimeout(reveal, 4000);
+  // Company: each person works in their own company's tools (Bifold or Tech Hub); the API enforces the separation.
+  // Group admins can switch company; their choice is sent as a header, which the API ignores for everyone else.
+  const BRANDS = {
+    bifold: { key: "bifold", tools: "Bifold Tools", name: "Bifold Technologies L.L.C", short: "Bifold", logo: "/assets/bifold_logo.png", foot: "Al Garhoud, Dubai", manager: "Ranjan" },
+    techhub: { key: "techhub", tools: "Tech Hub Tools", name: "Tech Hub Information Technology", short: "Tech Hub", logo: "/assets/techhub/techhub_logo.png", foot: "Al Nakheel, Ras Al Khaimah", manager: "your manager" },
+  };
+  const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+  const isHome = /^\/(index\.html)?$/.test(location.pathname);
+  const chosen = store.get("bx-co");
+  const sendCo = chosen && (chosen !== "all" || isHome) ? chosen : null;
+  if (sendCo && /^(bifold|techhub|all)$/.test(sendCo)) {
+    const of = window.fetch.bind(window);
+    window.fetch = (u, o) => {
+      const url = typeof u === "string" ? u : (u && u.url) || "";
+      if (url.startsWith("/api/") || url.startsWith(location.origin + "/api/")) {
+        o = Object.assign({}, o); const h = new Headers(o.headers || (typeof u === "string" ? undefined : u.headers)); h.set("x-bifold-company", sendCo); o.headers = h;
+      }
+      return of(u, o);
+    };
+  }
+  const last = store.get("bx-last-co");
+  if (last) document.documentElement.dataset.co = last;
+  let BR = BRANDS[last === "techhub" ? "techhub" : "bifold"];
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   const I = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
@@ -42,6 +65,30 @@
   const initials = e => { const p = String(e).split("@")[0].split(/[._-]+/).filter(Boolean); return ((p[0] || "?")[0] + (p[1] ? p[1][0] : (p[0] || "")[1] || "")).toUpperCase(); };
   const nameOf = e => String(e).split("@")[0].split(/[._-]+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
 
+  // Rebrand the static page for Tech Hub, and hide the other company's choices (records are always the signed-in company's).
+  const CO_NAMES = { bifold: "Bifold Technologies", techhub: "Tech Hub IT" };
+  function brandPage(m) {
+    const co = m.co;
+    document.documentElement.dataset.co = co;
+    store.set("bx-last-co", co === "all" ? m.homeCo : co);
+    BR = BRANDS[co === "techhub" ? "techhub" : "bifold"];
+    window.BIFOLD_BRAND = BR;
+    if (co !== "all") {
+      const other = CO_NAMES[co === "techhub" ? "bifold" : "techhub"], mine = CO_NAMES[co];
+      document.querySelectorAll("[data-v]").forEach(el => { if (el.dataset.v === other || el.dataset.v === mine) (el.closest(".seg") || el).hidden = true; });
+      document.querySelectorAll("select").forEach(sel => { const opts = [...sel.options]; if (!opts.some(o => (o.value || o.text) === mine)) return;
+        opts.forEach(o => { if ((o.value || o.text) === other) o.remove(); }); sel.value = mine; const lab = sel.closest("label"); if (lab && sel.options.length === 1) lab.hidden = true; });
+    }
+    if (BR.key !== "techhub") return;
+    document.title = document.title.replace(/Bifold Tools/g, BR.tools).replace(/Bifold/g, BR.short);
+    document.querySelectorAll('img[src="/assets/bifold_logo.png"]').forEach(i => { i.src = BR.logo; i.alt = BR.name; });
+    const ic = document.querySelector('link[rel="icon"]'); if (ic) ic.href = BR.logo;
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const fix = t => t.replace(/Bifold Technologies L\.?L\.?C\.?/g, BR.name).replace(/Bifold Technologies/g, BR.name).replace(/Bifold Tools/g, BR.tools).replace(/Al Garhoud, Dubai/g, BR.foot).replace(/Office A306, Saraya Avenue, /g, "Blue Building, Injaz Road, ").replace(/\bRanjan\b/g, "your manager").replace(/\bBifold\b/g, BR.short);
+    for (let n; (n = w.nextNode());) { if (/Bifold|Ranjan|Garhoud/.test(n.nodeValue) && !n.parentElement.closest("script,style,.bx-side,.bx-top")) n.nodeValue = fix(n.nodeValue); }
+    document.querySelectorAll("[placeholder],[aria-label],[title]").forEach(el => ["placeholder", "aria-label", "title"].forEach(a => { const v = el.getAttribute(a); if (v && /Bifold/.test(v)) el.setAttribute(a, fix(v)); }));
+  }
+
   function build(m) {
     document.body.classList.add("bx");
     const flat = [];
@@ -55,21 +102,24 @@
         return `<a href="${it.href}" class="${on ? "on" : ""}" data-key="${it.icon}">${ICON[it.icon]}<span>${esc(it.label)}</span><em class="ct" hidden></em></a>${subs}`;
       }).join("")}</div>`;
     }).join("");
-    const side = document.createElement("aside"); side.className = "bx-side"; side.setAttribute("aria-label", "Bifold Tools");
-    side.innerHTML = `<a class="bx-brand" href="/"><span class="lg"><img src="/assets/bifold_logo.png" alt="Bifold Technologies"></span><span class="nm"><b>Bifold Tools</b><span>Enterprise suite</span></span></a>
+    const side = document.createElement("aside"); side.className = "bx-side"; side.setAttribute("aria-label", BR.tools);
+    side.innerHTML = `<a class="bx-brand" href="/"><span class="lg"><img src="${BR.logo}" alt="${esc(BR.name)}"></span><span class="nm"><b>${esc(m.co === "all" ? "Group Tools" : BR.tools)}</b><span>${m.co === "all" ? "Bifold + Tech Hub" : "Enterprise suite"}</span></span></a>
       <nav class="bx-nav">${navHTML}</nav>
-      <div class="bx-foot"><b>Bifold Technologies L.L.C</b><br>Al Garhoud, Dubai · Signed in with Microsoft 365</div>`;
+      <div class="bx-foot"><b>${esc(BR.name)}</b><br>${esc(BR.foot)} · Signed in with Microsoft 365</div>`;
     const current = flat.find(it => it.href !== "/" && path.startsWith(it.href));
     const group = current ? (NAV.find(g => g.items.includes(current)) || {}).group : null;
-    const pageTitle = current ? current.label : path === "/" ? "Home" : document.title.replace(/^Bifold\s*/, "");
+    const pageTitle = current ? current.label : path === "/" ? "Home" : document.title.replace(/^(Bifold|Tech Hub)\s*/, "");
     const top = document.createElement("header"); top.className = "bx-top";
     const role = m.isManager ? "Manager · full access" : "Team member";
     top.innerHTML = `<button class="bx-ib bx-burger" type="button" aria-label="Open menu">${ICON.menu}</button>
-      <div class="bx-crumb"><a href="/">Bifold Tools</a>${group ? `<i>/</i><span>${esc(group)}</span>` : ""}<i>/</i><b>${esc(pageTitle)}</b></div>
+      <div class="bx-crumb"><a href="/">${esc(m.co === "all" ? "Group Tools" : BR.tools)}</a>${group ? `<i>/</i><span>${esc(group)}</span>` : ""}<i>/</i><b>${esc(pageTitle)}</b></div>
+      ${m.group ? `<label class="bx-co"><span>Company</span><select aria-label="Company">${[["bifold", "Bifold"], ["techhub", "Tech Hub"]].concat(isHome ? [["all", "Group (read-only)"]] : []).map(([k, l]) => `<option value="${k}"${k === m.co ? " selected" : ""}>${l}</option>`).join("")}</select></label>` : ""}
       <button class="bx-search" type="button" aria-label="Search tools and customers">${ICON.search}<span class="t">Search tools and customers</span><kbd>Ctrl K</kbd></button>
       <button class="bx-ib bx-bell" type="button" aria-label="Alerts">${ICON.bell}<span class="dot" hidden></span></button>
       <button class="bx-user" type="button" aria-label="Account"><span class="bx-av">${esc(initials(m.email))}</span><span class="u"><b>${esc(nameOf(m.email))}</b><span>${esc(role)}</span></span></button>`;
     document.body.prepend(top); document.body.prepend(side);
+    const coSel = top.querySelector(".bx-co select");
+    if (coSel) coSel.onchange = () => { store.set("bx-co", coSel.value); location.reload(); };
 
     // sub-links for the AMC tracker follow the hash
     const syncSub = () => side.querySelectorAll("a.sub").forEach(a => a.classList.toggle("on", (location.hash || "#overview") === a.dataset.hash));
@@ -148,13 +198,14 @@
   function block(m, msg) {
     document.querySelectorAll("body > *:not(.bx-side):not(.bx-top):not(script)").forEach(el => { el.hidden = true; });
     const box = document.createElement("div"); box.className = "noaccess";
-    box.innerHTML = `<h2>${esc(msg)}</h2><p>Ask Ranjan to give you access in Team access. You are signed in as ${esc(m.email)}.</p><a href="/">Back to Bifold Tools</a>`;
+    box.innerHTML = `<h2>${esc(msg)}</h2><p>Ask ${esc(BR.manager)} to give you access in Team access. You are signed in as ${esc(m.email)}.</p><a href="/">Back to ${esc(BR.tools)}</a>`;
     document.body.appendChild(box);
   }
 
   fetch("/api/me", { cache: "no-store" }).then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j))).then(m => {
     window.BIFOLD_ME = m;
     const apply = () => {
+      brandPage(m);
       build(m);
       if (!m.isManager) document.querySelectorAll("[data-manager]").forEach(el => { el.hidden = true; });
       const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/amc/": ["amc", "visits"], "/access/": ["manager"] };

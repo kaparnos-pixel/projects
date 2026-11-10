@@ -7,7 +7,7 @@ const EXAMPLE = require("./amc-example.json");
 const MODEL = () => process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 const ready = () => !!process.env.ANTHROPIC_API_KEY;
 
-const PLAYBOOK = `BIFOLD AMC PLAYBOOK
+const PLAYBOOK = `AMC PLAYBOOK
 - Subtitle names the engagement, e.g. "IP Telephony Support Plan", "IT Infrastructure Support Plan", "Network & Connectivity Support Plan", "CCTV & Security Support Plan". Mixed estates get a combined plan name.
 - Scope streams lettered A, B, C… tailored to the systems. Telephony: PBX support, handsets, call routing & features (MAC), PSTN/trunk coordination, preventive maintenance & health checks, support coordination & reporting. IT: daily operations & support, network & systems management, server & application administration, cybersecurity & compliance (advisory), vendor & asset management, communication & stakeholder coordination. CCTV: NVR/DVR platform, cameras & field devices, storage/retention/playback, network coordination, PM & health checks, reporting.
 - Service plan rows [Parameter, Coverage, Notes]: service plan, covered systems/endpoints/lines, preventive maintenance cadence, remote support hours, onsite support, moves/adds/changes, firmware updates, config backup, email/telephone support, named engineers, coverage hours (Mon–Sat 9 AM–6 PM unless told otherwise), hardware Excluded, vendor licences Excluded, service reports cadence.
@@ -25,12 +25,22 @@ const PARTS = {
   terms: `{"documentation": {"intro": string, "groups": [{"heading": string, "bullets": [...]}, … 3-4 groups]}, "exclusions": {"groups": [{"heading": string, "bullets": [...]} or {"heading": string, "text": string}, … the 7 standard groups]}}`,
 };
 
+// Tech Hub's house defaults (from its AMC playbook) take precedence over the shared playbook.
+const TECHHUB = `TECH HUB HOUSE DEFAULTS (these override the playbook above where they differ):
+- The company is Tech Hub Information Technology, an IT solutions provider in Ras Al Khaimah (Al Nakheel), serving RAK and the wider UAE.
+- Business hours are Sun-Thu, 9 AM - 6 PM UAE. Out-of-hours and 24x7 cover are a priced upgrade.
+- SLA priorities are named Critical, High, Medium and Low: Critical (system down) 1-hour remote and 4-hour on-site target; High (major function impaired) 2-hour remote and next-business-day on-site; Medium (degraded / single user) 4-hour remote; Low (request / advisory) next business day.
+- Preventive maintenance defaults to 4 visits a year (quarterly); 2 a year for small estates. Each visit ends with a written visit report.
+- Offer Comprehensive (parts and labour) or Standard (labour only, parts billed on approval) cover, and say which applies or that both are available.
+- Payment defaults to 100% annual in advance, with a quarterly option by prior agreement.`;
+const NAMES = { bifold: "Bifold Technologies LLC", techhub: "Tech Hub Information Technology" };
+
 function proposalPrompt(b, clean) {
   const part = String(b.part || "");
   if (!PARTS[part]) return null;
   const v = Number(b.value) || 0;
   const size = v < 15000 ? "small" : v <= 60000 ? "medium" : "large";
-  return `You are drafting part of a Bifold Technologies LLC Annual Maintenance Contract (AMC) proposal.
+  return `You are drafting part of a ${NAMES[b.company] || NAMES.bifold} Annual Maintenance Contract (AMC) proposal.
 
 CUSTOMER: ${clean(b.customerName, 150)}${b.location ? " (" + clean(b.location, 100) + ")" : ""}
 SYSTEMS COVERED (verbatim from the account manager):
@@ -39,7 +49,7 @@ ANNUAL AMC VALUE: AED ${v.toLocaleString("en-US")} excluding VAT (size band: ${s
 TERM: ${Number(b.termMonths) || 12} months.${b.renewal ? "\nThis is a renewal of an existing Bifold AMC; mention continuity of service where natural." : ""}
 ${b.notes ? "ACCOUNT MANAGER'S INSTRUCTIONS: " + clean(b.notes, 1500) + "\n" : ""}
 ${PLAYBOOK}
-
+${b.company === "techhub" ? "\n" + TECHHUB + "\n" : ""}
 Reply with ONLY one JSON object of this shape:
 ${PARTS[part]}
 
@@ -48,7 +58,7 @@ ${JSON.stringify(EXAMPLE)}`;
 }
 
 function visitPrompt(b, clean) {
-  return `You are writing the findings section of a Bifold Technologies maintenance visit report for the customer ${clean(b.customerName, 150)}.
+  return `You are writing the findings section of a ${NAMES[b.company] || NAMES.bifold} maintenance visit report for the customer ${clean(b.customerName, 150)}.
 Visit type: ${clean(b.visitType, 60)}. Systems under contract: ${clean(b.systems, 3000) || "not listed"}.
 Checklist items marked as issues: ${clean(b.issues, 2000) || "none"}.
 Engineer's rough notes (the only source of facts; add nothing the notes don't support):

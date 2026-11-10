@@ -14,8 +14,14 @@ const { TableClient } = require("@azure/data-tables");
 
 const env = process.env;
 const DRY = env.DRY_RUN === "1";
-const CC = String(env.AMC_REMINDER_CC || "ranjan@bifoldtech.com").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-const URL_ = env.TOOLS_URL || "https://yellow-dune-0607b0710.4.azurestaticapps.net/amc/#amcs";
+// Each company is alerted separately, from its own mailbox and with its own copy list:
+// Bifold: MAIL_SENDER, AMC_REMINDER_CC, TOOLS_URL. Tech Hub: TECHHUB_MAIL_SENDER, TECHHUB_REMINDER_CC, TECHHUB_TOOLS_URL.
+const ccList = v => String(v || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+const COS = {
+  bifold: { sender: env.MAIL_SENDER, cc: ccList(env.AMC_REMINDER_CC || "ranjan@bifoldtech.com"), url: env.TOOLS_URL || "https://yellow-dune-0607b0710.4.azurestaticapps.net/amc/#amcs" },
+  techhub: { sender: env.TECHHUB_MAIL_SENDER, cc: ccList(env.TECHHUB_REMINDER_CC), url: env.TECHHUB_TOOLS_URL || env.TOOLS_URL || "https://yellow-dune-0607b0710.4.azurestaticapps.net/amc/#amcs" },
+};
+const rowCo = e => e.co || "bifold";
 
 const dubaiToday = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 864e5);
@@ -25,7 +31,7 @@ const emailOk = e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e);
 const json = (s, d) => { try { return s ? JSON.parse(s) : d; } catch { return d; } };
 
 function missing() {
-  const need = ["STORAGE_CONNECTION"].concat(DRY ? [] : ["GRAPH_TENANT_ID", "GRAPH_CLIENT_ID", "GRAPH_CLIENT_SECRET", "MAIL_SENDER"]);
+  const need = ["STORAGE_CONNECTION"].concat(DRY ? [] : ["GRAPH_TENANT_ID", "GRAPH_CLIENT_ID", "GRAPH_CLIENT_SECRET"]);
   return need.filter(k => !env[k]);
 }
 async function graphToken() {
@@ -37,8 +43,8 @@ async function graphToken() {
   if (!r.ok) throw new Error("Microsoft sign-in for the reminder app failed: " + (j.error_description || j.error || r.status));
   return j.access_token;
 }
-async function sendMail(token, to, cc, subject, html) {
-  const r = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(env.MAIL_SENDER)}/sendMail`, {
+async function sendMail(token, sender, to, cc, subject, html) {
+  const r = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`, {
     method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
     body: JSON.stringify({ message: { subject, body: { contentType: "HTML", content: html }, toRecipients: to.map(a => ({ emailAddress: { address: a } })), ccRecipients: cc.map(a => ({ emailAddress: { address: a } })) }, saveToSentItems: true }),
   });
@@ -55,7 +61,7 @@ function dueMilestone(c, today) {
   return reached.length ? Math.min(...reached) : null;
 }
 
-function buildEmail(list, today) {
+function buildEmail(list, today, URL_) {
   const expired = list.every(x => daysBetween(today, x.c.end) < 0);
   const subject = `AMC renewal alert: ${list.length} contract${list.length === 1 ? "" : "s"} ${expired ? "expired" : "expiring"}`;
   const td = 'style="padding:6px 10px;border:1px solid #d5dce3"';
@@ -81,17 +87,20 @@ async function main() {
   console.log(`${due.length} contract(s) due an alert.`);
   if (!due.length) return;
   const groups = {};
-  for (const x of due) (groups[String(x.c.notifyEmail || "").toLowerCase()] ||= []).push(x);
+  for (const x of due) (groups[rowCo(x.c) + "|" + String(x.c.notifyEmail || "").toLowerCase()] ||= []).push(x);
   const token = DRY ? null : await graphToken();
   let sent = 0, failed = 0;
-  for (const [who, list] of Object.entries(groups)) {
+  for (const [key, list] of Object.entries(groups)) {
+    const [co, who] = key.split("|"); const C = COS[co] || COS.bifold;
+    if (!C.sender && !DRY) { console.log(`::warning::No mailbox set for ${co} (${co === "techhub" ? "TECHHUB_MAIL_SENDER" : "MAIL_SENDER"}); ${list.length} alert(s) not sent.`); continue; }
     list.sort((a, b) => a.c.end.localeCompare(b.c.end));
-    const to = emailOk(who) ? [who] : CC.slice(0, 1);
-    const cc = CC.filter(a => !to.includes(a));
-    const { subject, html } = buildEmail(list, today);
-    if (DRY) { console.log(`[dry run] to ${to.join(", ")} cc ${cc.join(", ")}: ${subject} (${list.map(x => x.c.ref + "@" + x.m).join(", ")})`); continue; }
+    const to = emailOk(who) ? [who] : C.cc.slice(0, 1);
+    if (!to.length) { console.log(`::warning::No recipient for ${list.length} ${co} contract(s).`); continue; }
+    const cc = C.cc.filter(a => !to.includes(a));
+    const { subject, html } = buildEmail(list, today, C.url);
+    if (DRY) { console.log(`[dry run] ${co}: to ${to.join(", ")} cc ${cc.join(", ")}: ${subject} (${list.map(x => x.c.ref + "@" + x.m).join(", ")})`); continue; }
     try {
-      await sendMail(token, to, cc, subject, html); sent++;
+      await sendMail(token, C.sender, to, cc, subject, html); sent++;
       for (const { c, m } of list) {
         const sentList = json(c.alertsSent, []).map(String).concat([String(m)]);
         await t.updateEntity({ partitionKey: c.partitionKey, rowKey: c.rowKey, alertsSent: JSON.stringify(sentList), lastAlertAt: new Date().toISOString() }, "Merge", { etag: c.etag })

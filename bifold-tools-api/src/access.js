@@ -3,7 +3,7 @@
 //
 // Storage (Table Storage):
 //   access       PK "user"   RowKey = email     sections (JSON array), updatedBy, updatedAt
-//                PK "policy" RowKey = "default" sections for anyone not listed (until set: every section)
+//                PK "policy" RowKey = "default-<company>" sections for anyone in that company not listed (until set: every section)
 //   accessseen   PK "seen"   RowKey = email     lastSeen (stamped at most once a day, so managers can see who signs in)
 
 const SECTIONS = [
@@ -18,23 +18,29 @@ const KEYS = SECTIONS.map(s => s.key);
 const CACHE_MS = 30000;
 
 module.exports = function makeAccess(H) {
-  const { table, getOrNull, all, fail, clean, emailOk, domains } = H;
-  const cache = new Map(); let policy = { v: null, at: 0 };
+  const { table, getOrNull, all, fail, clean, emailOk, domains, CO, coForEmail, rowCo } = H;
+  const cache = new Map(); const policies = new Map();
+  // Team access is per company: managers see and set access only for people in their own company.
+  const coOf = user => user.co === "all" ? user.homeCo : user.co;
+  const coManagers = co => CO[co].managers();
   const parse = s => { try { const a = JSON.parse(s || "[]"); return Array.isArray(a) ? a.filter(k => KEYS.includes(k)) : []; } catch { return []; } };
   const sectionsIn = arr => [...new Set((Array.isArray(arr) ? arr : []).filter(k => KEYS.includes(k)))];
 
-  async function defaultSections() {
-    if (policy.v && Date.now() - policy.at < CACHE_MS) return policy.v;
-    const e = await getOrNull(await table("access"), "policy", "default");
-    policy = { v: e ? parse(e.sections) : KEYS.slice(), at: Date.now() };
-    return policy.v;
+  async function defaultSections(co) {
+    const hit = policies.get(co);
+    if (hit && Date.now() - hit.at < CACHE_MS) return hit.v;
+    const t = await table("access");
+    const e = await getOrNull(t, "policy", "default-" + co) || (co === "bifold" ? await getOrNull(t, "policy", "default") : null);
+    const v = e ? parse(e.sections) : KEYS.slice();
+    policies.set(co, { v, at: Date.now() });
+    return v;
   }
   async function sectionsFor(user) {
     if (user.isManager) return KEYS.slice();
     const hit = cache.get(user.email);
     if (hit && Date.now() - hit.at < CACHE_MS) return hit.v;
     const e = await getOrNull(await table("access"), "user", user.email);
-    const v = e ? parse(e.sections) : await defaultSections();
+    const v = e ? parse(e.sections) : await defaultSections(user.homeCo);
     cache.set(user.email, { v, at: Date.now() });
     return v;
   }
@@ -67,19 +73,21 @@ module.exports = function makeAccess(H) {
     }
     return null;
   }
+  const boss = user => user.homeCo === "techhub" ? "your manager" : "Ranjan";
   const label = k => (SECTIONS.find(s => s.key === k) || {}).name || k;
   function guard(method, seg, body, user) {
     const n = need(method, seg, body);
     if (!n || user.isManager) return;
     if (n === "manager") fail(403, "Only managers can do this.");
     const has = k => user.sections.includes(k);
-    if (n === "any") { if (!user.sections.length) fail(403, "You don't have access to Bifold Tools yet. Ask Ranjan to give you access."); return; }
-    if (n === "customersOrTool") { if (!["customers", "pnl", "pipeline", "pdc", "amc"].some(has)) fail(403, "You don't have access to edit customers. Ask Ranjan to give you access."); return; }
+    if (n === "any") { if (!user.sections.length) fail(403, `You don't have access to ${user.homeCo === "techhub" ? "Tech Hub Tools" : "Bifold Tools"} yet. Ask ${boss(user)} to give you access.`); return; }
+    if (n === "customersOrTool") { if (!["customers", "pnl", "pipeline", "pdc", "amc"].some(has)) fail(403, `You don't have access to edit customers. Ask ${boss(user)} to give you access.`); return; }
     const list = Array.isArray(n) ? n : [n];
-    if (!list.some(has)) fail(403, `You don't have access to ${list.map(label).join(" or ")}. Ask Ranjan to give you access.`);
+    if (!list.some(has)) fail(403, `You don't have access to ${list.map(label).join(" or ")}. Ask ${boss(user)} to give you access.`);
   }
 
-  async function overview() {
+  async function overview(user) {
+    const co = coOf(user);
     const t = await table("access");
     const rows = [];
     for await (const e of t.listEntities({ queryOptions: { filter: "PartitionKey eq 'user'" } })) rows.push(e);
@@ -93,39 +101,43 @@ module.exports = function makeAccess(H) {
       scan("amc", "amc", ["owner"]), scan("amcvisits", "visit", ["createdBy", "updatedBy"])]);
     rows.forEach(r => known.add(r.rowKey));
     const listed = new Map(rows.map(r => [r.rowKey, r]));
-    const managers = H.managers();
+    const managers = coManagers(co);
+    [...known].forEach(e => { if (coForEmail(e) !== co) known.delete(e); });
     const users = [...known].sort().map(email => {
       const r = listed.get(email);
       return { email, isManager: managers.includes(email), listed: !!r, sections: managers.includes(email) ? KEYS.slice() : r ? parse(r.sections) : null,
         updatedBy: r ? r.updatedBy : "", updatedAt: r ? r.updatedAt : "", lastSeen: seen[email] || "" };
     });
-    managers.forEach(m => { if (!known.has(m)) users.push({ email: m, isManager: true, listed: false, sections: KEYS.slice(), updatedBy: "", updatedAt: "", lastSeen: seen[m] || "" }); });
-    return { sections: SECTIONS, defaultSections: await defaultSections(), users, domains: domains() };
+    managers.forEach(m => { if (!known.has(m) && coForEmail(m) === co) users.push({ email: m, isManager: true, listed: false, sections: KEYS.slice(), updatedBy: "", updatedAt: "", lastSeen: seen[m] || "" }); });
+    return { sections: SECTIONS, defaultSections: await defaultSections(co), users, domains: CO[co].domains(), company: { key: co, name: CO[co].name } };
   }
   async function setUser(user, email, body) {
     email = clean(email, 150).toLowerCase();
-    if (!emailOk(email)) fail(400, `Enter a valid ${domains().map(d => "@" + d).join(" or ")} email address.`);
-    if (H.managers().includes(email)) fail(400, "Managers always have access to every section.");
+    const co = coOf(user);
+    if (!emailOk(email) || coForEmail(email) !== co) fail(400, `Enter the email address of someone in ${CO[co].name} (${CO[co].domains().map(d => "@" + d).join(", ")}).`);
+    if (coManagers(co).includes(email)) fail(400, "Managers always have access to every section.");
     const t = new Date().toISOString();
     await (await table("access")).upsertEntity({ partitionKey: "user", rowKey: email, sections: JSON.stringify(sectionsIn(body.sections)), updatedBy: user.email, updatedAt: t }, "Replace");
     cache.delete(email);
     return { email, sections: sectionsIn(body.sections), updatedBy: user.email, updatedAt: t };
   }
-  async function removeUser(email) {
+  async function removeUser(user, email) {
     email = clean(email, 150).toLowerCase();
+    if (coForEmail(email) !== coOf(user)) fail(404, "That person isn't in your company.");
     try { await (await table("access")).deleteEntity("user", email); } catch (e) { if (e.statusCode !== 404) throw e; }
     cache.delete(email);
   }
   async function setDefault(user, body) {
-    await (await table("access")).upsertEntity({ partitionKey: "policy", rowKey: "default", sections: JSON.stringify(sectionsIn(body.sections)), updatedBy: user.email, updatedAt: new Date().toISOString() }, "Replace");
-    policy = { v: null, at: 0 }; cache.clear();
-    return { defaultSections: await defaultSections() };
+    const co = coOf(user);
+    await (await table("access")).upsertEntity({ partitionKey: "policy", rowKey: "default-" + co, sections: JSON.stringify(sectionsIn(body.sections)), updatedBy: user.email, updatedAt: new Date().toISOString() }, "Replace");
+    policies.delete(co); cache.clear();
+    return { defaultSections: await defaultSections(co) };
   }
   async function route(method, seg, user, body) {
     const [, b, c] = seg;
-    if (!b && method === "GET") return overview();
+    if (!b && method === "GET") return overview(user);
     if (b === "users" && c && method === "PUT") return setUser(user, c, body);
-    if (b === "users" && c && method === "DELETE") return removeUser(c);
+    if (b === "users" && c && method === "DELETE") return removeUser(user, c);
     if (b === "default" && method === "PUT") return setDefault(user, body);
     fail(404, "Unknown request.");
   }

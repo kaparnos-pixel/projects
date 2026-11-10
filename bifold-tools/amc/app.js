@@ -7,7 +7,26 @@ const LIB = {
   docx: "https://cdn.jsdelivr.net/npm/docx@9.5.1/dist/index.iife.js",
   jspdf: "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js",
   autotable: "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
+  jszip: "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
 };
+// Company branding: everything a document or screen says about "us" comes from here.
+const BRANDS = {
+  bifold: { key: "bifold", name: "Bifold Technologies LLC", short: "Bifold", desk: "the Bifold service desk", phone: "+971 04 264 0374", web: "bifoldtech.com",
+    hours: "Mon–Sat, 9 AM – 6 PM", hoursLarge: "Mon–Sat, 8 AM – 8 PM", manager: "Ranjan",
+    images: ["/assets/amc/bifold_logo.png", "/assets/amc/ranjan_signature.png", "/assets/amc/bifold_stamp.png"],
+    about: { paragraphs: [
+      "Bifold Technologies LLC is a Dubai-based enterprise ICT solutions and managed services provider serving large enterprise, hospitality, fitness, government, and education clients across the United Arab Emirates. We design, deploy, and operate mission-critical IT and communications infrastructure with a focus on networking, server platforms, unified communications and telephony, cybersecurity, structured cabling, and ongoing managed support.",
+      "Our managed services practice supports clients under structured Annual Maintenance Contracts that combine onsite engineering attendance, remote monitoring, vendor escalation, and clear service-level commitments. Each engagement is anchored by a named delivery team and underpinned by documented procedures, escalation matrices, and reporting cadence."],
+      strengths: ["Vendor-certified engineering capability across Avaya, HPE, Cisco, Aruba, Fortinet, Veeam, and Microsoft platforms.", "Dedicated managed services delivery model with named account ownership.", "Voice, network and security experience across hospitality, commercial and government environments in the UAE.", "Local presence in Dubai with rapid onsite response capability across the Emirates."] } },
+  techhub: { key: "techhub", name: "Tech Hub Information Technology", short: "Tech Hub", desk: "the Tech Hub support desk", phone: "+971 07 258 1926", web: "techhubrak.ae",
+    hours: "Sun–Thu, 9 AM – 6 PM", hoursLarge: "Sun–Thu, 8 AM – 8 PM", manager: "your manager",
+    images: ["/assets/techhub/techhub_logo.png"],
+    about: { paragraphs: [
+      "Tech Hub Information Technology is an IT solutions provider based in Al Nakheel, Ras Al Khaimah, serving businesses, schools, hospitality and government entities across RAK and the wider UAE. We supply, install and support IT infrastructure, from servers, networks and endpoints to CCTV and telephony.",
+      "Our maintenance contracts combine scheduled preventive maintenance with SLA-backed remote and on-site support, so that unplanned downtime becomes a fixed, budgeted annual cost."],
+      strengths: ["Single-source IT partner for supply, installation and ongoing support.", "SLA-backed support with defined response and resolution targets.", "Proactive preventive maintenance and patch management.", "RAK-wide delivery with fast on-site response."] } },
+};
+const B = () => BRANDS[S.co === "techhub" ? "techhub" : "bifold"];
 const STATUS = { draft: "Draft", sent: "Proposal sent", awarded: "Awarded", lost: "Lost" };
 const PM_LABEL = { 0: "No scheduled PM", 1: "Monthly", 3: "Quarterly", 6: "Every 6 months", 12: "Once a year" };
 
@@ -58,6 +77,9 @@ function arm(btn, label, fn) { btn.onclick = async () => { if (!btn.classList.co
 const loaded = {};
 function loadScript(src) { return loaded[src] || (loaded[src] = new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => { delete loaded[src]; rej(new Error("Could not load a document library. Check your connection and try again.")); }; document.head.appendChild(s); })); }
 async function libDocx() { await loadScript(LIB.docx); return window.docx; }
+async function libZip() { await loadScript(LIB.jszip); return window.JSZip; }
+let thTpl = null;
+async function thTemplate() { if (!thTpl) { const r = await fetch("/assets/techhub/base_template.docx"); if (!r.ok) throw new Error("The Tech Hub template is missing from the site."); thTpl = await r.arrayBuffer(); } return thTpl; }
 async function libPdf() { await loadScript(LIB.jspdf); await loadScript(LIB.autotable); return window.jspdf.jsPDF; }
 function busy(btn, on, label) { if (!btn) return; if (on) { btn.dataset.t = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spin"></span> ' + esc(label || "Working"); } else { btn.disabled = false; if (btn.dataset.t) btn.innerHTML = btn.dataset.t; } }
 
@@ -65,7 +87,8 @@ function busy(btn, on, label) { if (!btn) return; if (on) { btn.dataset.t = btn.
 let brandP;
 function b64(bytes) { let s = ""; const ch = 0x8000; for (let i = 0; i < bytes.length; i += ch) s += String.fromCharCode.apply(null, bytes.subarray(i, i + ch)); return btoa(s); }
 async function loadPng(path) { const r = await fetch(path); if (!r.ok) throw new Error("brand image missing"); const buf = new Uint8Array(await r.arrayBuffer()); const dv = new DataView(buf.buffer); return { bytes: buf, w: dv.getUint32(16), h: dv.getUint32(20), fmt: "PNG", dataUrl: "data:image/png;base64," + b64(buf) }; }
-function brand() { return brandP || (brandP = Promise.all(["/assets/amc/bifold_logo.png", "/assets/amc/ranjan_signature.png", "/assets/amc/bifold_stamp.png"].map(p => loadPng(p).catch(() => null))).then(([logo, sig, stamp]) => ({ logo, sig, stamp }))); }
+const brandPs = {};
+function brand() { const b = B(); return brandPs[b.key] || (brandPs[b.key] = Promise.all(b.images.map(p => loadPng(p).catch(() => null))).then(([logo, sig, stamp]) => ({ logo, sig: sig || null, stamp: stamp || null }))); }
 
 /* ============ files assets ============ */
 const toB64 = async blob => { const u = new Uint8Array(await blob.arrayBuffer()); return b64(u); };
@@ -143,7 +166,7 @@ function applyCan() {
   const c = S.can;
   document.querySelectorAll('nav.tabs a[data-v="amcs"], [data-act="new-amc"], [data-act="export-amcs"]').forEach(el => el.hidden = !c.amc);
   document.querySelectorAll('[data-act="new-visit"]').forEach(el => el.hidden = !c.visits);
-  document.querySelector("#v-overview .view-head p").textContent = c.amc ? "Contracts, renewals and site visits across Bifold's maintenance book." : "Maintenance visits for Bifold's awarded contracts.";
+  document.querySelector("#v-overview .view-head p").textContent = c.amc ? `Contracts, renewals and site visits across ${B().short}'s maintenance book.` : `Maintenance visits for ${B().short}'s awarded contracts.`;
   route();
 }
 function route() {
@@ -321,7 +344,7 @@ function applyDefaults() {
   set("a_start", defStart()); set("a_end", endFor($("a_start").value, $("a_months").value));
   set("a_attn", cust.contactName || ""); set("a_loc", cust.emirate && cust.emirate !== "Outside UAE" ? cust.emirate + ", UAE" : "Dubai, UAE");
   set("a_pm", small ? "quarterly" : "monthly"); set("a_pay", small ? "annual" : "semi");
-  set("a_cov", v > 60000 ? "Mon–Sat, 8 AM – 8 PM" : "Mon–Sat, 9 AM – 6 PM");
+  set("a_cov", v > 60000 ? B().hoursLarge : B().hours);
 }
 ["a_start", "a_months", "a_end", "a_attn", "a_loc", "a_pm", "a_pay", "a_cov", "a_valid"].forEach(id => $(id).addEventListener("input", () => { touched.add(id); if (id === "a_start" || id === "a_months") applyDefaults(); }));
 ["a_start", "a_months", "a_pm", "a_pay", "a_valid"].forEach(id => $(id).addEventListener("change", () => { touched.add(id); applyDefaults(); }));
@@ -344,7 +367,7 @@ function openAmcForm(a) {
   $("a_systems").value = a ? a.systems || "" : ""; $("a_value").value = a ? money(num(a.value)) : ""; valueHint();
   S.draftFiles = a ? (a.files || []).slice() : []; renderDraftFiles();
   $("a_filesWrap").hidden = false;
-  $("a_note").textContent = a ? "Changing the systems or value marks the proposal for redrafting." : (S.features.ai ? "Claude drafts the rest of the proposal in the Bifold AMC format after you save." : "The proposal is filled from the Bifold AMC template after you save.");
+  $("a_note").textContent = a ? "Changing the systems or value marks the proposal for redrafting." : (S.features.ai ? `Claude drafts the rest of the proposal in the ${B().short} AMC format after you save.` : "The proposal is filled from the Bifold AMC template after you save.");
   $("a_err").textContent = ""; applyDefaults(); $("dAmc").showModal();
 }
 $("fAmc").onsubmit = async e => {
@@ -378,10 +401,6 @@ $("fAmc").onsubmit = async e => {
 };
 
 /* ============ proposal content ============ */
-const ABOUT = { paragraphs: [
-  "Bifold Technologies LLC is a Dubai-based enterprise ICT solutions and managed services provider serving large enterprise, hospitality, fitness, government, and education clients across the United Arab Emirates. We design, deploy, and operate mission-critical IT and communications infrastructure with a focus on networking, server platforms, unified communications and telephony, cybersecurity, structured cabling, and ongoing managed support.",
-  "Our managed services practice supports clients under structured Annual Maintenance Contracts that combine onsite engineering attendance, remote monitoring, vendor escalation, and clear service-level commitments. Each engagement is anchored by a named delivery team and underpinned by documented procedures, escalation matrices, and reporting cadence."],
-  strengths: ["Vendor-certified engineering capability across Avaya, HPE, Cisco, Aruba, Fortinet, Veeam, and Microsoft platforms.", "Dedicated managed services delivery model with named account ownership.", "Voice, network and security experience across hospitality, commercial and government environments in the UAE.", "Local presence in Dubai with rapid onsite response capability across the Emirates."] };
 function category(sys) { const s = String(sys).toLowerCase(); if (/pbx|avaya|mitel|ip office|handset|ip phone|telephon|voip|sip trunk|pstn|call manager|cucm|3cx|voice/.test(s)) return "voice"; if (/cctv|camera|nvr|dvr|vms|surveillance|access control/.test(s)) return "cctv"; return "it"; }
 function sizeOf(v) { return v < 15000 ? "small" : v <= 60000 ? "medium" : "large"; }
 const PLAN = { voice: "IP Telephony Support Plan", cctv: "CCTV & Security Support Plan", it: "IT Infrastructure Support Plan" };
@@ -408,14 +427,17 @@ function fallbackContent(a, cust) {
   const pm = size === "small" ? "Quarterly" : "Monthly";
   const rows = [["Service Plan", PLAN[cat].replace(" Plan", ""), "Annual maintenance package"], ["Covered Systems", sysLines.length + " item" + (sysLines.length === 1 ? "" : "s"), "As listed in Section 3"], ["Preventive Maintenance", pm, "Scheduled health checks"], ["Remote Support", "Business Hours", "Diagnosis and resolution"],
     ["Onsite Support", size === "large" ? "Scheduled + On-Call" : "On-Call + PM Visits", "Major faults and scheduled PM"], ["Configuration Changes", "Included", "Reasonable volume"], ["Firmware & Software Updates", "Included", "As released and validated"], ["Configuration Backup", "Included", "Periodic backup"],
-    ["Email & Telephone Support", "Included", "Ticketing and P1 emergency line"], ["Named Engineer Contacts", size === "small" ? "2" : "3", "Primary and secondary engineers"], ["Coverage Hours", size === "large" ? "Mon–Sat, 8 AM – 8 PM" : "Mon–Sat, 9 AM – 6 PM", "P1 best-effort outside hours"],
+    ["Email & Telephone Support", "Included", "Ticketing and P1 emergency line"], ["Named Engineer Contacts", size === "small" ? "2" : "3", "Primary and secondary engineers"], ["Coverage Hours", size === "large" ? B().hoursLarge : B().hours, "P1 best-effort outside hours"],
     ["Hardware & Spare Parts", "Excluded", "Quoted separately"], ["Vendor Licences & Subscriptions", "Excluded", "Client to hold valid entitlements"], ["Service Reports", pm, "Visit report after each PM"]];
-  const sla = size === "large" ? [["P1", "Emergency: service down", "30 minutes", "1 hour", "4 hours"], ["P2", "High: significant impact", "1 hour", "2 hours", "8 hours"], ["P3", "Medium: limited impact", "2 hours", "Next business day", "2 business days"], ["P4", "Low: service request", "4 hours", "2 business days", "3 business days"]]
+  let sla = size === "large" ? [["P1", "Emergency: service down", "30 minutes", "1 hour", "4 hours"], ["P2", "High: significant impact", "1 hour", "2 hours", "8 hours"], ["P3", "Medium: limited impact", "2 hours", "Next business day", "2 business days"], ["P4", "Low: service request", "4 hours", "2 business days", "3 business days"]]
     : [["P1", "Emergency: system down", "1 hour", "2 hours", "8 business hours"], ["P2", "High: major feature or multiple users affected", "2 hours", "4 hours", "1 business day"], ["P3", "Medium: single user or minor feature", "4 hours", "Next business day", "2 business days"], ["P4", "Low: service request / change", "1 business day", "2 business days", "3 business days"]];
+  // Tech Hub's house SLA (Critical / High / Medium / Low, Sun–Thu business hours).
+  if (B().key === "techhub") sla = [["Critical", "System down / business-stopping", "1 hour (remote)", "4 hours on site", "Same business day target"], ["High", "Major function impaired", "2 hours (remote)", "Next business day on site", "Tracked to closure"],
+    ["Medium", "Degraded service or single user", "4 hours (remote)", "Remote first", "Tracked to closure"], ["Low", "Request or advisory", "Next business day", "As scheduled", "Tracked to closure"]];
   const short = shortName(cust.name);
   return {
     subtitle: PLAN[cat], planName: PLAN[cat].replace(" Plan", ""), letterSubjectTopic: PLAN[cat].replace(" Plan", " Services"),
-    letter: [`Bifold Technologies LLC is pleased to submit this Annual Maintenance Contract (AMC) proposal for the support and maintenance of the systems in use at ${cust.name}. The engagement covers ${sysOne}, with structured preventive maintenance, rapid fault diagnosis, and committed response timelines.`,
+    letter: [`${B().name} is pleased to submit this Annual Maintenance Contract (AMC) proposal for the support and maintenance of the systems in use at ${cust.name}. The engagement covers ${sysOne}, with structured preventive maintenance, rapid fault diagnosis, and committed response timelines.`,
       `This proposal outlines the scope of services, response and restoration commitments, service hours, deliverables, exclusions, and commercial terms for a ${termWords(a)} engagement. The terms herein are valid for ${(a.terms && a.terms.validDays) || 30} days from the date of issue.`,
       "We look forward to the opportunity of supporting your operations and building a long-term partnership with your team."],
     understanding: { paragraphs: [`${cust.name} relies on the following systems for its day-to-day operations: ${sysOne}. Each element must remain available and correctly configured to sustain business continuity.`,
@@ -423,9 +445,9 @@ function fallbackContent(a, cust) {
       drivers: ["Continuous availability of the covered systems.", "Rapid fault diagnosis and restoration.", "Orderly configuration and change management.", "Vendor coordination on warranty and support cases.", "A single point of accountability for the covered estate."] },
     scope: { intro: "The following service streams are included within this engagement. The complete scope is delivered as a unified managed service package under a single annual fee.", streams },
     servicePlan: { intro: "The following table summarises the coverage parameters under the support package selected for this engagement.", rows },
-    response: { intro: "All incidents logged with Bifold Technologies are classified by priority and managed against the following committed response and restoration timelines. Timelines are measured during covered business hours; Emergency (P1) incidents are handled on a best-effort basis outside business hours.", rows: sla,
-      workflow: ["Support requests are raised via phone or email to the Bifold service desk.", "Each request receives a ticket acknowledgement and reference number.", "Tickets are assigned to a named engineer based on priority and skill set.", "Engineers respond within the committed SLA timeline, remotely where possible.", "Incidents are resolved within the restoration target and closed with the client."] },
-    documentation: { intro: `As part of the AMC engagement, Bifold Technologies will produce and maintain the following documentation set covering the in-scope systems at ${cust.name}.`, groups: [
+    response: { intro: `All incidents logged with ${B().name} are classified by priority and managed against the following committed response and restoration timelines. Timelines are measured during covered business hours; Emergency (P1) incidents are handled on a best-effort basis outside business hours.`, rows: sla,
+      workflow: [`Support requests are raised via phone or email to ${B().desk}.`, "Each request receives a ticket acknowledgement and reference number.", "Tickets are assigned to a named engineer based on priority and skill set.", "Engineers respond within the committed SLA timeline, remotely where possible.", "Incidents are resolved within the restoration target and closed with the client."] },
+    documentation: { intro: `As part of the AMC engagement, ${B().name} will produce and maintain the following documentation set covering the in-scope systems at ${cust.name}.`, groups: [
       { heading: "System Documentation", bullets: ["Configuration overview of each covered system.", "Licensing and firmware version record."] },
       { heading: "Operational Documentation", bullets: ["Asset inventory for covered equipment.", "Configuration backup records.", "Escalation matrix and contact list."] },
       { heading: "Maintenance Records", bullets: ["Preventive maintenance visit reports with site photographs.", "Updated records reflecting all approved changes."] }] },
@@ -433,9 +455,9 @@ function fallbackContent(a, cust) {
       { heading: "Scope Exclusions", bullets: ["Supply, repair, or replacement of hardware and spare parts.", "Software licences, version upgrades, and manufacturer support entitlements.", "Cabling, structured cabling, and new point installation.", "Major upgrades, migrations, or redesign projects.", "Site visits beyond the included onsite attendance (chargeable)."] },
       { heading: "Future Purchases", bullets: ["New hardware and software purchases are chargeable separately.", "This agreement covers engineering time and managed service delivery only.", "Installation of new equipment proceeds only after customer approval."] },
       { heading: "Customer Obligations", bullets: ["Provide reasonable remote and onsite access to the covered systems.", "Maintain valid vendor licences and support entitlements.", "Maintain power, network, and environmental conditions required by the equipment.", "Refrain from unauthorised changes or third-party repairs to in-scope systems."] },
-      { heading: "Security & Responsibility Model", text: "Bifold Technologies provides support and configuration services for the covered systems under this engagement. Responsibility for the security of the wider network, user accounts, and connected systems remains with the client. Bifold issues advisory recommendations on security hardening and access control." },
-      { heading: "Disclaimers & Liability", bullets: ["No liability for force majeure events outside the reasonable control of either party.", "The customer is responsible for the legality of all software in use.", "No software will be installed without written approval from the customer.", "Bifold is not responsible for cyberattacks, toll fraud, hacking incidents, or resulting loss arising from factors outside its control."] },
-      { heading: "Confidentiality", bullets: ["This proposal is confidential and intended solely for the named recipient. It may not be reproduced or disclosed to any third party without the prior written consent of Bifold Technologies LLC.", "All Bifold engineers are bound by confidentiality obligations covering client systems, data, and operational information.", "A non-disclosure agreement (NDA) will be executed before the first onsite visit, if not already in place."] },
+      { heading: "Security & Responsibility Model", text: `${B().name} provides support and configuration services for the covered systems under this engagement. Responsibility for the security of the wider network, user accounts, and connected systems remains with the client. ${B().short} issues advisory recommendations on security hardening and access control.` },
+      { heading: "Disclaimers & Liability", bullets: ["No liability for force majeure events outside the reasonable control of either party.", "The customer is responsible for the legality of all software in use.", "No software will be installed without written approval from the customer.", `${B().short} is not responsible for cyberattacks, toll fraud, hacking incidents, or resulting loss arising from factors outside its control.`] },
+      { heading: "Confidentiality", bullets: [`This proposal is confidential and intended solely for the named recipient. It may not be reproduced or disclosed to any third party without the prior written consent of ${B().name}.`, `All ${B().short} engineers are bound by confidentiality obligations covering client systems, data, and operational information.`, "A non-disclosure agreement (NDA) will be executed before the first onsite visit, if not already in place."] },
       { heading: "System Size Assumption", text: `This agreement is based on the current footprint of ${sysOne}. Scope and commercials may be reviewed if the estate is materially expanded beyond this baseline.` }] },
     lineItemDesc: `Annual Maintenance Contract: ${PLAN[cat].replace(" Plan", "")} (${sysLines.join(", ").slice(0, 160)}), ${termMonthsOf(a.proposedStart || defStart(), (a.terms && a.terms.endDate) || endFor(a.proposedStart || defStart(), a.termMonths || 12))} Months`,
     paymentTerms: size === "small" ? ["Annual advance payment: 100% due on contract signing."] : ["Semi-annual payment: 50% on contract signing and 50% at the start of month 7."],
@@ -460,12 +482,12 @@ function assemble(a, cust, content) {
   return {
     meta: { customer: cust.name, attention, proposalNo: a.ref, date: fmt(t), dateISO: t, validUntil: fmt(valid), validISO: valid, subtitle: content.subtitle, headerTitle: "AMC Proposal: " + short },
     letter: { toName: attention, toLocation: T.location || (cust.emirate && cust.emirate !== "Outside UAE" ? cust.emirate + ", UAE" : "Dubai, UAE"), subject: `Annual Maintenance Contract Proposal: ${content.letterSubjectTopic || content.planName} (Reference: ${a.ref})`, salutation: attention && attention !== "The Management" ? "Dear " + attention.split(",")[0].trim() + "," : "Dear Sir/Madam,", body: content.letter, signoff: "Sincerely," },
-    about: ABOUT, understanding: content.understanding, scope: content.scope, servicePlan: Object.assign({}, content.servicePlan, { rows }), response: content.response, documentation: content.documentation,
+    about: B().about, understanding: content.understanding, scope: content.scope, servicePlan: Object.assign({}, content.servicePlan, { rows }), response: content.response, documentation: content.documentation,
     commercial: { intro: `The commercial terms set out below cover the full ${months}-month engagement from ${fmt(start)} to ${fmt(end)}.`, startISO: start, endISO: end, vatPct: 5, valueNum: v,
       lineItems: [{ desc: content.lineItemDesc || ("Annual Maintenance Contract: " + content.planName + ", 12 Months"), amount: money(v) }], subtotal: money(v), vat: money(vat), vatLabel: "VAT @ 5%", total: money(total), paymentTerms: pay,
       validity: ["All values are quoted in UAE Dirhams (AED).", `Proposal validity: ${validDays} days from the date of issue (valid until ${fmt(valid)}).`] },
     exclusions: content.exclusions,
-    signoff: { intro: `By signing below, both parties acknowledge agreement to the scope, service levels, commercial terms, and conditions set out in this Annual Maintenance Contract proposal. This document, upon signature, constitutes the binding agreement between Bifold Technologies LLC and ${cust.name} for the contract period stated.`, period: `${fmt(start)} to ${fmt(end)}`, plan: content.planName, total: `${aed(total)} (inclusive of VAT)`, governing: "This agreement is governed by the laws of the United Arab Emirates. Either party may terminate this agreement with two months prior written notice. Any material change in scope requires written approval from both parties." },
+    signoff: { intro: `By signing below, both parties acknowledge agreement to the scope, service levels, commercial terms, and conditions set out in this Annual Maintenance Contract proposal. This document, upon signature, constitutes the binding agreement between ${B().name} and ${cust.name} for the contract period stated.`, period: `${fmt(start)} to ${fmt(end)}`, plan: content.planName, total: `${aed(total)} (inclusive of VAT)`, governing: "This agreement is governed by the laws of the United Arab Emirates. Either party may terminate this agreement with two months prior written notice. Any material change in scope requires written approval from both parties." },
   };
 }
 function contentFromProposal(p) {
@@ -511,7 +533,7 @@ function proposalHTML(cfg, forEmail) {
   const m = cfg.meta, L = cfg.letter, cm = cfg.commercial, so = cfg.signoff;
   if (!forEmail) h.push(`<div class="pcover"><span class="k">ANNUAL MAINTENANCE CONTRACT PROPOSAL</span><span class="t">${esc(m.subtitle)}</span><span>Prepared for ${esc(m.customer)} · ${esc(m.proposalNo)} · ${esc(m.date)} · valid until ${esc(m.validUntil)}</span></div>`);
   h.push(`<h2>1. Introduction</h2>${P("Subject: " + L.subject)}${P(L.salutation)}${L.body.map(P).join("")}`);
-  if (!forEmail) h.push(`<h2>2. About Bifold Technologies</h2>${cfg.about.paragraphs.map(P).join("")}${UL(cfg.about.strengths)}`);
+  if (!forEmail) h.push(`<h2>2. About ${esc(B().name)}</h2>${cfg.about.paragraphs.map(P).join("")}${UL(cfg.about.strengths)}`);
   h.push(`<h2>${forEmail ? "" : "3. "}Understanding of Requirement</h2>${(cfg.understanding.paragraphs || []).map(P).join("")}${UL(cfg.understanding.drivers)}`);
   h.push(`<h2>${forEmail ? "" : "4. "}Scope of Work</h2>${cfg.scope.intro ? P(cfg.scope.intro) : ""}${groups(cfg.scope.streams)}`);
   h.push(`<h2>${forEmail ? "" : "5. "}Service Plan Summary</h2>${TB(["Parameter", "Coverage", "Notes"], cfg.servicePlan.rows)}`);
@@ -525,7 +547,13 @@ function proposalHTML(cfg, forEmail) {
 /* ============ document builders ============ */
 async function buildProposal(a, kind) {
   const cfg = a.proposal; if (!cfg) throw new Error("Draft the proposal first.");
-  const img = await brand();
+  const img = await brand(); GEN.useBrand(B().key);
+  if (B().key === "techhub") {
+    // Tech Hub proposals follow the approved Tech Hub template (8 sections), built from the same edited content.
+    const th = GEN.thFromAmc(cfg, a.systems);
+    if (kind === "docx") { const [Z, tpl] = await Promise.all([libZip(), thTemplate()]); return await GEN.thAmcDocx(Z, th, tpl); }
+    const J = await libPdf(); return GEN.thAmcPdf(J, th, img).output("blob");
+  }
   if (kind === "docx") { const D = await libDocx(); return await D.Packer.toBlob(GEN.amcDocx(D, cfg, img)); }
   const J = await libPdf(); return GEN.amcPdf(J, cfg, img).output("blob");
 }
@@ -539,13 +567,13 @@ async function photoData(p) {
 }
 function visitCtx(v) { const c = S.contracts.get(v.amcId) || {}; return { systems: c.systems || "", plan: c.plan || "", site: c.site || "" }; }
 async function buildVisit(v, kind) {
-  const img = await brand(); const photos = (await Promise.all((v.photos || []).map(photoData))).filter(Boolean);
+  const img = await brand(); GEN.useBrand(B().key); const photos = (await Promise.all((v.photos || []).map(photoData))).filter(Boolean);
   if (kind === "docx") { const D = await libDocx(); return await D.Packer.toBlob(GEN.visitDocx(D, v, visitCtx(v), img, photos)); }
   const J = await libPdf(); return GEN.visitPdf(J, v, visitCtx(v), img, photos).output("blob");
 }
 const visitName = (v, ext) => safeName(`${v.reportNo || "Visit"} ${shortName(v.customerName)} Maintenance Report`) + "." + ext;
 async function buildContract(c, kind) {
-  const img = await brand(); const vs = [...S.visits.values()].filter(v => v.amcId === c.amcId).sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+  const img = await brand(); GEN.useBrand(B().key); const vs = [...S.visits.values()].filter(v => v.amcId === c.amcId).sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
   const cc = Object.assign({}, c, { pmLabel: PM_LABEL[c.pmMonths] || "" });
   if (kind === "docx") { const D = await libDocx(); return await D.Packer.toBlob(GEN.contractDocx(D, cc, vs, img)); }
   const J = await libPdf(); return GEN.contractPdf(J, cc, vs, img).output("blob");
@@ -556,7 +584,7 @@ function openAmcById(id) {
   const a = S.amcs.get(id); if (a) return openAmc(a);
   const vs = [...S.visits.values()].filter(v => v.amcId === id).sort((x, y) => x.scheduledDate.localeCompare(y.scheduledDate));
   if (!S.can.amc && vs.length) { $("visitContract").value = id; S.visitFilter = "all"; syncSeg("visitSeg", "all"); location.hash = "visits"; renderVisits(); return; }
-  toast("You don't have access to this AMC. Ask Ranjan for access to AMC proposals.");
+  toast(`You don't have access to this AMC. Ask ${B().manager} for access to AMC proposals.`);
 }
 function openAmc(a) { S.openAmc = a.id; renderAmcSheet(); if (!$("sAmc").open) $("sAmc").showModal(); }
 $("sAmc").addEventListener("close", () => { S.openAmc = null; });
@@ -599,7 +627,7 @@ function renderAmcSheet() {
   wireAmcSheet(a, c);
 }
 function proposalBlock(a) {
-  if (a.proposalStatus === "generating") return `<div class="callout"><span class="spin"></span> Drafting the proposal in the Bifold AMC format. This takes up to a minute.</div>`;
+  if (a.proposalStatus === "generating") return `<div class="callout"><span class="spin"></span> Drafting the proposal in the house AMC format. This takes up to a minute.</div>`;
   if (!a.proposal) return `<div class="callout warn">No proposal yet.<button type="button" class="sm" id="x_gen" style="margin-left:auto">Draft proposal</button></div>`;
   const shares = (a.shares || []).slice(-3).reverse().map(s => `<div><time>${esc(fmt(s.at))}</time><span>${esc(s.mode === "draft" ? "Outlook draft for" : "Emailed to")} ${esc(s.to)} · ${esc(nameOf(s.by))}</span></div>`).join("");
   return `${a.proposalStale ? '<div class="callout warn">Systems or value changed since this proposal was drafted. Redraft before sending.</div>' : ""}
@@ -810,7 +838,7 @@ async function createVisit(c, o) {
   S.visits.set(v.id, v); return v.id;
 }
 function openNewVisit(amcId) {
-  if (!S.can.visits) { toast("You don't have access to maintenance visits. Ask Ranjan for access."); return; }
+  if (!S.can.visits) { toast(`You don't have access to maintenance visits. Ask ${B().manager} for access.`); return; }
   const cs = [...S.contracts.values()].filter(c => ["active", "expiring"].includes(contractState(c))).sort((a, b) => a.customerName.localeCompare(b.customerName));
   if (!cs.length) { toast("Mark an AMC as awarded first. Visits belong to awarded contracts.", 4000); return; }
   $("nv_contract").innerHTML = cs.map(c => `<option value="${esc(c.amcId)}">${esc(c.customerName)} · ${esc(c.ref)}</option>`).join("");
@@ -834,8 +862,8 @@ function renderVisitSheet() {
   $("vs_ref").textContent = v.ref + " · " + (v.reportNo || ""); $("vs_customer").textContent = v.customerName;
   $("vs_chips").innerHTML = chip(visitState(v)) + ` <span class="chip">${esc(GEN.typeLabel(v.type))}</span> <span class="chip">${esc(fmt(v.scheduledDate))}${v.time ? " · " + esc(v.time) : ""}</span>`;
   const done = v.status === "completed";
-  const B = [];
-  B.push(`<div class="sec"><h3>Visit</h3><div class="grid2">
+  const HB = [];
+  HB.push(`<div class="sec"><h3>Visit</h3><div class="grid2">
     <label class="f">Visit type<select id="vf_type">${Object.entries(GEN.TYPES).map(([k, l]) => `<option value="${k}"${v.type === k ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
     <label class="f">Scheduled date<input id="vf_date" type="date" value="${esc(v.scheduledDate)}"></label>
     <label class="f">Engineer(s)<input id="vf_eng" value="${esc(v.engineers)}" placeholder="Who is attending"></label>
@@ -846,29 +874,29 @@ function renderVisitSheet() {
     <label class="f">Site / location<input id="vf_site" value="${esc(v.site)}"></label>
     ${v.notes ? `<div class="full callout">${esc(v.notes)}</div>` : ""}
   </div>${c.systems ? `<details class="more"><summary>Systems covered</summary><div class="systems" style="margin-top:8px">${esc(c.systems)}</div></details>` : ""}</div>`);
-  B.push(`<div class="sec"><h3>Checklist</h3><div class="checklist" id="vf_ck"></div><div class="docrow"><input id="vf_ckNew" placeholder="Add a check item" style="flex:1;min-width:160px"><button type="button" class="sm" id="vf_ckAdd">Add</button></div></div>`);
-  B.push(`<div class="sec"><h3>Findings</h3>
+  HB.push(`<div class="sec"><h3>Checklist</h3><div class="checklist" id="vf_ck"></div><div class="docrow"><input id="vf_ckNew" placeholder="Add a check item" style="flex:1;min-width:160px"><button type="button" class="sm" id="vf_ckAdd">Add</button></div></div>`);
+  HB.push(`<div class="sec"><h3>Findings</h3>
     ${S.features.ai ? `<details class="more"><summary>Write up from rough notes with Claude</summary><div style="display:grid;gap:8px;margin-top:8px"><textarea id="vf_rough" rows="3" placeholder="e.g. ups battery 2y old runtime 6 min, cleaned rack, switch 3 port 12 flapping replaced patch cord, advise battery replacement"></textarea><div><button type="button" class="sm" id="vf_ai">Write findings, actions and recommendations</button></div></div></details>` : ""}
     <label class="f">Findings &amp; observations <span class="hint">One per line</span><textarea id="vf_find" rows="4">${esc(v.findings)}</textarea></label>
     <label class="f">Actions taken<textarea id="vf_act" rows="3">${esc(v.actions)}</textarea></label>
     <label class="f">Recommendations<textarea id="vf_rec" rows="3">${esc(v.recommendations)}</textarea></label></div>`);
-  B.push(`<div class="sec"><h3>Site photos</h3><div class="photos" id="vf_photos"></div>${'<label class="drop" id="vf_pdrop">Add site photos: drop images or click to choose<input type="file" id="vf_pinput" accept="image/*" multiple></label>'}</div>`);
-  B.push(`<div class="sec"><h3>Documents</h3><div class="files" id="vf_files">${filesHTML(v.files, true)}</div>${'<label class="drop" id="vf_fdrop">Upload signed job sheet or other documents<input type="file" id="vf_finput" multiple></label>'}</div>`);
-  B.push(`<div class="sec"><h3>Report</h3><div class="docrow"><button type="button" class="sm" id="vf_docx">Word report</button><button type="button" class="sm" id="vf_pdf">PDF report</button><button type="button" class="accent sm" id="vf_share">Share with customer</button></div>
+  HB.push(`<div class="sec"><h3>Site photos</h3><div class="photos" id="vf_photos"></div>${'<label class="drop" id="vf_pdrop">Add site photos: drop images or click to choose<input type="file" id="vf_pinput" accept="image/*" multiple></label>'}</div>`);
+  HB.push(`<div class="sec"><h3>Documents</h3><div class="files" id="vf_files">${filesHTML(v.files, true)}</div>${'<label class="drop" id="vf_fdrop">Upload signed job sheet or other documents<input type="file" id="vf_finput" multiple></label>'}</div>`);
+  HB.push(`<div class="sec"><h3>Report</h3><div class="docrow"><button type="button" class="sm" id="vf_docx">Word report</button><button type="button" class="sm" id="vf_pdf">PDF report</button><button type="button" class="accent sm" id="vf_share">Share with customer</button></div>
     ${(v.shares || []).length ? `<div class="log">${v.shares.slice(-3).reverse().map(s => `<div><time>${esc(fmt(s.at))}</time><span>${esc(s.mode === "draft" ? "Outlook draft for" : "Emailed to")} ${esc(s.to)}</span></div>`).join("")}</div>` : ""}</div>`);
-  B.push(`<div class="sec" style="position:sticky;bottom:-28px;background:var(--surface);padding:12px 0 4px;border-top:1px solid var(--line)"><div class="docrow">
+  HB.push(`<div class="sec" style="position:sticky;bottom:-28px;background:var(--surface);padding:12px 0 4px;border-top:1px solid var(--line)"><div class="docrow">
     <button type="button" class="primary" id="vf_save">Save</button>
     ${v.status === "scheduled" ? '<button type="button" id="vf_start">Start visit</button>' : ""}
     ${!done && v.status !== "cancelled" ? '<button type="button" id="vf_complete">Complete visit</button>' : ""}
     ${done ? '<button type="button" id="vf_reopen">Reopen</button>' : ""}
     ${v.status !== "cancelled" && !done ? '<button type="button" class="ghost" id="vf_cancel">Cancel visit</button>' : ""}
     <button type="button" class="danger sm" id="vf_delete" style="margin-left:auto">Delete</button></div><div class="err" id="vf_err" role="alert"></div></div>`);
-  $("vs_body").innerHTML = B.join("");
+  $("vs_body").innerHTML = HB.join("");
   renderChecklist(); renderPhotos(); wireVisit();
   if (!S.can.visits) {
     $("vs_body").querySelectorAll("input, textarea, select").forEach(el => el.disabled = true);
     $("vs_body").querySelectorAll(".ck button, .ph .x, .drop, details.more, #vf_ckNew, #vf_ckAdd, #vf_share, #vf_save, #vf_start, #vf_complete, #vf_reopen, #vf_cancel, #vf_delete, #vf_files [data-rm]").forEach(el => el.hidden = true);
-    const n = document.createElement("div"); n.className = "callout"; n.textContent = "View only. Ask Ranjan for access to maintenance visits to update this visit."; $("vs_body").prepend(n);
+    const n = document.createElement("div"); n.className = "callout"; n.textContent = `View only. Ask ${B().manager} for access to maintenance visits to update this visit.`; $("vs_body").prepend(n);
   }
 }
 function renderChecklist() {
@@ -966,8 +994,8 @@ function openShare(ctx) {
     const a = ctx.a; const cust = S.customers.get(a.customerId) || {};
     if (!a.proposal) { toast("Draft the proposal first."); return; }
     $("sh_title").textContent = "Send proposal to " + shortName(a.customerName);
-    $("sh_to").value = cust.email || ""; $("sh_cc").value = myEmail !== RANJAN ? RANJAN : "";
-    $("sh_subject").value = `AMC Proposal ${a.ref} | ${a.proposal.meta.subtitle} | Bifold Technologies`;
+    $("sh_to").value = cust.email || ""; const boss = ((window.BIFOLD_ME || {}).managers || [])[0] || (B().key === "bifold" ? RANJAN : ""); $("sh_cc").value = boss && myEmail !== boss ? boss : "";
+    $("sh_subject").value = `AMC Proposal ${a.ref} | ${a.proposal.meta.subtitle} | ${B().name}`;
     $("sh_msg").value = `${a.proposal.letter.salutation}\n\nPlease find attached our Annual Maintenance Contract proposal for ${a.customerName}, covering ${GEN.lines(a.systems).join(", ")}.\n\nThe total contract value is AED ${a.proposal.commercial.total} including VAT, and the proposal is valid until ${a.proposal.meta.validUntil}.\n\nWe would be glad to walk you through it at your convenience.`;
   } else {
     const v = ctx.v; const c = S.contracts.get(v.amcId) || {};
@@ -977,14 +1005,14 @@ function openShare(ctx) {
     $("sh_msg").value = `Dear ${v.customerRep || c.contactName || "Sir/Madam"},\n\nThank you for your support during our ${GEN.typeLabel(v.type).toLowerCase()} visit on ${fmt(v.completedDate || v.scheduledDate)}. Please find the visit report attached, with a summary below.\n\nPlease let us know if you have any questions.`;
   }
   $("sh_how").innerHTML = S.features.mail
-    ? `<span>The email goes out from the Bifold tools mailbox with the PDF attached. You are copied and replies come to you (${esc(myEmail)}).</span>`
+    ? `<span>The email goes out from ${esc(B().short)}'s tools mailbox with the PDF attached. You are copied and replies come to you (${esc(myEmail)}).</span>`
     : "<span>Email isn't set up on the tools site yet. Download the PDF and send it from Outlook.</span>";
   $("sh_send").disabled = !S.features.mail;
   $("dShare").showModal();
 }
 function shareBody() {
   const msg = $("sh_msg").value.split(/\n{2,}/).map(p => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
-  const sig = `<p>Best regards,<br>Bifold Technologies LLC<br>${esc(S.meId || "")} | Tel: +971 04 264 0374 | bifoldtech.com</p>`;
+  const sig = `<p>Best regards,<br>${esc(B().name)}<br>${esc(S.meId || "")} | Tel: ${esc(B().phone)} | ${esc(B().web)}</p>`;
   let summary = "";
   if (shareCtx.kind === "amc") summary = "<hr>" + proposalHTML(shareCtx.a.proposal, true);
   else {
@@ -1030,6 +1058,9 @@ const csvCell = v => { const s = String(v == null ? "" : v); return /[",\n]/.tes
 async function refresh() {
   const r = await api("GET", "amc/bootstrap");
   S.features = r.features || S.features;
+  if (r.co) { S.co = r.co; document.documentElement.dataset.co = r.co; }
+  const ccHint = $("aw_cc_hint"); if (ccHint) ccHint.textContent = B().key === "techhub" ? "The Tech Hub alert copy list is always copied." : "ranjan@bifoldtech.com is always copied.";
+  const awEmail = $("aw_email"); if (awEmail) awEmail.placeholder = "you@" + B().web;
   if (r.can) { S.can = r.can; applyCan(); }
   const keepFull = new Map([...S.amcs.values()].filter(a => a._full).map(a => [a.id, a]));
   S.amcs.clear();

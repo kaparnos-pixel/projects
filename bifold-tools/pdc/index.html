@@ -66,7 +66,7 @@ button.armed{background:var(--bad);border-color:var(--bad);color:#fff}
   <header class="top">
     <div>
       <h1><span class="tag">Bifold Tools</span>PDC &amp; Guarantees Log</h1>
-      <p class="sub">Post-dated cheques to suppliers and vendors, and security deposits and advance payment guarantees given against purchase orders, for Bifold and Tech Hub. Seven days before a cheque clears or a deposit or guarantee expires, a reminder goes to the person who logged it and to Ranjan.</p>
+      <p class="sub">Post-dated cheques to suppliers and vendors, and security deposits and advance payment guarantees given against purchase orders. Seven days before a cheque clears or a deposit or guarantee expires, a reminder goes to the person who logged it and to Ranjan.</p>
     </div>
     <div class="acts">
       <button type="button" id="csvBtn">Download CSV</button>
@@ -201,7 +201,7 @@ function kpis(){
   const soon=open.filter(c=>{const n=daysTo(c.clearanceDate);return n>=0&&n<=7}),late=open.filter(c=>daysTo(c.clearanceDate)<0);
   const n=(a,w)=>a.length+" "+w+(a.length===1?"":"s");
   $("kPend").textContent="AED "+aed(sum(p));
-  $("kPendN").textContent="Bifold "+aed(sum(p.filter(c=>c.company==="Bifold Technologies")))+" · Tech Hub "+aed(sum(p.filter(c=>c.company==="Tech Hub IT")));
+  $("kPendN").textContent=n(p,"cheque")+" not yet cleared";
   $("kSoon").textContent="AED "+aed(sum(soon));$("kSoonN").textContent=n(soon,"entry").replace("entrys","entries");
   $("kLate").textContent=late.length;$("kLateAmt").textContent="AED "+aed(sum(late));$("kLateBox").classList.toggle("alert",late.length>0);
   const dep=g.filter(c=>c.kind==="deposit"),apg=g.filter(c=>c.kind==="apg");

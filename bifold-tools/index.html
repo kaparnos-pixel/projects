@@ -172,10 +172,12 @@ async function api(p){const r=await fetch("/api/"+p,{cache:"no-store"});if(!r.ok
 function header(m){
   const h=dubai().getUTCHours(),first=String(m.email).split("@")[0].split(/[._-]/)[0];
   $("greet").textContent=`Good ${h<12?"morning":h<17?"afternoon":"evening"}, ${first.charAt(0).toUpperCase()+first.slice(1)}`;
-  $("today").innerHTML=`${dubai().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric",timeZone:"UTC"})} · Dubai · <b>${m.isManager?"Manager view: everything across Bifold":"Your workspace"}</b>`;
+  $("today").innerHTML=`${dubai().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric",timeZone:"UTC"})} · ${m.co==="techhub"?"Ras Al Khaimah":"Dubai"} · <b>${m.co==="all"?"Group view: Bifold and Tech Hub combined, read-only":m.isManager?"Manager view: everything across "+(m.co==="techhub"?"Tech Hub":"Bifold"):"Your workspace"}</b>`;
+  const eb=document.querySelector(".eyebrow"); if(m.co==="all")eb.textContent="Group · Bifold Technologies + Tech Hub IT"; else if(m.co==="techhub")eb.textContent="Tech Hub Information Technology · Operations";
 }
 const can=(m,k)=>m.isManager||(m.sections||[]).includes(k);
 function quick(m){
+  if(m.co==="all"){$("qa").innerHTML="";return}
   const a=[];
   if(can(m,"amc"))a.push(["/amc/#amcs","New AMC proposal","amc",1]);
   if(can(m,"visits"))a.push(["/amc/#visits","Maintenance visits","visits"]);
@@ -194,11 +196,11 @@ const failK=d=>setK(d,"–",`<span class="bad">Couldn't load</span>`);
 
 function apps(m){
   const list=[
-    ["pipeline","/pipeline/","Sales","Sales Pipeline","Every deal for Bifold and Tech Hub from lead to PO, with the weighted forecast.",["pipeline"]],
+    ["pipeline","/pipeline/","Sales","Sales Pipeline","Every deal from lead to PO, with the weighted forecast.",["pipeline"]],
     ["pnl","/pnl/","Sales","PnL Calculator","Profit on each PO before you commit, saved and shared with colleagues.",["pnl"]],
     ["amc","/amc/","Service","AMC Tracker","Branded AMC proposals, awards, expiry alerts and maintenance visits.",["amc","visits"]],
     ["pdc","/pdc/","Finance","PDC & Guarantees","Post-dated cheques, security deposits and advance payment guarantees.",["pdc"]],
-    ["customers","/customers/","Master data","Customers","The single customer list every Bifold tool uses.",["customers"]],
+    ["customers","/customers/","Master data","Customers","The single customer list every tool uses.",["customers"]],
     ["access","/access/","Administration","Team access","Choose which tools and sections each person can use.",["manager"]],
   ].filter(x=>x[5].some(k=>k==="manager"?m.isManager:can(m,k)));
   $("apps").innerHTML=list.map(x=>`<a class="app ${FN[x[0]]}" href="${x[1]}"><span class="ic">${ICON[x[0]]}</span><span class="k">${esc(x[2])}</span><h3>${esc(x[3])}</h3><p>${esc(x[4])}</p><span class="st" id="st_${x[0]}"></span></a>`).join("");

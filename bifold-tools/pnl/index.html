@@ -505,7 +505,7 @@ function stmtRows(r){return [["PO value (revenue, ex VAT)",r.po],["Direct projec
 
 $("dlXlsx").onclick=()=>{
   if(!window.XLSX){toast("The Excel export library didn't load. Reload the page and try again.",true);return}
-  const r=compute(S), rows=[["Bifold Technologies L.L.C - Project PnL"],[]];
+  const r=compute(S), rows=[[((window.BIFOLD_BRAND||{}).name||"Bifold Technologies L.L.C")+" - Project PnL"],[]];
   headerRows().forEach(x=>rows.push(x));rows.push([]);
   rows.push(["Item","Category","Qty","Unit cost (AED)","Total (AED)"]);
   const first=rows.length+1;
@@ -524,12 +524,13 @@ $("dlXlsx").onclick=()=>{
 };
 
 let logoCache=null;
-async function logo(){if(logoCache)return logoCache;const b=await (await fetch("/assets/bifold_logo.png")).blob();return logoCache=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(b)})}
+async function logo(){if(logoCache)return logoCache;const b=await (await fetch((window.BIFOLD_BRAND||{}).logo||"/assets/bifold_logo.png")).blob();return logoCache=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(b)})}
 $("dlPdf").onclick=async()=>{
   if(!window.jspdf||!window.jspdf.jsPDF||!window.jspdf.jsPDF.API.autoTable){toast("The PDF library didn't load. Reload the page and try again.",true);return}
   const {jsPDF}=window.jspdf, d=new jsPDF({unit:"pt",format:"a4"}), r=compute(S), W=d.internal.pageSize.getWidth(), M=40;
-  const BLUE=[30,90,140], RED=[216,31,42];
-  try{d.addImage(await logo(),"PNG",M,28,150,45)}catch(e){d.setFont("helvetica","bold");d.setFontSize(20);d.setTextColor(...BLUE);d.text("BIFOLD",M,58)}
+  const TH=(window.BIFOLD_BRAND||{}).key==="techhub", BR=window.BIFOLD_BRAND||{name:"Bifold Technologies L.L.C",short:"Bifold"};
+  const BLUE=TH?[0,60,80]:[30,90,140], RED=TH?[40,160,140]:[216,31,42];
+  try{d.addImage(await logo(),"PNG",M,28,150,TH?41:45)}catch(e){d.setFont("helvetica","bold");d.setFontSize(20);d.setTextColor(...BLUE);d.text(BR.short.toUpperCase(),M,58)}
   d.setFont("helvetica","bold");d.setFontSize(18);d.setTextColor(...BLUE);d.text("Project PnL",W-M,50,{align:"right"});
   d.setFont("helvetica","normal");d.setFontSize(9);d.setTextColor(90);d.text((DOC&&DOC.id)||"Draft - not saved",W-M,66,{align:"right"});
   d.setDrawColor(...RED);d.setLineWidth(2);d.line(M,84,W-M,84);
@@ -550,7 +551,7 @@ $("dlPdf").onclick=async()=>{
     margin:{left:M,right:M}});
   const pages=d.getNumberOfPages();
   for(let i=1;i<=pages;i++){d.setPage(i);const H=d.internal.pageSize.getHeight();d.setDrawColor(...RED);d.setLineWidth(1);d.line(M,H-40,W-M,H-40);
-    d.setFontSize(8);d.setTextColor(120);d.text("Bifold Technologies L.L.C · Confidential, internal use only",M,H-26);d.text(`Page ${i} of ${pages}`,W-M,H-26,{align:"right"})}
+    d.setFontSize(8);d.setTextColor(120);d.text(BR.name+" · Confidential, internal use only",M,H-26);d.text(`Page ${i} of ${pages}`,W-M,H-26,{align:"right"})}
   d.save(fileBase()+".pdf");
 };
 

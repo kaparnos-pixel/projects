@@ -121,3 +121,36 @@ body.bx .brandbar{display:none}
 }
 @media (prefers-reduced-motion:reduce){.bx-side{transition:none}}
 @media print{.bx-side,.bx-top{display:none}body.bx{padding:0}}
+
+/* ---------- Tech Hub house style (navy #003C50, teal #28A08C), applied when a Tech Hub user is signed in ---------- */
+html[data-co="techhub"]{
+  --bx-navy:#00222E; --bx-navy-2:#003C50; --bx-navy-line:#0E4A5E; --bx-navy-fg:#CFE3E6; --bx-navy-muted:#7FA6AE;
+  --bx-brand:#003C50; --bx-red:#28A08C; --bx-sky:#5CC8B4;
+  /* shared tool tokens (bifold.css) */
+  --accent:#00566E; --accent-soft:#DDEFF0; --red:#28A08C;
+  /* AMC tracker tokens */
+  --steel:#00566E; --steel-deep:#003C50; --steel-soft:#DDEFF0; --crimson:#1E8C78; --crimson-soft:#DCF2EC;
+  /* home page */
+  --sales:#00566E; --sales-soft:#DDEFF0;
+}
+@media (prefers-color-scheme:dark){
+  html[data-co="techhub"]:not([data-theme="light"]){--accent:#5CC8B4; --accent-soft:#12303A; --red:#5CC8B4; --steel:#5CC8B4; --steel-deep:#9EE0D3; --steel-soft:#12303A; --crimson:#5CC8B4; --crimson-soft:#12302B; --sales:#5CC8B4; --sales-soft:#12303A}
+}
+html[data-co="techhub"][data-theme="dark"]{--accent:#5CC8B4; --accent-soft:#12303A; --red:#5CC8B4; --steel:#5CC8B4; --steel-deep:#9EE0D3; --steel-soft:#12303A; --crimson:#5CC8B4; --crimson-soft:#12302B}
+html[data-co="techhub"] .bx-nav a.on{background:linear-gradient(90deg,rgba(40,160,140,.26),rgba(40,160,140,.06))}
+html[data-co="techhub"] .bx-brand .lg{padding:5px 8px}
+html[data-co="techhub"] .bx-brand img{height:22px}
+html[data-co="techhub"] .hero{background:
+  radial-gradient(900px 340px at 85% -10%,rgba(92,200,180,.30),transparent 60%),
+  radial-gradient(700px 300px at 10% 120%,rgba(40,160,140,.20),transparent 60%),
+  linear-gradient(135deg,#00222E 0%,#003C50 60%,#0B5B6E 100%)}
+html[data-co="techhub"] .eyebrow{color:#9EE0D3}
+html[data-co="techhub"] .eyebrow::before{background:#28A08C}
+html[data-co="techhub"] .qa a.primary{color:#003C50}
+
+/* company switcher (group admins only) */
+.bx-co{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--bx-top-muted);margin-left:auto}
+.bx-co select{font:inherit;font-weight:700;color:var(--bx-top-fg);background:transparent;border:1px solid var(--bx-top-line);border-radius:8px;padding:6px 8px;cursor:pointer}
+html[data-co="all"] .bx-co select{border-color:#B76E00}
+@media (max-width:760px){.bx-co span{display:none}}
+.bx-co + .bx-search{margin-left:0}

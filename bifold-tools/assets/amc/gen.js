@@ -1,13 +1,21 @@
 /* ===== Bifold document generators: AMC proposal, visit report, contract service report (Word + PDF) ===== */
 const GEN = (function () {
-  const NAVY = "34648C", RED = "AE3343", GREY = "EFF3F7", BLUE = "26506F", ALT = "F2F6FA", DARK = "1F2733", MUTE = "6B7280";
+  let NAVY = "34648C", RED = "AE3343", GREY = "EFF3F7", BLUE = "26506F", ALT = "F2F6FA", DARK = "1F2733", MUTE = "6B7280";
   const CW = 10080;
-  const COMPANY = {
-    company: "Bifold Technologies LLC", preparerName: "Ranjan Mazumder", preparerTitle: "Director",
-    email: "ranjan@bifoldtech.com", phone: "+971 056 4243777", tagline: "Enterprise ICT Solutions & Managed Services",
-    addressLine: "Office A306, Saraya Avenue, Al Garhoud, Dubai, UAE  |  PO Box 554567",
-    contactLine: "Tel: +971 04 264 0374  |  bifoldtech.com  |  ranjan@bifoldtech.com",
+  // House styles. Bifold: logo-derived steel blue and crimson. Tech Hub: navy 003C50 and teal 28A08C.
+  const BRANDS = {
+    bifold: { colors: ["34648C", "AE3343", "EFF3F7", "26506F", "F2F6FA"], company: {
+      company: "Bifold Technologies LLC", preparerName: "Ranjan Mazumder", preparerTitle: "Director",
+      email: "ranjan@bifoldtech.com", phone: "+971 056 4243777", tagline: "Enterprise ICT Solutions & Managed Services",
+      addressLine: "Office A306, Saraya Avenue, Al Garhoud, Dubai, UAE  |  PO Box 554567",
+      contactLine: "Tel: +971 04 264 0374  |  bifoldtech.com  |  ranjan@bifoldtech.com" } },
+    techhub: { colors: ["003C50", "28A08C", "EEF4F5", "003C50", "F5F7F8"], company: {
+      company: "Tech Hub Information Technology", preparerName: "", preparerTitle: "", email: "sales@techhubrak.ae", phone: "+971 07 258 1926",
+      tagline: "Information Technology  |  Ras Al Khaimah", addressLine: "Blue Building, Injaz Road, Al Nakheel, Ras Al Khaimah, UAE",
+      contactLine: "sales@techhubrak.ae  |  +971 07 258 1926  |  www.techhubrak.ae" } },
   };
+  let COMPANY = BRANDS.bifold.company;
+  function useBrand(key) { const b = BRANDS[key] || BRANDS.bifold; [NAVY, RED, GREY, BLUE, ALT] = b.colors; COMPANY = b.company; }
   const s = v => (v == null ? "" : String(v)).replace(/\s*\u2014\s*/g, ", ");
   const fitBox = (p, maxW, maxH) => { let w = maxW, h = Math.round(maxW * p.h / p.w); if (h > maxH) { h = maxH; w = Math.round(maxH * p.w / p.h); } return { width: w, height: h }; };
   const lines = t => s(t).split(/\n+/).map(x => x.replace(/^\s*[-•*]\s*/, "").trim()).filter(Boolean);
@@ -456,6 +464,196 @@ const GEN = (function () {
     return k.doc;
   }
 
-  return { amcDocx, amcPdf, visitDocx, visitPdf, contractDocx, contractPdf, fmtDate, typeLabel, TYPES, COMPANY, lines };
+
+  /* ---------------- Tech Hub AMC proposal (approved Tech Hub template, 8 sections) ---------------- */
+  const TH = (function () {
+    const TNAVY = "003C50", TTEAL = "28A08C", TGREY = "555555", TLGREY = "999999", TSUB = "F5F5F5", TBORDER = "D0D0D0", TWHITE = "FFFFFF", TTEXT = "1A1A1A", TCW = 9746;
+    const x = t => s(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const money = v => v == null || v === "" ? "-" : Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Map the shared AMC content (the same one the editor changes) onto Tech Hub's eight-section structure.
+    function fromAmc(cfg, systems) {
+      const m = cfg.meta, cm = cfg.commercial, sp = cfg.servicePlan || {}, rp = cfg.response || {};
+      const sysLines = lines(systems);
+      const flat = g => (g.bullets && g.bullets.length ? (g.heading ? g.heading.replace(/^[A-Z]\.\s*/, "") + ": " : "") + g.bullets.join("; ") : (g.heading ? g.heading + ": " : "") + s(g.text)).replace(/\.;/g, ";");
+      const excl = (cfg.exclusions && cfg.exclusions.groups) || [];
+      const pmRow = (sp.rows || []).find(r => /preventive/i.test(r[0]));
+      const hoursRow = (sp.rows || []).find(r => /coverage hours/i.test(r[0]));
+      const months = cm.startISO && cm.endISO ? Math.max(1, Math.round((Date.parse(cm.endISO) - Date.parse(cm.startISO)) / 864e5 / 30.44)) : 12;
+      const sla = (rp.rows || []).map(r => `${r[0]} (${s(r[1]).replace(/^[A-Za-z]+:\s*/, "")}): ${r[2]} response, ${r[3]} action, ${r[4]} restoration`).join("; ");
+      return {
+        meta: { title: m.subtitle ? "Annual Maintenance Contract (AMC): " + m.subtitle.replace(/ Plan$/, "") : "Annual Maintenance Contract (AMC)", client: m.customer, proposalNo: m.proposalNo, date: m.date, validUntil: m.validUntil, preparedBy: "Tech Hub Information Technology" },
+        executiveSummary: [s((cfg.letter.body || [])[0]) + ` Total annual investment is AED ${cm.total} including VAT.`].concat((cfg.letter.body || []).slice(1)),
+        clientUnderstanding: { background: (cfg.understanding.paragraphs || []).slice(), scopeTitle: "Scope of Coverage", scope: ((cfg.scope && cfg.scope.streams) || []).map(flat), assumptions: excl.slice(0, 3).map(flat) },
+        solution: {
+          overview: [cfg.scope && cfg.scope.intro, sp.intro, rp.intro].filter(Boolean),
+          boq: { vatRate: cm.vatPct != null ? cm.vatPct : 5, sections: [{ items: sysLines.map(l => ({ description: l, model: "", qtyUnit: "Covered", priceLabel: l })) }],
+            priceItems: (cm.lineItems || []).map(li => ({ priceLabel: li.desc, qty: 1, unit: li.amount, total: li.amount })), subTotal: cm.subtotal, vat: cm.vat, total: cm.total },
+          specs: [sla && "SLA response targets: " + sla + ".", pmRow && `Preventive maintenance: ${pmRow[1]}${pmRow[2] ? " (" + pmRow[2].toLowerCase() + ")" : ""}, with a written visit report after each visit.`, hoursRow && `Support hours: ${hoursRow[1]}. Out-of-hours and 24x7 cover available as a priced upgrade.`, `Contract term: ${cfg.signoff.period}.`].filter(Boolean),
+        },
+        commercial: { paymentTerms: (cm.paymentTerms || []).map(t => { const i = t.indexOf(":"); return i > 0 && i < 40 ? { label: t.slice(0, i), value: t.slice(i + 1).trim() } : { label: "Terms", value: t }; }) },
+        timeline: { phases: [
+          { phase: 1, activity: "Contract Activation & Kickoff", duration: "1-2 days", responsible: "Tech Hub & Client" },
+          { phase: 2, activity: "Asset Audit & Coverage Baseline", duration: "2-3 days", responsible: "Tech Hub" },
+          { phase: 3, activity: "Support Desk Onboarding & Escalation Setup", duration: "1 day", responsible: "Tech Hub" },
+          { phase: 4, activity: "First Preventive Maintenance Visit", duration: "Within first 30 days", responsible: "Tech Hub" },
+          { phase: 5, activity: "Ongoing PM Visits & SLA Support", duration: `Recurring - ${months} months`, responsible: "Tech Hub" },
+          { phase: 6, activity: "End-of-Term Review & Renewal", duration: `Month ${months}`, responsible: "Tech Hub & Client" }], total: `${months}-Month Contract Term` },
+        warranty: [{ label: "Contract Term", value: cfg.signoff.period }].concat((sp.rows || []).slice(0, 9).map(r => ({ label: r[0], value: [r[1], r[2]].filter(Boolean).join(". ") }))),
+        terms: [`This proposal is valid until ${m.validUntil}.`, "Prices are in UAE Dirhams (AED). VAT at 5% is applicable on all items."].concat(excl.slice(3).map(flat)),
+        termsNote: "The annual value may be adjusted as items are added to or removed from coverage during the term, by written variation.",
+        whyTechHub: [
+          { title: "Single-Source IT Partner", body: "Supply, installation and ongoing support from one accountable team, so nothing falls between vendors." },
+          { title: "SLA-Backed Support", body: "Defined response and resolution targets turn unpredictable downtime into a fixed, budgeted annual cost." },
+          { title: "Proactive, Not Reactive", body: "Scheduled preventive maintenance and patch management catch issues early instead of reacting to breakdowns." },
+          { title: "RAK-Wide Delivery", body: "Local engineers based in Ras Al Khaimah for fast on-site response across the emirate and the wider UAE." }],
+        closing: `Thank you for considering Tech Hub for your IT maintenance needs. We look forward to a successful partnership with ${m.customer}.`,
+      };
+    }
+    // ---- OOXML body (port of the Tech Hub skill's build_body) ----
+    const rpr = ({ color, bold, italic, sz, spacing } = {}) => { let r = ""; if (bold) r += "<w:b/><w:bCs/>"; if (italic) r += "<w:i/><w:iCs/>"; if (color) r += `<w:color w:val="${color}"/>`; if (spacing != null) r += `<w:spacing w:val="${spacing}"/>`; if (sz) r += `<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>`; return r ? `<w:rPr>${r}</w:rPr>` : ""; };
+    const run = (t, o) => `<w:r>${rpr(o)}<w:t xml:space="preserve">${x(t)}</w:t></w:r>`;
+    function para(inner, { before = 0, after = 120, align, line, border, num } = {}) {
+      let p = "<w:pPr>"; if (num != null) p += `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${num}"/></w:numPr>`;
+      if (border) p += `<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="0" w:color="${border}"/></w:pBdr>`;
+      p += `<w:spacing w:before="${before}" w:after="${after}"${line ? ` w:line="${line}" w:lineRule="auto"` : ""}/>`; if (align) p += `<w:jc w:val="${align}"/>`;
+      return `<w:p>${p}</w:pPr>${inner}</w:p>`;
+    }
+    const heading = t => para(run(t, { color: TNAVY, bold: true, sz: 24, spacing: 80 }), { before: 260, after: 80 }) + para("", { after: 160, border: TTEAL });
+    const subheading = t => para(run(t, { color: TNAVY, bold: true, sz: 21 }), { before: 160, after: 60 });
+    const bodyP = (t, grey) => para(run(t, { color: grey ? TLGREY : TTEXT, sz: 20 }), { after: 100, line: 264 });
+    const bullet = t => para(run(t, { color: TTEXT, sz: 20 }), { after: 60, line: 252, num: 2 });
+    const tcb = c => "<w:tcBorders>" + ["top", "left", "bottom", "right"].map(e => `<w:${e} w:val="single" w:sz="4" w:space="0" w:color="${c}"/>`).join("") + "</w:tcBorders>";
+    function cell(t, w, { fill, bold, italic, color = TTEXT, align, span, accent, inner, sz = 20, vmar = 70 } = {}) {
+      let p = `<w:tcW w:w="${w}" w:type="dxa"/>`; if (span) p += `<w:gridSpan w:val="${span}"/>`;
+      p += accent ? `<w:tcBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="${TBORDER}"/><w:left w:val="single" w:sz="24" w:space="0" w:color="${accent}"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="${TBORDER}"/><w:right w:val="single" w:sz="4" w:space="0" w:color="${TBORDER}"/></w:tcBorders>` : tcb(TBORDER);
+      if (fill) p += `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>`;
+      p += `<w:tcMar><w:top w:w="${vmar}" w:type="dxa"/><w:left w:w="130" w:type="dxa"/><w:bottom w:w="${vmar}" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar><w:vAlign w:val="center"/>`;
+      return `<w:tc><w:tcPr>${p}</w:tcPr>${inner != null ? inner : para(run(t, { color, bold, italic, sz }), { after: 0, align })}</w:tc>`;
+    }
+    const row = cs => `<w:tr>${cs.join("")}</w:tr>`;
+    function table(grid, rows) {
+      const g = grid.map(w => `<w:gridCol w:w="${w}"/>`).join("");
+      const pr = `<w:tblPr><w:tblW w:w="${grid.reduce((a, b) => a + b, 0)}" w:type="dxa"/><w:tblBorders>` + ["top", "left", "bottom", "right", "insideH", "insideV"].map(e => `<w:${e} w:val="single" w:sz="4" w:space="0" w:color="${TBORDER}"/>`).join("") + `</w:tblBorders><w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="0"/></w:tblPr>`;
+      return `<w:tbl>${pr}<w:tblGrid>${g}</w:tblGrid>${rows.join("")}</w:tbl>` + para("", { after: 40 });
+    }
+    const H = (t, w, o = {}) => cell(t, w, Object.assign({ fill: TNAVY, color: TWHITE, bold: true }, o));
+    function scopeTable(boq) {
+      const g = [520, 5200, 2400, 1626]; const rows = [row([H("#", g[0], { align: "center" }), H("Description", g[1]), H("Brand / Model", g[2]), H("Qty / Unit", g[3])])]; let n = 0;
+      boq.sections.forEach(sec => sec.items.forEach(it => { n++; rows.push(row([cell(String(n), g[0], { align: "center" }), cell(it.description, g[1]), cell(it.model || "", g[2]), cell(it.qtyUnit || "", g[3], { align: "center" })])); }));
+      return table(g, rows);
+    }
+    function pricingTable(boq) {
+      const g = [520, 4406, 1100, 1860, 1860]; const rows = [row([H("#", g[0], { align: "center" }), H("Item / Service", g[1]), H("Qty", g[2], { align: "center" }), H("Unit Price (AED)", g[3], { align: "right" }), H("Total (AED)", g[4], { align: "right" })])];
+      boq.priceItems.forEach((it, i) => rows.push(row([cell(String(i + 1), g[0], { align: "center" }), cell(it.priceLabel, g[1]), cell(String(it.qty), g[2], { align: "center" }), cell(s(it.unit), g[3], { align: "right" }), cell(s(it.total), g[4], { align: "right", bold: true, color: TNAVY })])));
+      const span = g[0] + g[1] + g[2] + g[3];
+      const tr = (l, v, navy) => row([cell(l, span, { span: 4, fill: navy ? TNAVY : TSUB, bold: true, color: navy ? TWHITE : TNAVY, align: "right" }), cell(v, g[4], { fill: navy ? TNAVY : TSUB, bold: true, color: navy ? TWHITE : TNAVY, align: "right" })]);
+      rows.push(tr("Sub-Total (Excl. VAT)", "AED " + s(boq.subTotal)), tr(`VAT (${boq.vatRate}%)`, "AED " + s(boq.vat)), tr("TOTAL INVESTMENT (INCL. VAT)", "AED " + s(boq.total), true));
+      return table(g, rows);
+    }
+    const kv = (pairs, w1 = 3000) => table([w1, TCW - w1], pairs.map(([k, v]) => row([cell(k, w1, { bold: true, color: TNAVY }), cell(v, TCW - w1, { color: TGREY, italic: true })])));
+    function timeline(tl) {
+      const g = [1100, 4646, 2000, 2000]; const rows = [row([H("Phase", g[0], { align: "center" }), H("Activity", g[1]), H("Duration", g[2], { align: "center" }), H("Responsible", g[3], { align: "center" })])];
+      tl.phases.forEach(p => rows.push(row([cell(String(p.phase), g[0], { align: "center" }), cell(p.activity, g[1]), cell(p.duration, g[2], { align: "center", italic: true, color: TTEAL }), cell(p.responsible, g[3], { align: "center" })])));
+      rows.push(row([cell("Contract Term", g[0] + g[1] + g[2], { span: 3, fill: TSUB, bold: true, color: TNAVY }), cell(tl.total, g[3], { fill: TSUB, bold: true, color: TTEAL, align: "center", italic: true })]));
+      return table(g, rows);
+    }
+    function cards(cs) {
+      const half = Math.floor(TCW / 2); const out = [];
+      for (let i = 0; i < cs.length; i += 2) {
+        const pair = cs.slice(i, i + 2).map(c => cell("", half, { accent: TTEAL, vmar: 180, inner: para(run(c.title, { color: TNAVY, bold: true, sz: 22 }), { before: 20, after: 60 }) + para(run(c.body, { color: TGREY, sz: 19 }), { after: 20, line: 252 }) }));
+        if (pair.length === 1) pair.push(cell("", half, { inner: para("", { after: 0 }) }));
+        out.push(row(pair));
+        if (i + 2 < cs.length) { const sp = `<w:tc><w:tcPr><w:tcW w:w="${half}" w:type="dxa"/><w:tcBorders>` + ["top", "left", "bottom", "right"].map(e => `<w:${e} w:val="none" w:sz="0" w:space="0" w:color="FFFFFF"/>`).join("") + `</w:tcBorders></w:tcPr>${para("", { after: 0 })}</w:tc>`; out.push(`<w:tr>${sp}${sp}</w:tr>`); }
+      }
+      return table([half, half], out);
+    }
+    function body(c) {
+      const P = [];
+      P.push(heading("1. EXECUTIVE SUMMARY")); c.executiveSummary.forEach((t, i) => P.push(bodyP(t, i > 0)));
+      const cu = c.clientUnderstanding; P.push(heading("2. CLIENT UNDERSTANDING & SCOPE OF WORK"));
+      if (cu.background.length) { P.push(subheading("2.1 Background")); cu.background.forEach(t => P.push(bodyP(t))); }
+      if (cu.scope.length) { P.push(subheading("2.2 " + cu.scopeTitle)); cu.scope.forEach(b => P.push(bullet(b))); }
+      if (cu.assumptions.length) { P.push(subheading("2.3 Assumptions & Exclusions")); cu.assumptions.forEach(t => P.push(bodyP(t, true))); }
+      const so = c.solution; P.push(heading("3. PROPOSED SOLUTION"));
+      if (so.overview.length) { P.push(subheading("3.1 Solution Overview")); so.overview.forEach(t => P.push(bodyP(t))); }
+      P.push(subheading("3.2 Scope of Supply & Services")); P.push(scopeTable(so.boq));
+      if (so.specs.length) { P.push(subheading("3.3 Technical Specifications")); so.specs.forEach(t => P.push(bodyP(t, true))); }
+      P.push(heading("4. COMMERCIAL OFFER")); P.push(subheading("4.1 Pricing Summary")); P.push(pricingTable(so.boq));
+      P.push(subheading("4.2 Payment Terms")); P.push(kv(c.commercial.paymentTerms.map(r => [r.label, r.value])));
+      P.push(heading("5. CONTRACT LIFECYCLE")); P.push(timeline(c.timeline));
+      P.push(heading("6. SERVICE COVERAGE & SLA")); P.push(kv(c.warranty.map(r => [r.label, r.value])));
+      P.push(heading("7. TERMS & CONDITIONS")); c.terms.forEach(b => P.push(bullet(b))); if (c.termsNote) P.push(bodyP(c.termsNote, true));
+      P.push(heading("8. WHY TECH HUB")); P.push(cards(c.whyTechHub));
+      P.push(para(run(c.closing, { color: TGREY, italic: true, sz: 20 }), { before: 240, after: 80, align: "center" }));
+      P.push(para(run("Tech Hub Information Technology  ·  sales@techhubrak.ae  ·  +971 07 258 1926  ·  www.techhubrak.ae", { color: TNAVY, bold: true, sz: 19 }), { after: 0, align: "center" }));
+      return P.join("\n    ");
+    }
+    async function docx(JSZip, c, template) {
+      const zip = await JSZip.loadAsync(template);
+      let d = await zip.file("word/document.xml").async("string");
+      const m = c.meta;
+      const tok = { "{{TITLE}}": m.title, "{{CLIENT}}": m.client, "{{PROPOSAL_NO}}": m.proposalNo, "{{DATE}}": m.date, "{{PREPARED_FOR}}": m.client, "{{PREPARED_BY}}": m.preparedBy, "{{VALID_UNTIL}}": m.validUntil };
+      Object.keys(tok).forEach(k => { d = d.split(k).join(x(tok[k])); });
+      const at = d.lastIndexOf("<w:sectPr"); if (at < 0) throw new Error("The Tech Hub template is damaged.");
+      d = d.slice(0, at) + body(c) + "\n    " + d.slice(at);
+      zip.file("word/document.xml", d);
+      return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", compression: "DEFLATE" });
+    }
+    // ---- PDF in the same Tech Hub style ----
+    function pdf(jsPDF, c, img) {
+      useBrand("techhub");
+      const k = pdfKit(jsPDF, img, "Commercial Proposal", "a4"); const { doc, M, CWp } = k; const m = c.meta;
+      k.y = 60; if (img && img.logo) { k.image(img.logo, 150); }
+      k.y += 40; doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(...rgb(TTEAL)); doc.text("C O M M E R C I A L   P R O P O S A L", M, k.y); k.y += 26;
+      doc.setFontSize(22); doc.setTextColor(...rgb(TNAVY)); doc.splitTextToSize(P(m.title), CWp).forEach(l => { doc.text(l, M, k.y); k.y += 26; });
+      doc.setFont("helvetica", "italic"); doc.setFontSize(11); doc.setTextColor(...rgb(TGREY)); doc.text("for", M, k.y); k.y += 20;
+      doc.setFont("helvetica", "bolditalic"); doc.setFontSize(15); doc.setTextColor(...rgb(TNAVY)); doc.splitTextToSize(P(m.client), CWp).forEach(l => { doc.text(l, M, k.y); k.y += 19; });
+      doc.setDrawColor(...rgb(TTEAL)); doc.setLineWidth(1.2); doc.line(M, k.y, M + CWp, k.y); k.y += 26;
+      k.table(null, [["Proposal No.", m.proposalNo], ["Date", m.date], ["Prepared For", m.client], ["Prepared By", m.preparedBy], ["Valid Until", m.validUntil]], { columnStyles: { 0: { fontStyle: "bold", cellWidth: 130, textColor: rgb(TNAVY) }, 1: { textColor: rgb(TGREY), fontStyle: "italic" } } });
+      doc.setFont("helvetica", "italic"); doc.setFontSize(8); doc.setTextColor(...rgb(TGREY)); doc.text(P(COMPANY.addressLine + "  |  www.techhubrak.ae"), M, k.y + 10);
+      doc.addPage(); k.y = k.TOP;
+      const hd = (t, room = 60) => { k.need(room); k.y += 8; k.text(t, { size: 12.5, bold: true, color: TNAVY, after: 2 }); doc.setDrawColor(...rgb(TTEAL)); doc.setLineWidth(1); doc.line(M, k.y, M + CWp, k.y); k.y += 12; };
+      const sub = t => k.text(t, { size: 10.5, bold: true, color: TNAVY, after: 3 });
+      const navyHead = { headStyles: { fillColor: rgb(TNAVY) } };
+      hd("1. EXECUTIVE SUMMARY"); c.executiveSummary.forEach((t, i) => k.text(t, { color: i ? TLGREY : TTEXT, size: 10 }));
+      const cu = c.clientUnderstanding; hd("2. CLIENT UNDERSTANDING & SCOPE OF WORK");
+      if (cu.background.length) { sub("2.1 Background"); cu.background.forEach(t => k.text(t, { size: 10 })); }
+      if (cu.scope.length) { sub("2.2 " + cu.scopeTitle); cu.scope.forEach(k.bullet); }
+      if (cu.assumptions.length) { sub("2.3 Assumptions & Exclusions"); cu.assumptions.forEach(t => k.text(t, { color: TLGREY, size: 10 })); }
+      const so = c.solution; hd("3. PROPOSED SOLUTION");
+      if (so.overview.length) { sub("3.1 Solution Overview"); so.overview.forEach(t => k.text(t, { size: 10 })); }
+      sub("3.2 Scope of Supply & Services");
+      k.table(["#", "Description", "Brand / Model", "Qty / Unit"], so.boq.sections[0].items.map((it, i) => [String(i + 1), it.description, it.model || "", it.qtyUnit || ""]), { columnStyles: { 0: { halign: "center", cellWidth: 26 }, 3: { halign: "center", cellWidth: 80 } } });
+      if (so.specs.length) { sub("3.3 Technical Specifications"); so.specs.forEach(t => k.text(t, { color: TLGREY, size: 10 })); }
+      hd("4. COMMERCIAL OFFER"); sub("4.1 Pricing Summary");
+      const pr = so.boq.priceItems.map((it, i) => [String(i + 1), it.priceLabel, String(it.qty), s(it.unit), s(it.total)]);
+      const n0 = pr.length; const tot = l => ({ content: P(l), colSpan: 4, styles: { halign: "right" } });
+      pr.push([tot("Sub-Total (Excl. VAT)"), "AED " + s(so.boq.subTotal)], [tot(`VAT (${so.boq.vatRate}%)`), "AED " + s(so.boq.vat)], [tot("TOTAL INVESTMENT (INCL. VAT)"), "AED " + s(so.boq.total)]);
+      k.table(["#", "Item / Service", "Qty", "Unit Price (AED)", "Total (AED)"], pr, { columnStyles: { 0: { halign: "center", cellWidth: 26 }, 2: { halign: "center", cellWidth: 40 }, 3: { halign: "right", cellWidth: 95 }, 4: { halign: "right", cellWidth: 95 } },
+        didParseCell: dd => { if (dd.section !== "body" || dd.row.index < n0) return; dd.cell.styles.fontStyle = "bold"; const last = dd.row.index === n0 + 2; dd.cell.styles.fillColor = last ? rgb(TNAVY) : rgb(TSUB); dd.cell.styles.textColor = last ? [255, 255, 255] : rgb(TNAVY); dd.cell.styles.halign = "right"; } });
+      sub("4.2 Payment Terms"); k.table(null, c.commercial.paymentTerms.map(r => [r.label, r.value]), { columnStyles: { 0: { fontStyle: "bold", cellWidth: 150, textColor: rgb(TNAVY) }, 1: { textColor: rgb(TGREY), fontStyle: "italic" } } });
+      hd("5. CONTRACT LIFECYCLE");
+      const tl = c.timeline.phases.map(p => [String(p.phase), p.activity, p.duration, p.responsible]); const t0 = tl.length; tl.push([{ content: "Contract Term", colSpan: 3 }, c.timeline.total]);
+      k.table(["Phase", "Activity", "Duration", "Responsible"], tl, { columnStyles: { 0: { halign: "center", cellWidth: 44 }, 2: { halign: "center", cellWidth: 110, textColor: rgb(TTEAL), fontStyle: "italic" }, 3: { halign: "center", cellWidth: 100 } }, didParseCell: dd => { if (dd.section === "body" && dd.row.index === t0) { dd.cell.styles.fillColor = rgb(TSUB); dd.cell.styles.fontStyle = "bold"; } } });
+      hd("6. SERVICE COVERAGE & SLA"); k.table(null, c.warranty.map(r => [r.label, r.value]), { columnStyles: { 0: { fontStyle: "bold", cellWidth: 150, textColor: rgb(TNAVY) }, 1: { textColor: rgb(TGREY), fontStyle: "italic" } } });
+      hd("7. TERMS & CONDITIONS"); c.terms.forEach(k.bullet); if (c.termsNote) k.text(c.termsNote, { color: TLGREY, size: 10 });
+      hd("8. WHY TECH HUB", 170);
+      for (let i = 0; i < c.whyTechHub.length; i += 2) {
+        const pair = c.whyTechHub.slice(i, i + 2), w = (CWp - 14) / 2; k.need(90); const y0 = k.y; let hmax = 0;
+        pair.forEach((cd, j) => { const x0 = M + j * (w + 14); doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); const ls = doc.splitTextToSize(P(cd.body), w - 24); const h = 34 + ls.length * 12.5; hmax = Math.max(hmax, h);
+          doc.setDrawColor(...rgb(TBORDER)); doc.setLineWidth(.5); doc.rect(x0, y0, w, h); doc.setFillColor(...rgb(TTEAL)); doc.rect(x0, y0, 3, h, "F");
+          doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...rgb(TNAVY)); doc.text(P(cd.title), x0 + 14, y0 + 18);
+          doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(...rgb(TGREY)); ls.forEach((l, q) => doc.text(l, x0 + 14, y0 + 34 + q * 12.5)); });
+        k.y = y0 + hmax + 12;
+      }
+      k.y += 10; k.text(c.closing, { italic: true, color: TGREY, size: 10 });
+      k.text("Tech Hub Information Technology  ·  sales@techhubrak.ae  ·  +971 07 258 1926  ·  www.techhubrak.ae", { bold: true, color: TNAVY, size: 9.5 });
+      k.chrome(true);
+      return doc;
+    }
+    return { fromAmc, docx, pdf };
+  })();
+  return { amcDocx, amcPdf, visitDocx, visitPdf, contractDocx, contractPdf, fmtDate, typeLabel, TYPES, lines, useBrand,
+    thFromAmc: (...a) => TH.fromAmc(...a), thAmcDocx: (...a) => TH.docx(...a), thAmcPdf: (...a) => TH.pdf(...a), get COMPANY() { return COMPANY; } };
 })();
 if (typeof module !== "undefined") module.exports = GEN;

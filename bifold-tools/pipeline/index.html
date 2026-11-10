@@ -107,7 +107,7 @@ textarea{resize:vertical;min-height:64px}
   <header class="top">
     <div>
       <h1><span class="tag">Bifold Tools</span>Sales Pipeline</h1>
-      <p class="sub" id="sub">Track every open deal for Bifold and Tech Hub from first lead to PO.</p>
+      <p class="sub" id="sub">Track every open deal from first lead to PO.</p>
     </div>
     <div class="acts">
       <button type="button" id="csvBtn">Download CSV</button>
@@ -478,7 +478,7 @@ $("csvBtn").onclick=()=>{
   try{
     [ME,DEALS,CUSTOMERS]=await Promise.all([api("GET","me"),api("GET","deals"),api("GET","customers")]);
     $("who").textContent=ME.email;
-    $("sub").textContent=ME.isManager?"Every deal across Bifold and Tech Hub, from first lead to PO.":"Your deals across Bifold and Tech Hub, from first lead to PO.";
+    $("sub").textContent=ME.isManager?"Every deal in the company, from first lead to PO.":"Your deals, from first lead to PO.";
     $("closedF").value=F.closed;seg("coSeg","company");seg("viewSeg","view");renderOwners();render();
     const m=/^#(DEAL-[\w-]+)$/.exec(location.hash);if(m)openDeal(m[1]);
   }catch(e){$("loading").textContent=e.message}

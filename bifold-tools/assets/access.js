@@ -13,7 +13,7 @@
   // Group admins can switch company; their choice is sent as a header, which the API ignores for everyone else.
   const BRANDS = {
     bifold: { key: "bifold", tools: "Bifold Tools", name: "Bifold Technologies L.L.C", short: "Bifold", logo: "/assets/bifold_logo.png", foot: "Al Garhoud, Dubai", manager: "Ranjan" },
-    techhub: { key: "techhub", tools: "Tech Hub Tools", name: "Tech Hub Information Technology", short: "Tech Hub", logo: "/assets/techhub/techhub_logo.png", foot: "Al Nakheel, Ras Al Khaimah", manager: "your manager" },
+    techhub: { key: "techhub", tools: "Tech Hub Tools", name: "Tech Hub Information Technology", short: "Tech Hub", logo: "/assets/techhub/techhub_logo.png", foot: "Al Nakheel, Ras Al Khaimah", manager: "Ranjan" },
   };
   const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
   const isHome = /^\/(index\.html)?$/.test(location.pathname);
@@ -84,7 +84,7 @@
     document.querySelectorAll('img[src="/assets/bifold_logo.png"]').forEach(i => { i.src = BR.logo; i.alt = BR.name; });
     const ic = document.querySelector('link[rel="icon"]'); if (ic) ic.href = BR.logo;
     const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    const fix = t => t.replace(/Bifold Technologies L\.?L\.?C\.?/g, BR.name).replace(/Bifold Technologies/g, BR.name).replace(/Bifold Tools/g, BR.tools).replace(/Al Garhoud, Dubai/g, BR.foot).replace(/Office A306, Saraya Avenue, /g, "Blue Building, Injaz Road, ").replace(/\bRanjan\b/g, "your manager").replace(/\bBifold\b/g, BR.short);
+    const fix = t => t.replace(/Bifold Technologies L\.?L\.?C\.?/g, BR.name).replace(/Bifold Technologies/g, BR.name).replace(/Bifold Tools/g, BR.tools).replace(/Al Garhoud, Dubai/g, BR.foot).replace(/Office A306, Saraya Avenue, /g, "Blue Building, Injaz Road, ").replace(/\bBifold\b/g, BR.short);
     for (let n; (n = w.nextNode());) { if (/Bifold|Ranjan|Garhoud/.test(n.nodeValue) && !n.parentElement.closest("script,style,.bx-side,.bx-top")) n.nodeValue = fix(n.nodeValue); }
     document.querySelectorAll("[placeholder],[aria-label],[title]").forEach(el => ["placeholder", "aria-label", "title"].forEach(a => { const v = el.getAttribute(a); if (v && /Bifold/.test(v)) el.setAttribute(a, fix(v)); }));
   }
@@ -210,11 +210,22 @@
       if (!m.isManager) document.querySelectorAll("[data-manager]").forEach(el => { el.hidden = true; });
       const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/amc/": ["amc", "visits"], "/access/": ["manager"] };
       document.querySelectorAll("body > :not(.bx-side) a[href]").forEach(a => { const k = LINK[a.getAttribute("href")]; if (k && !allowed(m, k)) a.hidden = true; });
-      if (pageNeeds.length && !allowed(m, pageNeeds)) block(m, "You don't have access to this tool");
+      if (m.noAccess) block(m, "You don't have access yet");
+      else if (pageNeeds.length && !allowed(m, pageNeeds)) block(m, "You don't have access to this tool");
       else if (!m.isManager && !(m.sections || []).length && path === "/") block(m, "You don't have access to any tools yet");
       document.dispatchEvent(new CustomEvent("bifold:me", { detail: m }));
       clearTimeout(failsafe); reveal();
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply); else apply();
-  }).catch(() => { clearTimeout(failsafe); reveal(); });
+  }).catch(j => {
+    clearTimeout(failsafe);
+    // Signed in with an account that may not use the tools (wrong domain): show only the reason and a way to switch account.
+    const show = () => {
+      document.querySelectorAll("body > *:not(script)").forEach(el => { el.hidden = true; });
+      const box = document.createElement("div"); box.className = "noaccess";
+      box.innerHTML = `<h2>You can't use these tools with this account</h2><p>${esc((j && j.error) || "Sign-in could not be checked. Reload the page to try again.")}</p><a href="/.auth/logout?post_logout_redirect_uri=/">Sign out and use your company account</a>`;
+      document.body.appendChild(box); reveal();
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", show); else show();
+  });
 })();

@@ -1,5 +1,6 @@
-// Team access: managers (BIFOLD_MANAGERS, default ranjan@bifoldtech.com) choose which sections of Bifold Tools
-// each person can use. Managers always have every section and are the only ones who can change access.
+// Team access: each company's managers (BIFOLD_MANAGERS, default ranjan@bifoldtech.com; TECHHUB_MANAGERS, default
+// ranjan@techhubrak.ae) choose which sections each person in their company can use. Nobody has access until a
+// manager gives it. Managers always have every section and are the only ones who can change access.
 //
 // Storage (Table Storage):
 //   access       PK "user"   RowKey = email     sections (JSON array), updatedBy, updatedAt
@@ -26,15 +27,8 @@ module.exports = function makeAccess(H) {
   const parse = s => { try { const a = JSON.parse(s || "[]"); return Array.isArray(a) ? a.filter(k => KEYS.includes(k)) : []; } catch { return []; } };
   const sectionsIn = arr => [...new Set((Array.isArray(arr) ? arr : []).filter(k => KEYS.includes(k)))];
 
-  async function defaultSections(co) {
-    const hit = policies.get(co);
-    if (hit && Date.now() - hit.at < CACHE_MS) return hit.v;
-    const t = await table("access");
-    const e = await getOrNull(t, "policy", "default-" + co) || (co === "bifold" ? await getOrNull(t, "policy", "default") : null);
-    const v = e ? parse(e.sections) : KEYS.slice();
-    policies.set(co, { v, at: Date.now() });
-    return v;
-  }
+  // No one gets in by default: a manager must give each person access (strict mode).
+  async function defaultSections() { return []; }
   async function sectionsFor(user) {
     if (user.isManager) return KEYS.slice();
     const hit = cache.get(user.email);
@@ -73,11 +67,14 @@ module.exports = function makeAccess(H) {
     }
     return null;
   }
-  const boss = user => user.homeCo === "techhub" ? "your manager" : "Ranjan";
+  const boss = user => (CO[user.homeCo].managers()[0] || "your manager");
   const label = k => (SECTIONS.find(s => s.key === k) || {}).name || k;
   function guard(method, seg, body, user) {
+    if (user.isManager) return;
+    // Everything except "who am I" needs access granted by a manager.
+    if (seg[0] !== "me" && !user.sections.length) fail(403, `You don't have access to ${user.homeCo === "techhub" ? "Tech Hub Tools" : "Bifold Tools"} yet. Ask ${boss(user)} to give you access.`);
     const n = need(method, seg, body);
-    if (!n || user.isManager) return;
+    if (!n) return;
     if (n === "manager") fail(403, "Only managers can do this.");
     const has = k => user.sections.includes(k);
     if (n === "any") { if (!user.sections.length) fail(403, `You don't have access to ${user.homeCo === "techhub" ? "Tech Hub Tools" : "Bifold Tools"} yet. Ask ${boss(user)} to give you access.`); return; }
@@ -127,12 +124,7 @@ module.exports = function makeAccess(H) {
     try { await (await table("access")).deleteEntity("user", email); } catch (e) { if (e.statusCode !== 404) throw e; }
     cache.delete(email);
   }
-  async function setDefault(user, body) {
-    const co = coOf(user);
-    await (await table("access")).upsertEntity({ partitionKey: "policy", rowKey: "default-" + co, sections: JSON.stringify(sectionsIn(body.sections)), updatedBy: user.email, updatedAt: new Date().toISOString() }, "Replace");
-    policies.delete(co); cache.clear();
-    return { defaultSections: await defaultSections(co) };
-  }
+  async function setDefault() { fail(400, "Access is given person by person. There is no default access."); }
   async function route(method, seg, user, body) {
     const [, b, c] = seg;
     if (!b && method === "GET") return overview(user);

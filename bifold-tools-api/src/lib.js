@@ -27,7 +27,7 @@ const emailOk = e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) && domains().some(d =>
 // GROUP_ADMINS (empty by default) may switch between companies and open the combined Group view (read-only).
 const CO = {
   bifold: { key: "bifold", name: "Bifold Technologies", domains: () => list(process.env.BIFOLD_DOMAINS, "bifoldtech.com"), managers: () => list(process.env.BIFOLD_MANAGERS, "ranjan@bifoldtech.com") },
-  techhub: { key: "techhub", name: "Tech Hub IT", domains: () => list(process.env.TECHHUB_DOMAINS, "techhubrak.ae"), managers: () => list(process.env.TECHHUB_MANAGERS, "") },
+  techhub: { key: "techhub", name: "Tech Hub IT", domains: () => list(process.env.TECHHUB_DOMAINS, "techhubrak.ae"), managers: () => list(process.env.TECHHUB_MANAGERS, "ranjan@techhubrak.ae") },
 };
 const groupAdmins = () => String(process.env.GROUP_ADMINS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 const coForEmail = e => (Object.values(CO).find(c => c.domains().some(d => String(e).endsWith("@" + d))) || {}).key || null;
@@ -668,7 +668,9 @@ async function route(method, seg, user, body) {
   if (a === "access") return access().route(method, seg, user, body);
   if (a === "amc") return amc()(method, seg.slice(1), user, body);
   if (a === "alerts" && method === "GET") return alerts(user);
-  if (a === "me" && method === "GET") { access().touch(user.email); return { ...user, managers: CO[user.homeCo].managers(), domains: domains(), allSections: access().SECTIONS, companies: Object.values(CO).map(c => ({ key: c.key, name: c.name })), mailReady: mailReadyFor(user.co) }; }
+  if (a === "me" && method === "GET") { access().touch(user.email);
+    if (!user.isManager && !user.sections.length) return { email: user.email, homeCo: user.homeCo, co: user.co, group: false, isManager: false, sections: [], noAccess: true, managers: [], allSections: [], companies: [], mailReady: false };
+    return { ...user, managers: CO[user.homeCo].managers(), domains: domains(), allSections: access().SECTIONS, companies: Object.values(CO).map(c => ({ key: c.key, name: c.name })), mailReady: mailReadyFor(user.co) }; }
   if (a === "customers") {
     if (!id && method === "GET") return listCustomers(user);
     if (!id && method === "POST") return createCustomer(user, body);

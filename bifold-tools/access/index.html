@@ -52,14 +52,14 @@ table.matrix{width:100%;border-collapse:collapse;min-width:980px}
   <header class="top">
     <div>
       <h1><span class="tag">Bifold Tools</span>Team access</h1>
-      <p class="sub">Choose which tools and sections each Bifold user can use. Changes save as you tick and apply within a minute. Managers always have full access.</p>
+      <p class="sub">Choose which tools and sections each person can use. Changes save as you tick and apply within a minute. Managers always have full access.</p>
     </div>
   </header>
 
   <section class="panel">
-    <h2>Default for people not listed below</h2>
-    <p class="sub">Applies to anyone who signs in with a Bifold account and has no access set of their own.</p>
-    <div class="defaults" id="defaults"></div>
+    <h2>No access until you give it</h2>
+    <p class="sub">Only people listed here with at least one section ticked can open the tools. Anyone else who signs in with a company account sees a "no access" page and appears below, so you can approve them.</p>
+    <div class="defaults" id="defaults" hidden></div>
   </section>
 
   <section class="panel">
@@ -77,7 +77,7 @@ table.matrix{width:100%;border-collapse:collapse;min-width:980px}
     <div class="panel listpanel"><div class="tblwrap">
       <table class="matrix"><thead id="head"></thead><tbody id="rows"></tbody></table>
     </div><div class="empty" id="empty">Loading…</div></div>
-    <p class="note">People appear here once they have signed in or used a tool. Ticks on a "Default" row are the default access; change any tick to give that person their own access.</p>
+    <p class="note">People appear here once they have tried to sign in. Tick sections to give access; untick everything or use "Remove access" to take it away. Changes apply within a minute.</p>
   </section>
 </div>
 
@@ -121,15 +121,15 @@ function render(){
   list.forEach(u=>{
     const eff=u.isManager?SEC.map(s=>s.key):u.listed?u.sections:D.defaultSections;
     const tr=document.createElement("tr");if(u.isManager)tr.className="mgr";else if(!eff.length)tr.className="none";
-    const tag=u.isManager?'<span class="tagd mgr">Manager: full access</span>':u.listed?'<span class="tagd custom">Own access</span>':'<span class="tagd">Default</span>';
+    const tag=u.isManager?'<span class="tagd mgr">Manager: full access</span>':eff.length?'<span class="tagd custom">Has access</span>':'<span class="tagd">No access</span>';
     tr.innerHTML=`<td><div class="e">${esc(u.email)}</div><div class="s">${u.lastSeen?"Last signed in "+esc(day(u.lastSeen)):"Not signed in yet"}${u.listed&&u.updatedBy?" · set by "+esc(u.updatedBy):""}</div></td>`+
       SEC.map(s=>`<td><input type="checkbox" data-k="${s.key}" aria-label="${esc(s.name)} for ${esc(u.email)}" ${eff.includes(s.key)?"checked":""} ${u.isManager?"disabled":""}></td>`).join("")+
-      `<td>${tag}</td><td>${u.isManager?"":`<div class="acts"><select aria-label="Apply a role to ${esc(u.email)}"><option value="">Apply role…</option>${PRESETS.map(p=>`<option value="${p.key}">${esc(p.name)}</option>`).join("")}</select>${u.listed?'<button type="button" data-reset>Use default</button>':""}</div>`}</td>`;
+      `<td>${tag}</td><td>${u.isManager?"":`<div class="acts"><select aria-label="Apply a role to ${esc(u.email)}"><option value="">Apply role…</option>${PRESETS.map(p=>`<option value="${p.key}">${esc(p.name)}</option>`).join("")}</select>${u.listed&&eff.length?'<button type="button" data-reset>Remove access</button>':""}</div>`}</td>`;
     if(!u.isManager){
       const save=async(sections,msg)=>{try{const r=await api("PUT","access/users/"+encodeURIComponent(u.email),{sections});Object.assign(u,{listed:true,sections:r.sections,updatedBy:r.updatedBy,updatedAt:r.updatedAt});toast(msg||"Access saved for "+u.email);render()}catch(e){toast(e.message,1);render()}};
       tr.querySelectorAll("input[type=checkbox]").forEach(cb=>cb.onchange=()=>save([...tr.querySelectorAll("input[type=checkbox]:checked")].map(x=>x.dataset.k)));
       tr.querySelector("select").onchange=e=>{if(e.target.value)save(presetSections(e.target.value),"Role applied for "+u.email)};
-      const rb=tr.querySelector("[data-reset]");if(rb)rb.onclick=async()=>{try{await api("DELETE","access/users/"+encodeURIComponent(u.email));Object.assign(u,{listed:false,sections:null,updatedBy:""});toast(u.email+" now uses the default");render()}catch(e){toast(e.message,1)}};
+      const rb=tr.querySelector("[data-reset]");if(rb)rb.onclick=async()=>{try{await api("DELETE","access/users/"+encodeURIComponent(u.email));Object.assign(u,{listed:false,sections:null,updatedBy:""});toast("Access removed for "+u.email);render()}catch(e){toast(e.message,1)}};
     }
     $("rows").appendChild(tr);
   });

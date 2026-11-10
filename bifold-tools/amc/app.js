@@ -19,7 +19,7 @@ const BRANDS = {
       "Our managed services practice supports clients under structured Annual Maintenance Contracts that combine onsite engineering attendance, remote monitoring, vendor escalation, and clear service-level commitments. Each engagement is anchored by a named delivery team and underpinned by documented procedures, escalation matrices, and reporting cadence."],
       strengths: ["Vendor-certified engineering capability across Avaya, HPE, Cisco, Aruba, Fortinet, Veeam, and Microsoft platforms.", "Dedicated managed services delivery model with named account ownership.", "Voice, network and security experience across hospitality, commercial and government environments in the UAE.", "Local presence in Dubai with rapid onsite response capability across the Emirates."] } },
   techhub: { key: "techhub", name: "Tech Hub Information Technology", short: "Tech Hub", desk: "the Tech Hub support desk", phone: "+971 07 258 1926", web: "techhubrak.ae",
-    hours: "Sun–Thu, 9 AM – 6 PM", hoursLarge: "Sun–Thu, 8 AM – 8 PM", manager: "your manager",
+    hours: "Sun–Thu, 9 AM – 6 PM", hoursLarge: "Sun–Thu, 8 AM – 8 PM", manager: "Ranjan",
     images: ["/assets/techhub/techhub_logo.png"],
     about: { paragraphs: [
       "Tech Hub Information Technology is an IT solutions provider based in Al Nakheel, Ras Al Khaimah, serving businesses, schools, hospitality and government entities across RAK and the wider UAE. We supply, install and support IT infrastructure, from servers, networks and endpoints to CCTV and telephony.",

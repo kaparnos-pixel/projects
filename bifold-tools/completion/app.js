@@ -295,7 +295,7 @@
           s ? (s.remarks ? `<p class="hint" style="margin:0">Customer remarks: ${esc(s.remarks)}</p>` : "") : `<div class="signopts edit-only">
             <button type="button" class="primary" data-sign="customer">Customer signs on this device<small style="color:inherit;opacity:.85">Hand over the tablet or phone on site</small></button>
             <button type="button" data-sign="link">${linkLive ? "Show signing link" : "Send a signing link"}<small>The customer reads and signs online, no account needed</small></button>
-            <button type="button" data-sign="print">Print and sign on paper<small>Download the PDF with blank signature lines</small></button></div>`)}
+            <button type="button" data-sign="print">Print and sign on paper<small>Preview the PDF with blank signature lines, then print or download it</small></button></div>`)}
       </div>`;
     },
   };
@@ -565,7 +565,7 @@
     if (what === "customer") return openSign("customer");
     if (what === "company") return openSign("company");
     if (what === "company-clear") { await flush(); try { const res = await api("POST", `pcr/reports/${R.id}/company-sign`, { clear: true }); R = Object.assign(res, { _custLoaded: res.customerId }); renderAll(); } catch (e) { toast(e.message, true); } return; }
-    if (what === "print") return download("pdf", btn);
+    if (what === "print") return BXPdf.preview(() => build("pdf"), fileName("pdf"));
     if (what === "link") {
       if (R.link) return showLink();
       busy(btn, true, "Creating link"); await flush();
@@ -648,6 +648,7 @@
   }
   $("bDocx").onclick = () => download("docx", $("bDocx"));
   $("bPdf").onclick = () => download("pdf", $("bPdf"));
+  $("bPv").onclick = () => { const warn = checks(); if (warn) toast(warn, true); BXPdf.preview(() => build("pdf"), fileName("pdf")); };
 
   /* ================= email ================= */
   function openMail(withLink) {

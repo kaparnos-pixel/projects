@@ -304,13 +304,13 @@ const GEN = (function () {
     }
     function block(fill, h) { need(h); doc.setFillColor(...rgb(fill)); doc.rect(M, y, CWp, h, "F"); }
     function rule() { doc.setFillColor(...rgb(RED)); doc.rect(M, y, CWp, 2.5, "F"); y += 2.5; }
-    function image(im, w, x) { const h = w * im.h / im.w; need(h); doc.addImage(im.dataUrl, im.fmt || "PNG", x == null ? M : x, y, w, h); y += h; }
+    function image(im, w, x) { const h = w * im.h / im.w; need(h); doc.addImage(im.dataUrl, im.fmt || "PNG", x == null ? M : x, y, w, h, undefined, "FAST"); y += h; }
     function chrome(skipFirst) {
       const n = doc.getNumberOfPages();
       for (let i = 1; i <= n; i++) {
         if (skipFirst && i === 1) continue;
         doc.setPage(i);
-        if (img && img.logo) { const w = 92, h = w * img.logo.h / img.logo.w; doc.addImage(img.logo.dataUrl, "PNG", M, 30, w, h); }
+        if (img && img.logo) { const w = 92, h = w * img.logo.h / img.logo.w; doc.addImage(img.logo.dataUrl, "PNG", M, 30, w, h, "logo", "FAST"); }
         doc.setFont("helvetica", "bolditalic"); doc.setFontSize(8.5); doc.setTextColor(...rgb(NAVY)); doc.text(P(headerTitle), W - M, 52, { align: "right" });
         doc.setDrawColor(...rgb(RED)); doc.setLineWidth(0.8); doc.line(M, 62, W - M, 62);
         doc.setDrawColor(...rgb("AFC7DB")); doc.line(M, H - 50, W - M, H - 50);

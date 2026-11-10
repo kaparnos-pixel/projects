@@ -148,6 +148,7 @@ aside{position:sticky;top:16px}
           <button type="button" id="dlBtn" aria-haspopup="true" aria-expanded="false">Download ▾</button>
           <div class="pop" id="dlMenu" hidden>
             <button type="button" id="dlPdf">PDF (branded)</button>
+            <button type="button" id="pvPdf">Preview PDF</button>
             <button type="button" id="dlXlsx">Excel (.xlsx)</button>
           </div>
         </div>
@@ -662,8 +663,11 @@ $("dlXlsx").onclick=()=>{
 
 let logoCache=null;
 async function logo(){if(logoCache)return logoCache;const b=await (await fetch((window.BIFOLD_BRAND||{}).logo||"/assets/bifold_logo.png")).blob();return logoCache=await new Promise(res=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.readAsDataURL(b)})}
-$("dlPdf").onclick=async()=>{
-  if(!window.jspdf||!window.jspdf.jsPDF||!window.jspdf.jsPDF.API.autoTable){toast("The PDF library didn't load. Reload the page and try again.",true);return}
+$("dlPdf").onclick=async()=>{const d=await pnlPdf();if(d)d.save(fileBase()+".pdf")};
+$("pvPdf").onclick=()=>{if(!window.jspdf||!window.jspdf.jsPDF||!window.jspdf.jsPDF.API.autoTable){toast("The PDF library didn't load. Reload the page and try again.",true);return}
+  BXPdf.preview(async()=>(await pnlPdf()).output("blob"),fileBase()+".pdf")};
+async function pnlPdf(){
+  if(!window.jspdf||!window.jspdf.jsPDF||!window.jspdf.jsPDF.API.autoTable){toast("The PDF library didn't load. Reload the page and try again.",true);return null}
   const {jsPDF}=window.jspdf, d=new jsPDF({unit:"pt",format:"a4"}), r=compute(S), W=d.internal.pageSize.getWidth(), M=40;
   const TH=(window.BIFOLD_BRAND||{}).key==="techhub", BR=window.BIFOLD_BRAND||{name:"Bifold Technologies L.L.C",short:"Bifold"};
   const BLUE=TH?[0,60,80]:[30,90,140], RED=TH?[40,160,140]:[216,31,42];
@@ -689,8 +693,8 @@ $("dlPdf").onclick=async()=>{
   const pages=d.getNumberOfPages();
   for(let i=1;i<=pages;i++){d.setPage(i);const H=d.internal.pageSize.getHeight();d.setDrawColor(...RED);d.setLineWidth(1);d.line(M,H-40,W-M,H-40);
     d.setFontSize(8);d.setTextColor(120);d.text(BR.name+" · Confidential, internal use only",M,H-26);d.text(`Page ${i} of ${pages}`,W-M,H-26,{align:"right"})}
-  d.save(fileBase()+".pdf");
-};
+  return d;
+}
 
 /* ---------- start ---------- */
 (async()=>{

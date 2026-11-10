@@ -298,7 +298,7 @@ const PCRGEN = (function () {
       y = doc.lastAutoTable.finalY + 12;
     }
     const kv = rows => table(null, rows, { columnStyles: { 0: { fontStyle: "bold", fillColor: rgb(C.label), textColor: rgb(C.primary), cellWidth: 150 } } });
-    function image(im, w, maxH, fmt) { const d = fitBox(im, w, maxH || 9999); need(d.height); doc.addImage(im.dataUrl, fmt || im.fmt || "PNG", M + (CWp - d.width) / 2, y, d.width, d.height); y += d.height; }
+    function image(im, w, maxH, fmt) { const d = fitBox(im, w, maxH || 9999); need(d.height); doc.addImage(im.dataUrl, fmt || im.fmt || "PNG", M + (CWp - d.width) / 2, y, d.width, d.height, undefined, "FAST"); y += d.height; }
 
     const parts = plan(cfg);
     const title = cfg.mode === "certificate" ? "Work Completion Certificate" : "Project Completion Report";
@@ -384,8 +384,8 @@ const PCRGEN = (function () {
         doc.setDrawColor(...rgb(C.primary)); doc.setLineWidth(1.4); doc.line(x, yy, x + w, yy); yy += 16;
         font("bold", 8.5, C.primary); doc.text(label.split("").join(" "), x, yy); yy += 8;
         const boxH = 56;
-        if (who.sigImg) { const d = fitBox(who.sigImg, 150, boxH); doc.addImage(who.sigImg.dataUrl, "PNG", x, yy + boxH - d.height, d.width, d.height); }
-        if (who.stamp) { const d = fitBox(who.stamp, 62, 62); doc.addImage(who.stamp.dataUrl, "PNG", x + w - d.width, yy - 4, d.width, d.height); }
+        if (who.sigImg) { const d = fitBox(who.sigImg, 150, boxH); doc.addImage(who.sigImg.dataUrl, "PNG", x, yy + boxH - d.height, d.width, d.height, undefined, "FAST"); }
+        if (who.stamp) { const d = fitBox(who.stamp, 62, 62); doc.addImage(who.stamp.dataUrl, "PNG", x + w - d.width, yy - 4, d.width, d.height, "stamp", "FAST"); }
         yy += boxH + 4;
         doc.setDrawColor(...rgb(C.primary)); doc.setLineWidth(0.6); doc.line(x, yy, x + w * 0.8, yy); yy += 10;
         font("normal", 7.5, MUTE); doc.text("Signature" + (who.stampable ? " & company stamp" : ""), x, yy); yy += 16;
@@ -402,7 +402,7 @@ const PCRGEN = (function () {
     for (let i = 1; i <= n; i++) {
       if (cfg.mode !== "certificate" && i === 1) continue;
       doc.setPage(i);
-      if (img.logo) { const d = fitBox(img.logo, 84, 34); doc.addImage(img.logo.dataUrl, "PNG", M, 28, d.width, d.height); }
+      if (img.logo) { const d = fitBox(img.logo, 84, 34); doc.addImage(img.logo.dataUrl, "PNG", M, 28, d.width, d.height, "logo", "FAST"); }
       font("normal", 8, MUTE); doc.text(P(cfg.headerTitle), W - M, 52, { align: "right" });
       doc.setDrawColor(...rgb(C.primary)); doc.setLineWidth(0.8); doc.line(M, 64, W - M, 64);
       doc.setDrawColor(...rgb(BORDER)); doc.setLineWidth(0.5); doc.line(M, H - 44, W - M, H - 44);

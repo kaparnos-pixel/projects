@@ -34,6 +34,106 @@
   let BR = BRANDS[last === "techhub" ? "techhub" : "bifold"];
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  // PDF preview shared by every tool: BXPdf.preview(build, fileName), where build is a Blob, a promise of one, or a
+  // function returning one. Pages are drawn with pdf.js (hosted in /assets/pdfjs/), so the preview works the same on
+  // phones and tablets as on a PC and doesn't depend on the browser's own PDF viewer.
+  window.BXPdf = (function () {
+    let dlg, url = "", blob = null, name = "document.pdf", pdf = null, zoom = 1, obs = null, run = 0;
+    const PDFJS = "/assets/pdfjs/";
+    let libP = null;
+    const lib = () => libP || (libP = new Promise((res, rej) => {
+      if (window.pdfjsLib) return res(window.pdfjsLib);
+      const s = document.createElement("script"); s.src = PDFJS + "pdf.min.js";
+      s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.js"; res(window.pdfjsLib); };
+      s.onerror = () => { libP = null; rej(new Error("The preview viewer couldn't load. Check your connection, or use Download PDF.")); };
+      document.head.appendChild(s);
+    }));
+    function ui() {
+      if (dlg) return dlg;
+      const st = document.createElement("style");
+      st.textContent = `.bxpv{border:0;padding:0;width:min(1120px,calc(100vw - 24px));height:calc(100vh - 24px);max-height:none;max-width:none;border-radius:14px;overflow:hidden;background:var(--surface,#fff);color:var(--fg,#15222e);box-shadow:0 24px 64px rgba(10,28,51,.35)}
+.bxpv::backdrop{background:rgba(10,20,30,.55)}
+.bxpv[open]{display:flex;flex-direction:column}
+.bxpv .hd{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line,#d5dce3);flex-wrap:wrap}
+.bxpv .hd b{flex:1 1 220px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.bxpv .hd button,.bxpv .hd a{font:inherit;font-size:13px;font-weight:600;cursor:pointer;border-radius:8px;border:1px solid var(--line,#d5dce3);background:var(--surface,#fff);color:var(--fg,#15222e);padding:7px 12px;text-decoration:none;white-space:nowrap}
+.bxpv .hd button:disabled{opacity:.5;cursor:default}
+.bxpv .hd .dl{background:var(--accent,#1E5A8C);border-color:var(--accent,#1E5A8C);color:var(--on-accent,#fff)}
+.bxpv .zm{display:inline-flex;align-items:center;gap:4px}
+.bxpv .zm button{padding:7px 11px}
+.bxpv .zm span{font-size:12px;color:var(--muted,#5b6a78);min-width:74px;text-align:center;font-variant-numeric:tabular-nums}
+.bxpv .bd{flex:1;position:relative;background:#525659;overflow:auto;-webkit-overflow-scrolling:touch}
+.bxpv .pages{display:grid;justify-items:center;gap:14px;padding:16px 12px 28px}
+.bxpv .pg{background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.35);position:relative}
+.bxpv .pg canvas{display:block;width:100%;height:100%}
+.bxpv .msg{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:14px;text-align:center;padding:24px}
+.bxpv .msg[hidden]{display:none}
+.bxpv .spin{width:22px;height:22px;border:3px solid #fff;border-right-color:transparent;border-radius:50%;display:inline-block;animation:bxpvs .7s linear infinite;margin-bottom:10px}
+@keyframes bxpvs{to{transform:rotate(360deg)}}
+@media (max-width:640px){.bxpv{width:100vw;height:100dvh;border-radius:0}.bxpv .hd b{flex-basis:100%}.bxpv .tab{display:none}}`;
+      document.head.appendChild(st);
+      dlg = document.createElement("dialog"); dlg.className = "bxpv"; dlg.setAttribute("aria-label", "PDF preview");
+      dlg.innerHTML = `<div class="hd"><b></b><span class="zm"><button type="button" class="zo" aria-label="Zoom out">&minus;</button><span class="pc"></span><button type="button" class="zi" aria-label="Zoom in">+</button></span><button type="button" class="dl" disabled>Download PDF</button><a class="tab" target="_blank" rel="noopener" hidden>Open in new tab</a><button type="button" class="x">Close</button></div><div class="bd"><div class="pages"></div><div class="msg"></div></div>`;
+      document.body.appendChild(dlg);
+      dlg.querySelector(".x").onclick = () => dlg.close();
+      dlg.querySelector(".dl").onclick = () => { if (!blob) return; const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); };
+      dlg.querySelector(".zo").onclick = () => setZoom(zoom / 1.25);
+      dlg.querySelector(".zi").onclick = () => setZoom(zoom * 1.25);
+      dlg.addEventListener("close", () => { run++; if (obs) obs.disconnect(); dlg.querySelector(".pages").innerHTML = ""; if (pdf) { pdf.destroy(); pdf = null; } if (url) { const u = url; setTimeout(() => URL.revokeObjectURL(u), 1000); } url = ""; blob = null; });
+      return dlg;
+    }
+    function setZoom(z) { if (!pdf) return; zoom = Math.max(0.5, Math.min(3, z)); layout(); }
+    // Sizes every page for the current zoom, then draws pages as they scroll into view.
+    async function layout() {
+      const me = run, box = dlg.querySelector(".pages"), bd = dlg.querySelector(".bd");
+      if (obs) obs.disconnect();
+      box.innerHTML = "";
+      const avail = Math.max(240, bd.clientWidth - 24);
+      const first = await pdf.getPage(1); if (me !== run) return;
+      const base = first.getViewport({ scale: 1 });
+      const fit = Math.min(avail / base.width, 1.6);
+      dlg.querySelector(".pc").textContent = `${pdf.numPages} page${pdf.numPages === 1 ? "" : "s"} · ${zoom === 1 ? "fit" : Math.round(zoom * 100) + "%"}`;
+      const els = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const el = document.createElement("div"); el.className = "pg"; el.dataset.n = i;
+        el.style.width = Math.round(base.width * fit * zoom) + "px"; el.style.height = Math.round(base.height * fit * zoom) + "px";
+        box.appendChild(el); els.push(el);
+      }
+      obs = new IntersectionObserver(ents => ents.forEach(en => { if (en.isIntersecting && !en.target.dataset.done) { en.target.dataset.done = "1"; draw(en.target, fit * zoom, me); } }), { root: bd, rootMargin: "600px 0px" });
+      els.forEach(e => obs.observe(e));
+    }
+    async function draw(el, scale, me) {
+      try {
+        const page = await pdf.getPage(Number(el.dataset.n)); if (me !== run) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+        const vp = page.getViewport({ scale: scale * dpr });
+        const cv = document.createElement("canvas"); cv.width = Math.floor(vp.width); cv.height = Math.floor(vp.height);
+        el.style.height = Math.round(vp.height / dpr) + "px";
+        await page.render({ canvasContext: cv.getContext("2d"), viewport: vp }).promise;
+        if (me === run) el.appendChild(cv);
+      } catch (e) { el.dataset.done = ""; }
+    }
+    async function preview(build, fileName) {
+      const d = ui(); name = String(fileName || "document.pdf"); if (!/\.pdf$/i.test(name)) name += ".pdf";
+      const me = ++run, msg = d.querySelector(".msg"), dl = d.querySelector(".dl"), tab = d.querySelector(".tab");
+      d.querySelector(".hd b").textContent = name; d.querySelector(".pc").textContent = ""; dl.disabled = true; tab.hidden = true; zoom = 1;
+      d.querySelector(".pages").innerHTML = ""; msg.hidden = false; msg.innerHTML = `<div><span class="spin"></span><br>Preparing the preview…</div>`;
+      if (!d.open) d.showModal();
+      try {
+        const [b, L] = await Promise.all([typeof build === "function" ? build() : build, lib()]);
+        if (!(b instanceof Blob) || !b.size) throw new Error("The document couldn't be made.");
+        if (me !== run) return;
+        blob = b.type === "application/pdf" ? b : new Blob([b], { type: "application/pdf" }); url = URL.createObjectURL(blob);
+        dl.disabled = false; tab.href = url; tab.hidden = false;
+        pdf = await L.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false, standardFontDataUrl: PDFJS + "standard_fonts/" }).promise;
+        if (me !== run) return;
+        msg.hidden = true; await layout();
+      } catch (e) { if (me === run) msg.innerHTML = `<div>${esc((e && e.message) || "The preview couldn't be made.")}${blob ? "<br><br>Use Download PDF to open it instead." : ""}</div>`; }
+    }
+    addEventListener("resize", () => { if (dlg && dlg.open && pdf) { clearTimeout(dlg._r); dlg._r = setTimeout(layout, 200); } });
+    return { preview };
+  })();
+
   const I = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   const ICON = {
     home: I('<path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>'),

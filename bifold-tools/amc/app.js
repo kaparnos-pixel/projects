@@ -616,7 +616,7 @@ function renderAmcSheet() {
     const vs = [...S.visits.values()].filter(x => x.amcId === a.id).sort((x, y) => x.scheduledDate.localeCompare(y.scheduledDate));
     body.push(`<div class="sec"><h3>Awarded contract</h3>${termHTML(c)}<div class="callout ${cls}">${esc(msg)}${(cst === "expiring" || cst === "expired") && !c.renewalAmcId ? '<button type="button" class="sm" id="x_renew" style="margin-left:auto">Start renewal</button>' : ""}${c.renewalAmcId ? `<button type="button" class="linky" id="x_goRenewal" style="margin-left:auto">Open renewal</button>` : ""}</div>
       <div class="facts"><div class="fact"><div class="k">Awarded</div><div class="v">${esc(fmt(c.awardDate))}</div></div><div class="fact"><div class="k">LPO</div><div class="v mono">${esc(c.lpo || "-")}</div></div><div class="fact"><div class="k">PM cadence</div><div class="v">${esc(PM_LABEL[c.pmMonths] || "-")}</div></div><div class="fact"><div class="k">Visits</div><div class="v">${vs.filter(x => x.status === "completed").length} of ${vs.length} done</div></div></div>
-      <div class="docrow"><button type="button" class="primary sm" id="x_visit">Schedule visit</button><span class="muted small">Service report:</span><button type="button" class="sm" id="x_srDocx">Word</button><button type="button" class="sm" id="x_srPdf">PDF</button><button type="button" class="ghost sm" id="x_editAward">Edit award details</button></div>
+      <div class="docrow"><button type="button" class="primary sm" id="x_visit">Schedule visit</button><span class="muted small">Service report:</span><button type="button" class="sm" id="x_srDocx">Word</button><button type="button" class="sm" id="x_srPdf">PDF</button><button type="button" class="sm" id="x_srPv">Preview</button><button type="button" class="ghost sm" id="x_editAward">Edit award details</button></div>
       <div class="list" style="border:1px solid var(--line);border-radius:8px" id="x_visits"></div></div>`);
   }
   body.push(`<div class="sec"><h3>Proposal</h3>${proposalBlock(a)}</div>`);
@@ -632,7 +632,7 @@ function proposalBlock(a) {
   const shares = (a.shares || []).slice(-3).reverse().map(s => `<div><time>${esc(fmt(s.at))}</time><span>${esc(s.mode === "draft" ? "Outlook draft for" : "Emailed to")} ${esc(s.to)} · ${esc(nameOf(s.by))}</span></div>`).join("");
   return `${a.proposalStale ? '<div class="callout warn">Systems or value changed since this proposal was drafted. Redraft before sending.</div>' : ""}
     <div class="facts"><div class="fact"><div class="k">Proposal no.</div><div class="v mono">${esc(a.ref)}</div></div><div class="fact"><div class="k">Drafted</div><div class="v">${esc(fmt(a.proposalAt))}</div><div class="sub">${a.proposalSource === "claude" ? "by Claude" : a.proposalSource === "mixed" ? "Claude + template" : "from template"}</div></div><div class="fact"><div class="k">Total incl. VAT</div><div class="v mono">${esc("AED " + a.proposal.commercial.total)}</div></div></div>
-    <div class="docrow"><button type="button" class="sm" id="x_prev">Preview</button><button type="button" class="sm" id="x_editp">Edit proposal</button><button type="button" class="sm" id="x_docx">Download Word</button><button type="button" class="sm" id="x_pdf">Download PDF</button><button type="button" class="accent sm" id="x_share">Share with customer</button><button type="button" class="ghost sm" id="x_regen">Redraft</button></div>
+    <div class="docrow"><button type="button" class="sm" id="x_prev">Read proposal</button><button type="button" class="sm" id="x_editp">Edit proposal</button><button type="button" class="sm" id="x_docx">Download Word</button><button type="button" class="sm" id="x_pdf">Download PDF</button><button type="button" class="sm" id="x_pvpdf">Preview PDF</button><button type="button" class="accent sm" id="x_share">Share with customer</button><button type="button" class="ghost sm" id="x_regen">Redraft</button></div>
     ${shares ? `<div class="log">${shares}</div>` : ""}`;
 }
 function wireAmcSheet(a, c) {
@@ -649,12 +649,14 @@ function wireAmcSheet(a, c) {
   on("x_editp", () => openEditor(a));
   on("x_docx", b => downloadProposal(a, "docx", b));
   on("x_pdf", b => downloadProposal(a, "pdf", b));
+  on("x_pvpdf", () => BXPdf.preview(() => buildProposal(S.amcs.get(a.id) || a, "pdf"), propName(a, "pdf")));
   on("x_share", () => openShare({ kind: "amc", a }));
   on("x_visit", () => openNewVisit(a.id));
   if (!S.can.visits && $("x_visit")) $("x_visit").hidden = true;
   on("x_renew", b => startRenewal(a, c, b));
   on("x_goRenewal", () => openAmcById(c.renewalAmcId));
   on("x_srDocx", async b => { busy(b, true, ""); try { await save(safeName(c.ref + " " + shortName(c.customerName) + " Service Report") + ".docx", await buildContract(c, "docx")); } catch (e) { toast(errMsg(e)); } finally { busy(b, false); } });
+  on("x_srPv", () => BXPdf.preview(() => buildContract(c, "pdf"), safeName(c.ref + " " + shortName(c.customerName) + " Service Report") + ".pdf"));
   on("x_srPdf", async b => { busy(b, true, ""); try { await save(safeName(c.ref + " " + shortName(c.customerName) + " Service Report") + ".pdf", await buildContract(c, "pdf")); } catch (e) { toast(errMsg(e)); } finally { busy(b, false); } });
   if ($("x_delete")) arm($("x_delete"), "Click again to delete", async () => {
     try { await api("DELETE", "amc/amcs/" + encodeURIComponent(a.id)); S.amcs.delete(a.id); S.contracts.delete(a.id); $("sAmc").close(); toast("AMC deleted"); renderAll(); } catch (e) { toast(errMsg(e)); }
@@ -679,6 +681,7 @@ $("fRegen").onsubmit = async e => {
 function openPreview(a) {
   $("pv_ref").textContent = a.ref; $("pv_body").innerHTML = proposalHTML(a.proposal, false);
   $("pv_docx").onclick = () => downloadProposal(a, "docx", $("pv_docx")); $("pv_pdf").onclick = () => downloadProposal(a, "pdf", $("pv_pdf"));
+  $("pv_pvpdf").onclick = () => BXPdf.preview(() => buildProposal(S.amcs.get(a.id) || a, "pdf"), propName(a, "pdf"));
   $("pv_edit").onclick = () => { $("sPrev").close(); openEditor(S.amcs.get(a.id) || a); };
   $("sPrev").showModal();
 }
@@ -882,7 +885,7 @@ function renderVisitSheet() {
     <label class="f">Recommendations<textarea id="vf_rec" rows="3">${esc(v.recommendations)}</textarea></label></div>`);
   HB.push(`<div class="sec"><h3>Site photos</h3><div class="photos" id="vf_photos"></div>${'<label class="drop" id="vf_pdrop">Add site photos: drop images or click to choose<input type="file" id="vf_pinput" accept="image/*" multiple></label>'}</div>`);
   HB.push(`<div class="sec"><h3>Documents</h3><div class="files" id="vf_files">${filesHTML(v.files, true)}</div>${'<label class="drop" id="vf_fdrop">Upload signed job sheet or other documents<input type="file" id="vf_finput" multiple></label>'}</div>`);
-  HB.push(`<div class="sec"><h3>Report</h3><div class="docrow"><button type="button" class="sm" id="vf_docx">Word report</button><button type="button" class="sm" id="vf_pdf">PDF report</button><button type="button" class="accent sm" id="vf_share">Share with customer</button></div>
+  HB.push(`<div class="sec"><h3>Report</h3><div class="docrow"><button type="button" class="sm" id="vf_docx">Word report</button><button type="button" class="sm" id="vf_pdf">PDF report</button><button type="button" class="sm" id="vf_pv">Preview</button><button type="button" class="accent sm" id="vf_share">Share with customer</button></div>
     ${(v.shares || []).length ? `<div class="log">${v.shares.slice(-3).reverse().map(s => `<div><time>${esc(fmt(s.at))}</time><span>${esc(s.mode === "draft" ? "Outlook draft for" : "Emailed to")} ${esc(s.to)}</span></div>`).join("")}</div>` : ""}</div>`);
   HB.push(`<div class="sec" style="position:sticky;bottom:-28px;background:var(--surface);padding:12px 0 4px;border-top:1px solid var(--line)"><div class="docrow">
     <button type="button" class="primary" id="vf_save">Save</button>
@@ -982,6 +985,7 @@ function wireVisit() {
   });
   const rep = async (kind, b) => { busy(b, true, ""); try { readVisitForm(); if (vDirty) await saveVisit(); await save(visitName(vDraft, kind), await buildVisit(vDraft, kind)); } catch (e) { err(errMsg(e)); } finally { busy(b, false); } };
   on("vf_docx", b => rep("docx", b)); on("vf_pdf", b => rep("pdf", b));
+  on("vf_pv", () => BXPdf.preview(async () => { readVisitForm(); if (vDirty) await saveVisit(); return buildVisit(vDraft, "pdf"); }, visitName(vDraft, "pdf")));
   on("vf_share", async () => { readVisitForm(); if (vDirty) { try { await saveVisit(); } catch (e) { err(errMsg(e)); return; } } openShare({ kind: "visit", v: S.visits.get(vDraft.id) }); });
 }
 
@@ -1042,6 +1046,7 @@ $("fShare").onsubmit = async e => {
   } catch (err) { $("sh_err").textContent = errMsg(err); }
   finally { busy($("sh_send"), false); $("sh_send").disabled = !S.features.mail; }
 };
+$("sh_pv").onclick = () => { const d = shareDoc(); BXPdf.preview(d.build, d.name); };
 $("sh_dl").onclick = async () => { const b = $("sh_dl"); busy(b, true, "Preparing"); try { const d = shareDoc(); await save(d.name, await d.build()); } catch (e) { $("sh_err").textContent = errMsg(e); } finally { busy(b, false); } };
 /* ============ exports ============ */
 document.addEventListener("click", e => {

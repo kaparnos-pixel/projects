@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Completion Reports · Bifold Tools</title>
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
+<link rel="stylesheet" href="/completion/completion.css">
+<script src="/assets/access.js" data-section="completion"></script>
+</head>
+<body>
+<div class="brandbar"><div class="in">
+  <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
+  <nav><a href="/">All tools</a><a href="/.auth/logout">Sign out</a></nav>
+</div></div>
+
+<div class="wrap pcr">
+  <!-- LIST -->
+  <section id="v-list" class="view" hidden>
+    <header class="top">
+      <div>
+        <h1><span class="tag">Service</span>Project Completion Reports</h1>
+        <p class="sub">Close out a project: customer BoQ, serial numbers, site pictures, system diagram, warranty and the customer's signature, in a branded Word or PDF report.</p>
+      </div>
+      <div class="acts"><button class="primary" type="button" data-act="new">New completion report</button></div>
+    </header>
+    <div class="kpis" id="kpis"></div>
+    <div class="tools">
+      <input type="search" id="q" placeholder="Search customer, PO, project or document no." aria-label="Search reports">
+      <div class="seg" id="fseg" role="group" aria-label="Status">
+        <button type="button" data-v="all" aria-pressed="true">All</button><button type="button" data-v="draft" aria-pressed="false">Drafts</button><button type="button" data-v="awaiting" aria-pressed="false">Awaiting signature</button><button type="button" data-v="signed" aria-pressed="false">Signed</button>
+      </div>
+      <span class="cnt" id="cnt"></span>
+    </div>
+    <div class="panel flush"><div class="tblwrap"><table class="list"><thead><tr><th>Document</th><th>Customer</th><th>Project</th><th>Customer PO</th><th>Completed</th><th>Prepared by</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div>
+      <div class="empty" id="empty" hidden><strong>No completion reports yet</strong><span>Start one when a project is finished: pick the customer and add their PO reference.</span><br><button class="primary" type="button" data-act="new">New completion report</button></div>
+    </div>
+  </section>
+
+  <!-- EDITOR -->
+  <section id="v-edit" class="view" hidden>
+    <div class="edbar">
+      <a href="#list" class="back" aria-label="Back to all reports">&larr; All reports</a>
+      <div class="edtitle"><b id="eDoc"></b><span id="eCust"></span></div>
+      <span class="savest" id="saveSt"></span>
+      <div class="edacts">
+        <button type="button" id="bAi" class="ai">Draft with Claude</button>
+        <button type="button" id="bDocx">Word</button>
+        <button type="button" id="bPdf">PDF</button>
+        <button type="button" id="bMail">Email</button>
+        <button type="button" id="bMore" aria-label="More actions" aria-haspopup="menu">&#8942;</button>
+        <div class="menu" id="moreMenu" role="menu" hidden><button type="button" role="menuitem" id="bHist">History</button><button type="button" role="menuitem" id="bDel" class="danger">Delete report</button></div>
+      </div>
+    </div>
+    <div class="lockbar" id="lockbar" hidden></div>
+    <div class="edgrid">
+      <nav class="toc" id="toc" aria-label="Report sections"></nav>
+      <div class="cards" id="cards"></div>
+    </div>
+  </section>
+</div>
+
+<!-- new report -->
+<dialog id="newDlg"><form id="newForm" novalidate>
+  <h3>New completion report</h3>
+  <label><span class="lbl">Customer *</span><span class="row2"><select id="nCust" required></select><button type="button" id="nNewCust">New</button></span>
+    <span class="hint">From the shared customer list. Contact, address and TRN are pulled into the report.</span></label>
+  <div class="fields">
+    <label><span class="lbl">Customer PO reference</span><input id="nPo" maxlength="80" placeholder="e.g. PO-2026-0418"></label>
+    <label><span class="lbl">Completion date *</span><input id="nDate" type="date" required></label>
+  </div>
+  <label><span class="lbl">Project title</span><input id="nTitle" maxlength="200" placeholder="e.g. Network infrastructure: supply, installation and commissioning"></label>
+  <div class="fields">
+    <label><span class="lbl">Prepared by *</span><input id="nBy" maxlength="100" required></label>
+    <label><span class="lbl">Document type</span><select id="nMode"><option value="report">Project completion report (full)</option><option value="certificate">Work completion certificate (short letter)</option></select></label>
+  </div>
+  <p class="err" id="nErr"></p>
+  <div class="foot"><button type="button" data-close>Cancel</button><button class="primary" type="submit" id="nGo">Create report</button></div>
+</form></dialog>
+
+<!-- quick customer -->
+<dialog id="custDlg"><form id="custForm" novalidate>
+  <h3>Add customer</h3>
+  <label><span class="lbl">Company name *</span><input id="cName" maxlength="150" required></label>
+  <div class="fields">
+    <label><span class="lbl">Contact person</span><input id="cContact" maxlength="100"></label>
+    <label><span class="lbl">Email</span><input id="cEmail" type="email" maxlength="150"></label>
+    <label><span class="lbl">Emirate</span><input id="cEmirate" maxlength="50"></label>
+    <label><span class="lbl">TRN</span><input id="cTrn" maxlength="30"></label>
+  </div>
+  <label><span class="lbl">Address</span><input id="cAddr" maxlength="300"></label>
+  <p class="err" id="cErr"></p>
+  <div class="foot"><button type="button" data-close>Cancel</button><button class="primary" type="submit">Add customer</button></div>
+</form></dialog>
+
+<!-- import table -->
+<dialog id="impDlg" class="wide"><form id="impForm" novalidate>
+  <h3 id="impTitle">Import</h3>
+  <p class="hint" style="margin:0">Upload an Excel or CSV file, or paste rows copied from Excel. The first row should be the column headings; columns are matched automatically and you can change them below.</p>
+  <label class="drop"><input type="file" id="impFile" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden><b>Choose a file</b> or drop it here</label>
+  <label><span class="lbl">Or paste from Excel</span><textarea id="impPaste" rows="4" placeholder="Copy the cells in Excel (including the heading row) and paste here"></textarea></label>
+  <div id="impMap"></div>
+  <label class="chk"><input type="checkbox" id="impReplace"> Replace the rows already in the report</label>
+  <p class="err" id="impErr"></p>
+  <div class="foot"><button type="button" data-close>Cancel</button><button class="primary" type="submit" id="impGo" disabled>Import</button></div>
+</form></dialog>
+
+<!-- signature pad -->
+<dialog id="sigDlg" class="wide"><form id="sigForm" novalidate>
+  <h3 id="sigTitle">Customer signature</h3>
+  <p class="hint" id="sigIntro" style="margin:0"></p>
+  <div class="fields" id="sigWho">
+    <label><span class="lbl">Name *</span><input id="sName" maxlength="100"></label>
+    <label><span class="lbl">Designation</span><input id="sDesig" maxlength="100"></label>
+  </div>
+  <div class="pad"><canvas id="sPad" width="900" height="300" aria-label="Signature area: sign with your finger, pen or mouse"></canvas><span class="padhint">Sign here</span><button type="button" class="padclear" id="sClear">Clear</button></div>
+  <label class="chk" id="sAgreeL"><input type="checkbox" id="sAgree"> <span id="sAgreeT"></span></label>
+  <p class="err" id="sErr"></p>
+  <div class="foot"><button type="button" data-close>Cancel</button><button class="primary" type="submit" id="sGo">Save signature</button></div>
+</form></dialog>
+
+<!-- signing link -->
+<dialog id="linkDlg"><form id="linkForm" novalidate>
+  <h3>Customer signing link</h3>
+  <p class="hint" style="margin:0">Anyone with this link can read the report and sign it, without signing in. It works once and expires on <b id="lExp"></b>.</p>
+  <div class="row2"><input id="lUrl" readonly aria-label="Signing link"><button type="button" id="lCopy">Copy</button></div>
+  <div class="foot"><button type="button" id="lRevoke" class="danger">Cancel link</button><button type="button" id="lMail">Email it to the customer</button><button class="primary" type="button" data-close>Done</button></div>
+</form></dialog>
+
+<!-- email -->
+<dialog id="mailDlg" class="wide"><form id="mailForm" novalidate>
+  <h3>Email the report</h3>
+  <div class="fields">
+    <label><span class="lbl">To *</span><input id="mTo" placeholder="customer@company.com"></label>
+    <label><span class="lbl">Cc</span><input id="mCc" placeholder="Optional"></label>
+  </div>
+  <label><span class="lbl">Subject</span><input id="mSubj" maxlength="250"></label>
+  <label><span class="lbl">Message</span><textarea id="mMsg" rows="7"></textarea></label>
+  <label class="chk" id="mLinkL"><input type="checkbox" id="mLink"> Include the signing link so the customer can sign online</label>
+  <p class="hint" style="margin:0">The PDF is attached. You are copied, and replies come to you.</p>
+  <p class="err" id="mErr"></p>
+  <div class="foot"><button type="button" data-close>Cancel</button><button class="primary" type="submit" id="mGo">Send</button></div>
+</form></dialog>
+
+<!-- history -->
+<dialog id="histDlg" class="wide"><form method="dialog">
+  <h3>History</h3>
+  <div id="histList" class="hist"></div>
+  <div class="foot"><button class="primary" type="submit">Close</button></div>
+</form></dialog>
+
+<script src="/completion/diagram.js"></script>
+<script src="/completion/gen.js"></script>
+<script src="/completion/app.js"></script>
+</body>
+</html>

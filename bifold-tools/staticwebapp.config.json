@@ -39,6 +39,22 @@
       ]
     },
     {
+      "route": "/sign/*",
+      "allowedRoles": [
+        "anonymous"
+      ],
+      "headers": {
+        "Cache-Control": "no-store",
+        "X-Robots-Tag": "noindex"
+      }
+    },
+    {
+      "route": "/sign",
+      "allowedRoles": [
+        "anonymous"
+      ]
+    },
+    {
       "route": "/email/*",
       "allowedRoles": [
         "anonymous"

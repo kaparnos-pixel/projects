@@ -157,10 +157,11 @@ const ICON={
   pdc:I('<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h6M6 14h4M15.5 13.5l1.5 1.5 3-3"/>'),amc:I('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>'),
   visits:I('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4"/>'),customers:I('<path d="M4 21V5a1 1 0 0 1 1-1h9v17"/><path d="M14 9h5a1 1 0 0 1 1 1v11M8 8h2M8 12h2M8 16h2M3 21h18"/>'),
   activity:I('<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>'),
+  completion:I('<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8.5 14.5l2.5 2.5 4.5-5"/>'),
   campaigns:I('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
   access:I('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4M12 15v2"/>'),plus:I('<path d="M12 5v14M5 12h14"/>'),
 };
-const FN={pipeline:"sales",pnl:"sales",amc:"service",visits:"service",pdc:"finance",campaigns:"marketing",customers:"master",access:"admin",activity:"admin"};
+const FN={pipeline:"sales",pnl:"sales",amc:"service",visits:"service",pdc:"finance",campaigns:"marketing",completion:"service",customers:"master",access:"admin",activity:"admin"};
 const aed=n=>Math.round(n||0).toLocaleString("en-US");
 const short=n=>{n=+n||0;return n>=1e6?(n/1e6).toFixed(n>=1e7?1:2)+"M":n>=1e4?Math.round(n/1e3)+"K":aed(n)};
 const dubai=()=>new Date(Date.now()+4*3600e3);
@@ -183,6 +184,7 @@ function quick(m){
   const a=[];
   if(can(m,"amc"))a.push(["/amc/#amcs","New AMC proposal","amc",1]);
   if(can(m,"visits"))a.push(["/amc/#visits","Maintenance visits","visits"]);
+  if(can(m,"completion"))a.push(["/completion/#new","Completion report","completion"]);
   if(can(m,"pipeline"))a.push(["/pipeline/","Sales pipeline","pipeline"]);
   if(can(m,"pnl"))a.push(["/pnl/","New PnL","pnl"]);
   if(can(m,"pdc"))a.push(["/pdc/","Log a cheque","pdc"]);
@@ -201,6 +203,7 @@ function apps(m){
     ["pipeline","/pipeline/","Sales","Sales Pipeline","Every deal from lead to PO, with the weighted forecast.",["pipeline"]],
     ["pnl","/pnl/","Sales","PnL Calculator","Profit on each PO before you commit, saved and shared with colleagues.",["pnl"]],
     ["amc","/amc/","Service","AMC Tracker","Branded AMC proposals, awards, expiry alerts and maintenance visits.",["amc","visits"]],
+    ["completion","/completion/","Service","Completion Reports","Project close-out with BoQ, serial numbers, site pictures, Claude-drawn diagrams, warranty and customer sign-off.",["completion"]],
     ["pdc","/pdc/","Finance","PDC & Guarantees","Post-dated cheques, security deposits and advance payment guarantees.",["pdc"]],
     ["campaigns","/campaigns/","Marketing","Email Campaigns","Branded email campaigns, contact lists, Claude drafting and scheduled sending.",["campaigns"]],
     ["customers","/customers/","Master data","Customers","The single customer list every tool uses.",["customers"]],
@@ -237,6 +240,7 @@ async function load(m){
       $("funnelCard").hidden=false;
     }).catch(()=>failK(k));
   }
+  if(can(m,"completion"))api("pcr/reports").then(l=>{const w=l.filter(r=>r.status==="awaiting").length,d=l.filter(r=>r.status==="draft").length;st("completion",`${d} draft${d===1?"":"s"} · ${w} awaiting signature`)}).catch(()=>{});
   if(can(m,"amc")||can(m,"visits")){
     const k=can(m,"amc")?kpiCard("amc","service","Active AMCs","amc","/amc/#amcs","AMC contracts"):null;
     const kv=can(m,"visits")?kpiCard("vis","service","Visits this fortnight","visits","/amc/#visits","Maintenance visits"):null;

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Review and sign</title>
+<style>
+:root{--navy:#1E5A8C;--accent:#D81F2A;--soft:#EEF3F9;--bg:#EDF0F5;--fg:#1D2733;--muted:#5E6B7A;--line:#DCE3EC;--good:#1F7A4D}
+html[data-co="techhub"]{--navy:#003C50;--accent:#28A08C;--soft:#E6F4F2;--bg:#ECF2F3}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 Arial,"Helvetica Neue",Helvetica,sans-serif;padding:24px max(12px,env(safe-area-inset-left)) 48px}
+.doc{max-width:860px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 18px 48px rgba(10,28,51,.12)}
+.hd{padding:20px 28px;border-bottom:4px solid var(--accent);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.hd img{height:42px;width:auto;display:block}
+.hd .no{font-family:Consolas,Menlo,monospace;font-size:13px;color:var(--muted)}
+.title{background:var(--navy);color:#fff;padding:22px 28px}
+.title small{display:block;text-transform:uppercase;letter-spacing:.14em;font-size:11px;opacity:.75}
+.title h1{margin:4px 0 2px;font-size:24px}
+.title p{margin:0;opacity:.9}
+.bd{padding:24px 28px 8px}
+h2{color:var(--navy);font-size:15px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid var(--accent);padding-bottom:5px;margin:26px 0 12px}
+h3{color:var(--navy);font-size:14.5px;margin:14px 0 4px}
+p{margin:0 0 12px}
+ul{margin:0 0 12px;padding-left:20px}
+li{margin-bottom:4px}
+li::marker{color:var(--accent)}
+.kv{display:grid;grid-template-columns:minmax(150px,220px) 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:14px}
+.kv div{padding:7px 12px;border-bottom:1px solid var(--line)}
+.kv div:nth-child(odd){background:var(--soft);font-weight:700;color:var(--navy)}
+.kv div:nth-last-child(-n+2){border-bottom:0}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:520px}
+th{background:var(--navy);color:#fff;text-align:left;padding:7px 9px;font-size:12px}
+td{padding:6px 9px;border-top:1px solid var(--line);vertical-align:top}
+td.m{font-family:Consolas,Menlo,monospace}
+.pass{color:var(--good);font-weight:700}.fail{color:var(--accent);font-weight:700}
+.note{background:var(--soft);border-radius:8px;padding:10px 12px;font-size:13.5px;color:var(--muted)}
+.sign{margin:26px 0 0;border-top:1px solid var(--line);padding:22px 28px 28px;background:#FAFBFD}
+.sign h2{margin-top:0}
+label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px}
+input[type=text]{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--fg)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:12px}
+.pad{position:relative;border:1px solid var(--line);border-radius:10px;background:#fff;touch-action:none;margin-bottom:12px}
+.pad canvas{width:100%;height:auto;aspect-ratio:3/1;display:block;touch-action:none;cursor:crosshair}
+.pad span{position:absolute;left:16px;right:16px;bottom:22%;border-top:1.5px dashed #b4c5d6;padding-top:4px;font-size:11px;color:#8a99a8;pointer-events:none}
+.pad button{position:absolute;top:8px;right:8px;font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer}
+.chk{display:flex;gap:10px;align-items:flex-start;font-size:14px;margin-bottom:14px;cursor:pointer}
+.chk input{margin-top:4px;width:18px;height:18px}
+.go{font:inherit;font-weight:700;border-radius:8px;padding:13px 22px;cursor:pointer;border:0;background:var(--navy);color:#fff;width:100%}
+.go:disabled{opacity:.6;cursor:default}
+.err{color:#B4322C;font-weight:600;margin:0 0 10px}
+.ok{display:flex;gap:12px;align-items:flex-start;background:#E7F5EE;border-radius:10px;padding:14px 16px;color:#1F5E3E}
+.ok b{display:block;font-size:16px}
+.ft{max-width:860px;margin:14px auto 0;text-align:center;font-size:12px;color:var(--muted)}
+.msg{max-width:520px;margin:10vh auto;background:#fff;border-radius:14px;padding:28px;box-shadow:0 18px 48px rgba(10,28,51,.12)}
+@media print{body{background:#fff;padding:0}.doc{box-shadow:none}.sign{display:none}}
+</style>
+</head>
+<body>
+<main id="app" aria-live="polite"><div class="msg">Loading the report…</div></main>
+<p class="ft" id="ft"></p>
+<script>
+(function () {
+  const k = new URLSearchParams(location.search).get("k") || "";
+  const app = document.getElementById("app");
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const M = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const fd = iso => { if (!iso) return ""; const [y, m, d] = iso.slice(0, 10).split("-").map(Number); return d + " " + M[m - 1] + " " + y; };
+  const fdt = iso => new Date(iso).toLocaleString("en-GB", { timeZone: "Asia/Dubai", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const url = "/api/public/pcr/" + encodeURIComponent(k);
+  const fail = m => { app.innerHTML = `<div class="msg"><h1 style="margin:0 0 8px;font-size:20px">This link can't be used</h1><p>${esc(m)}</p></div>`; };
+  if (!k) return fail("The link is incomplete. Copy the whole link from the email and try again.");
+  fetch(url, { cache: "no-store" }).then(r => r.json().then(j => r.ok ? j : Promise.reject(j))).then(render).catch(j => fail((j && j.error) || "The report couldn't be loaded. Check your connection and try again."));
+
+  function table(head, rows, opt) {
+    return `<div class="tw"><table><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map((c, j) => `<td class="${(opt && opt[j]) || ""}">${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  }
+  function render(d) {
+    document.documentElement.dataset.co = d.co;
+    document.title = (d.mode === "certificate" ? "Work Completion Certificate " : "Project Completion Report ") + d.docNo;
+    document.getElementById("ft").textContent = d.company + " · This page is private to the person the link was sent to.";
+    const L = d.letter || {};
+    const w = d.warranty;
+    const h = [];
+    h.push(`<div class="hd"><img src="/email/${esc(d.co)}.png" alt="${esc(d.company)}"><span class="no">${esc(d.docNo)}</span></div>`);
+    h.push(`<div class="title"><small>${d.mode === "certificate" ? "Work completion certificate" : "Project completion report"}</small><h1>${esc(d.customerName)}</h1><p>${esc(d.projectTitle || "")}</p></div><div class="bd">`);
+    h.push(`<div class="kv">${[["Customer PO reference", d.poRef + (d.poDate ? ", dated " + fd(d.poDate) : "")], ["Site", d.site], ["Completion date", fd(d.completionDate)], ["Prepared by", [d.preparedBy, d.preparedTitle].filter(Boolean).join(", ") + ", " + d.company]].filter(r => r[1]).map(r => `<div>${esc(r[0])}</div><div>${esc(r[1])}</div>`).join("")}</div>`);
+    h.push(`<h2>${esc(L.subject || "Completion")}</h2>`);
+    if (L.salutation) h.push(`<p>${esc(L.salutation)}</p>`);
+    (L.body || []).forEach(p => h.push(`<p>${esc(p)}</p>`));
+    if (L.closing) h.push(`<p>${esc(L.closing)}</p>`);
+    if (d.mode !== "certificate" && d.scope && (d.scope.streams || []).length) {
+      h.push(`<h2>Scope delivered</h2>`); if (d.scope.intro) h.push(`<p>${esc(d.scope.intro)}</p>`);
+      d.scope.streams.forEach(s => { if (s.heading) h.push(`<h3>${esc(s.heading)}</h3>`); h.push(`<ul>${s.bullets.map(b => `<li>${esc(b)}</li>`).join("")}</ul>`); });
+    }
+    if (d.boq.length) { h.push(`<h2>Bill of quantities</h2>`); h.push(table(["#", "Description", "Make / model", "Qty", "Unit", "Remarks"], d.boq.map((r, i) => [r.item || i + 1, r.desc, r.model, r.qty, r.unit, r.remarks]))); }
+    if (d.serials.length) { h.push(`<h2>Equipment and serial numbers</h2><p>${d.serials.length} unit${d.serials.length === 1 ? "" : "s"} recorded.</p>`); h.push(table(["#", "Device type", "Make & model", "Serial number", "Location"], d.serials.map((r, i) => [i + 1, r.type, r.model, r.serial, r.location]), { 3: "m" })); }
+    if (d.testing.length) { h.push(`<h2>Testing and commissioning</h2>`); h.push(table(["#", "Test", "Method", "Result", "Remarks"], d.testing.map((r, i) => [i + 1, r.test, r.method, r.result || "-", r.remarks])).replace(/<td class="">(Pass)<\/td>/g, '<td class="pass">$1</td>').replace(/<td class="">(Fail|Open)<\/td>/g, '<td class="fail">$1</td>')); }
+    if (d.handover && d.handover.length && d.mode !== "certificate") h.push(`<h2>Handover deliverables</h2><ul>${d.handover.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`);
+    if (w) {
+      h.push(`<h2>Warranty</h2><div class="kv">${[w.hwMonths ? ["Hardware", w.hwMonths + " months"] : null, w.wkMonths ? ["Workmanship", w.wkMonths + " months"] : null, ["Starts", fd(w.start || d.completionDate)], w.hours ? ["Support hours", w.hours] : null].filter(Boolean).map(r => `<div>${esc(r[0])}</div><div>${esc(r[1])}</div>`).join("")}</div>`);
+      if (w.terms.length) h.push(`<h3>Terms</h3><ul>${w.terms.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`);
+      if (w.exclusions.length) h.push(`<h3>Exclusions</h3><ul>${w.exclusions.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`);
+    }
+    if (d.snags.length) { h.push(`<h2>Open items</h2>`); h.push(table(["#", "Item", "Owner", "Target date"], d.snags.map((r, i) => [i + 1, r.item, r.owner, r.target]))); }
+    const extra = [d.photoCount ? `${d.photoCount} site picture${d.photoCount === 1 ? "" : "s"}` : "", d.hasDiagram ? "the system diagram" : ""].filter(Boolean);
+    if (extra.length) h.push(`<p class="note" style="margin-top:18px">The full document also includes ${extra.join(" and ")}. You will receive it with your signature once signed.</p>`);
+    h.push(`</div>`);
+    if (d.signed) h.push(`<div class="sign"><div class="ok"><span>&#10003;</span><span><b>Signed</b>Accepted by ${esc(d.signed.name)}${d.signed.designation ? ", " + esc(d.signed.designation) : ""} on ${esc(fdt(d.signed.at))}. Thank you.</span></div></div>`);
+    else h.push(`<form class="sign" id="f" novalidate><h2>Acceptance</h2>
+      <div class="two"><div><label for="n">Your name *</label><input type="text" id="n" maxlength="100" autocomplete="name"></div><div><label for="g">Designation</label><input type="text" id="g" maxlength="100" autocomplete="organization-title"></div></div>
+      <label>Signature *</label><div class="pad"><canvas id="c" width="900" height="300" aria-label="Sign here with your finger, pen or mouse"></canvas><span>Sign above this line</span><button type="button" id="x">Clear</button></div>
+      <div><label for="rm">Remarks (optional)</label><input type="text" id="rm" maxlength="600"></div><br>
+      <label class="chk" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--fg);font-size:14px"><input type="checkbox" id="a"> <span>I confirm, on behalf of ${esc(d.customerName)}, that the works described in ${esc(d.docNo)}${d.poRef ? " under PO " + esc(d.poRef) : ""} have been completed and are accepted${d.snags.length ? ", subject to the open items listed above" : ""}.</span></label>
+      <p class="err" id="e"></p><button class="go" id="s" type="submit">Sign and accept</button></form>`);
+    app.innerHTML = `<article class="doc">${h.join("")}</article>`;
+    if (!d.signed) pad(d);
+  }
+  function pad(d) {
+    const cv = document.getElementById("c"), cx = cv.getContext("2d"); let on = false, ink = false, last;
+    const pos = e => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height }; };
+    cv.addEventListener("pointerdown", e => { on = true; last = pos(e); cv.setPointerCapture(e.pointerId); e.preventDefault(); });
+    cv.addEventListener("pointermove", e => { if (!on) return; const p = pos(e); cx.strokeStyle = "#0A1C33"; cx.lineWidth = 3.6; cx.lineCap = "round"; cx.lineJoin = "round"; cx.beginPath(); cx.moveTo(last.x, last.y); cx.lineTo(p.x, p.y); cx.stroke(); last = p; ink = true; e.preventDefault(); });
+    ["pointerup", "pointercancel", "pointerleave"].forEach(v => cv.addEventListener(v, () => on = false));
+    document.getElementById("x").onclick = () => { cx.clearRect(0, 0, cv.width, cv.height); ink = false; };
+    const png = () => { const px = cx.getImageData(0, 0, cv.width, cv.height).data; let a = cv.width, b = cv.height, c = 0, e = 0;
+      for (let y = 0; y < cv.height; y += 2) for (let x = 0; x < cv.width; x += 2) if (px[(y * cv.width + x) * 4 + 3] > 10) { if (x < a) a = x; if (x > c) c = x; if (y < b) b = y; if (y > e) e = y; }
+      if (c <= a) return null; a = Math.max(0, a - 12); b = Math.max(0, b - 12); c = Math.min(cv.width, c + 12); e = Math.min(cv.height, e + 12);
+      const o = document.createElement("canvas"); o.width = c - a; o.height = e - b; o.getContext("2d").drawImage(cv, a, b, o.width, o.height, 0, 0, o.width, o.height); return o.toDataURL("image/png"); };
+    document.getElementById("f").onsubmit = ev => {
+      ev.preventDefault(); const er = document.getElementById("e"); er.textContent = "";
+      const name = document.getElementById("n").value.trim(), img = ink ? png() : null;
+      if (!name) { er.textContent = "Enter your name."; return; }
+      if (!img) { er.textContent = "Sign in the box."; return; }
+      if (!document.getElementById("a").checked) { er.textContent = "Tick the box to confirm acceptance."; return; }
+      const b = document.getElementById("s"); b.disabled = true; b.textContent = "Signing…";
+      fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, designation: document.getElementById("g").value, remarks: document.getElementById("rm").value, agree: true, image: img }) })
+        .then(r => r.json().then(j => r.ok ? j : Promise.reject(j))).then(j => { render(j); window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); })
+        .catch(j => { er.textContent = (j && j.error) || "That didn't go through. Check your connection and try again."; b.disabled = false; b.textContent = "Sign and accept"; });
+    };
+  }
+})();
+</script>
+</body>
+</html>

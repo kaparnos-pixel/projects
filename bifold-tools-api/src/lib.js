@@ -558,6 +558,10 @@ const amc = () => amcRoute || (amcRoute = require("./amc")({ table, getOrNull, a
 let mkMod;
 const mk = () => mkMod || (mkMod = require("./mk")({ table, getOrNull, packJson, unpackJson, fail, clean, CO, writeCo, record: x => audit().record(x) }));
 
+// ---------- Project Completion Reports (src/pcr.js) ----------
+let pcrMod;
+const pcr = () => pcrMod || (pcrMod = require("./pcr")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CUST, CPK, CO, rowCo, inCo, writeCo, mailReadyFor, diff: (a, b) => audit().diff(a, b), record: x => audit().record(x) }));
+
 // ---------- team access (src/access.js) ----------
 let accessMod;
 let auditMod;
@@ -683,6 +687,7 @@ async function route(method, seg, user, body) {
   if (a === "access") return access().route(method, seg, user, body);
   if (a === "amc") return amc()(method, seg.slice(1), user, body);
   if (a === "mk") return mk().route(method, seg.slice(1), user, body);
+  if (a === "pcr") return pcr().route(method, seg.slice(1), user, body);
   if (a === "alerts" && method === "GET") return alerts(user);
   if (a === "audit" && method === "GET") return audit().list(user, id);
   if (a === "me" && method === "GET") { if (access().touch(user.email) && user.aud) { user.aud.signin = true; user.aud.noAccess = !user.isManager && !user.sections.length; }
@@ -736,6 +741,8 @@ function shouldRecord(method, seg, status, user, body) {
   if (a === "mk" && (b === "audience" || b === "render.js")) return false;
   if (a === "me") return !!(user && user.aud && user.aud.signin);
   const fileGet = method === "GET" && ((a === "pnl" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c));
+  // Photos and signatures shown in the report editor are not logged one by one; downloads are.
+  if (a === "pcr" && b === "files" && method === "GET") return seg[3] === "download" || status === 403;
   // Refused reads are logged for people who have some access (trying beyond it); people with none are logged at sign-in.
   if (method === "GET" && !fileGet) return status === 403 && (user.isManager || user.sections.length > 0);
   if (status >= 400 && status !== 401 && status !== 403 && !(fileGet && status === 404)) return false;
@@ -748,10 +755,10 @@ async function dispatch(method, path, getHeader, readBody, log = console) {
   const seg = String(path || "").replace(/^\/+|\/+$/g, "").split("/").filter(Boolean).map(s => { try { return decodeURIComponent(s); } catch { return s; } });
   const ip = String(getHeader("x-forwarded-for") || getHeader("x-client-ip") || "").split(",")[0].trim();
   let out;
-  // Public routes (no sign-in): the unsubscribe page and images used in campaign emails.
+  // Public routes (no sign-in): the unsubscribe page, images used in campaign emails, and customer signing links.
   if (seg[0] === "public") {
     try {
-      const o = await mk().publicRoute(method, seg.slice(1), ip);
+      const o = seg[1] === "pcr" ? await pcr().publicRoute(method, seg.slice(2), ip, readBody) : await mk().publicRoute(method, seg.slice(1), ip);
       return o && o.__binary ? { status: 200, raw: o.__binary, headers: o.headers } : { status: 200, body: o };
     } catch (e) {
       if (e instanceof HttpError) return { status: e.status, body: { error: e.message } };

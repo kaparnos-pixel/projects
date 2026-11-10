@@ -14,6 +14,7 @@ const SECTIONS = [
   { key: "customers", name: "Customers", hint: "Open the customer list and edit customer details" },
   { key: "amc", name: "AMC proposals & contracts", hint: "Create AMC proposals, award contracts, see contract values" },
   { key: "visits", name: "Maintenance visits & reports", hint: "Schedule and complete visits, upload photos, send visit reports" },
+  { key: "completion", name: "Project completion reports", hint: "Completion reports with BoQ, serial numbers, site pictures, warranty and customer sign-off" },
   { key: "campaigns", name: "Email Campaigns", hint: "Design, schedule and send marketing emails; import and manage contacts" },
 ];
 const KEYS = SECTIONS.map(s => s.key);
@@ -62,6 +63,7 @@ module.exports = function makeAccess(H) {
     if (a === "deals") return "pipeline";
     if (a === "cheques") return "pdc";
     if (a === "mk") return "campaigns";
+    if (a === "pcr") return "completion";
     if (a === "amc") {
       if (b === "bootstrap" || b === "files") return ["amc", "visits"];
       if (b === "amcs") return "amc";
@@ -82,7 +84,7 @@ module.exports = function makeAccess(H) {
     if (n === "manager") fail(403, "Only managers can do this.");
     const has = k => user.sections.includes(k);
     if (n === "any") { if (!user.sections.length) fail(403, `You don't have access to ${user.homeCo === "techhub" ? "Tech Hub Tools" : "Bifold Tools"} yet. Ask ${boss(user)} to give you access.`); return; }
-    if (n === "customersOrTool") { if (!["customers", "pnl", "pipeline", "pdc", "amc"].some(has)) fail(403, `You don't have access to edit customers. Ask ${boss(user)} to give you access.`); return; }
+    if (n === "customersOrTool") { if (!["customers", "pnl", "pipeline", "pdc", "amc", "completion"].some(has)) fail(403, `You don't have access to edit customers. Ask ${boss(user)} to give you access.`); return; }
     const list = Array.isArray(n) ? n : [n];
     if (!list.some(has)) fail(403, `You don't have access to ${list.map(label).join(" or ")}. Ask ${boss(user)} to give you access.`);
   }
@@ -99,7 +101,7 @@ module.exports = function makeAccess(H) {
     const add = v => { const e = String(v || "").toLowerCase(); if (emailOk(e)) known.add(e); };
     const scan = async (name, pk, cols) => { try { (await all(await table(name), pk, cols)).forEach(r => cols.forEach(c => add(r[c]))); } catch {} };
     await Promise.all([scan("pnl", "pnl", ["owner"]), scan("deals", "deal", ["owner", "createdBy"]), scan("pdc", "cheque", ["createdBy"]), scan("customers", "customer", ["createdBy"]),
-      scan("amc", "amc", ["owner"]), scan("amcvisits", "visit", ["createdBy", "updatedBy"]), scan("mkcampaigns", "bifold", ["createdBy", "updatedBy"]), scan("mkcampaigns", "techhub", ["createdBy", "updatedBy"])]);
+      scan("amc", "amc", ["owner"]), scan("pcr", "pcr", ["owner", "updatedBy"]), scan("amcvisits", "visit", ["createdBy", "updatedBy"]), scan("mkcampaigns", "bifold", ["createdBy", "updatedBy"]), scan("mkcampaigns", "techhub", ["createdBy", "updatedBy"])]);
     rows.forEach(r => known.add(r.rowKey));
     const listed = new Map(rows.map(r => [r.rowKey, r]));
     const managers = coManagers(co);

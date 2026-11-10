@@ -10,9 +10,9 @@
 const crypto = require("crypto");
 
 const SKIP_KEYS = new Set(["partitionKey", "rowKey", "etag", "timestamp", "odata.etag", "updatedAt", "updatedBy", "createdAt", "createdBy", "dataChunks", "acl", "files",
-  "reminderSentAt", "alertsSent", "lastAlertAt", "proposalStatus", "proposalAt", "proposalStale", "proposalSource", "sentAt", "stageAt", "closedAt", "directCost", "netPct", "co", "company"]);
+  "reminderSentAt", "linkExpires", "signedAt", "alertsSent", "lastAlertAt", "proposalStatus", "proposalAt", "proposalStale", "proposalSource", "sentAt", "stageAt", "closedAt", "directCost", "netPct", "co", "company"]);
 const LABELS = { contactName: "contact", poNo: "PO no.", poValue: "PO value", netProfit: "net profit", customerName: "customer", customerId: null, scheduledDate: "date",
-  engineers: "engineer", trn: "TRN", amount: "amount", chequeNo: "cheque no.", clearanceDate: "clearance date", value: "value", status: "status", stage: "stage", title: "title" };
+  engineers: "engineer", trn: "TRN", amount: "amount", chequeNo: "cheque no.", clearanceDate: "clearance date", value: "value", status: "status", stage: "stage", title: "title", poRef: "PO ref", projectTitle: "project", completionDate: "completion date", preparedBy: "prepared by", docNo: "doc no." };
 
 module.exports = function makeAudit(H) {
   const { table, fail, clean, CO } = H;
@@ -119,11 +119,30 @@ module.exports = function makeAudit(H) {
       if (b === "settings") return [A, "Changed campaign settings", "", ""];
       if (b === "ai") return [A, "Drafted with Claude", name, ""];
     }
+    if (a === "pcr") {
+      const A = "Completion Reports";
+      if (b === "public-sign") return [A, "Customer signed using the signing link", name, ""];
+      if (b === "files") {
+        if (method === "POST") return [A, "Uploaded picture", out.name || clean(body.name, 200), out.size ? Math.max(1, Math.round(out.size / 1024)) + " KB" : ""];
+        if (method === "GET") return [A, d === "download" ? "Downloaded file" : "Opened file", name || c, ""];
+      }
+      if (b === "ai") return [A, "Drafted with Claude", name || clean(body.id, 60), { text: "report text", closeout: "testing, warranty and snags", diagram: "system diagram" }[aud.detail] || ""];
+      if (b === "reports") {
+        if (!c && method === "POST") return [A, "Created report", out.docNo, [out.customerName, out.poRef && "PO " + out.poRef].filter(Boolean).join(", ")];
+        if (d === "sign") return [A, "Customer signed on site", name || c, [clean(body.name, 100), clean(body.designation, 100)].filter(Boolean).join(", ")];
+        if (d === "company-sign") return [A, body.clear ? "Removed company signature" : "Signed for the company", name || c, ""];
+        if (d === "reopen") return [A, "Reopened signed report", name || c, "Customer signature removed"];
+        if (d === "link") return [A, method === "DELETE" ? "Cancelled signing link" : "Created customer signing link", name || c, ""];
+        if (d === "share") return [A, "Emailed report", name || c, "To " + [].concat(body.to || []).join(", ").slice(0, 200)];
+        if (method === "PUT") return [A, "Edited report", out.docNo || name || c, ch];
+        if (method === "DELETE") return [A, "Deleted report", name || c, ""];
+      }
+    }
     if (a === "access") {
       if (b === "users" && method === "PUT") return ["Team access", "Changed access", c, (out.sections || []).join(", ") || "No sections"];
       if (b === "users" && method === "DELETE") return ["Team access", "Removed access", c, ""];
     }
-    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", access: "Team access", alerts: "Alerts" };
+    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", access: "Team access", alerts: "Alerts" };
     if (method === "GET") return [AREA[a] || "Other", b ? "Opened a record" : "Opened the list", b || "", ""];
     return [AREA[a] || "Other", method + " /" + seg.join("/"), "", ""];
   }

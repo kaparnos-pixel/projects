@@ -91,11 +91,39 @@ module.exports = function makeAudit(H) {
       if (b === "share") return ["AMC Tracker", body.kind === "visit" ? "Emailed visit report" : "Emailed AMC proposal", name || clean(body.id, 60), "To " + [].concat(body.to || []).join(", ").slice(0, 200)];
       if (b === "ai") return ["AMC Tracker", body.kind === "visit" ? "Drafted visit findings with Claude" : "Drafted proposal with Claude", clean(body.customerName, 150), ""];
     }
+    if (a === "mk") {
+      const A = "Email Campaigns", det = aud.detail || "";
+      if (b === "public-unsub") return [A, "Unsubscribed using the email link", name, body.campaign && body.campaign !== "-" ? "Campaign " + body.campaign : ""];
+      if (b === "public-resub") return [A, "Re-subscribed on the unsubscribe page", name, ""];
+      if (b === "contacts") {
+        if (c === "import") return [A, "Imported contacts", clean(body.source, 120), `${out.added || 0} added, ${out.updated || 0} updated, ${(out.invalid || []).length} invalid, ${out.suppressed || 0} kept unsubscribed${(body.tags || []).length ? "; lists: " + [].concat(body.tags).join(", ") : ""}`];
+        if (c === "bulk") return [A, { addTag: "Added contacts to a list", removeTag: "Removed contacts from a list", unsubscribe: "Unsubscribed contacts", delete: "Deleted contacts" }[body.action] || "Changed contacts", name, clean(body.tag, 40)];
+        if (method === "POST") return [A, "Added contact", out.email, ""];
+        if (method === "PUT") return [A, body.status === "subscribed" ? "Re-subscribed contact" : body.status === "unsubscribed" ? "Unsubscribed contact" : "Edited contact", name, clean(body.reason, 200)];
+      }
+      if (b === "campaigns") {
+        const sub = d;
+        if (!c && method === "POST") return [A, "Created campaign", out.name, out.id];
+        if (sub === "test") return [A, "Sent a test email", name, det];
+        if (sub === "duplicate") return [A, "Duplicated campaign", out.name, ""];
+        if (sub === "schedule") return [A, "Scheduled campaign", name, det];
+        if (sub === "unschedule") return [A, "Moved campaign back to draft", name, ""];
+        if (sub === "pause") return [A, "Paused sending", name, ""];
+        if (sub === "resume") return [A, "Resumed sending", name, ""];
+        if (sub === "cancel") return [A, "Cancelled campaign", name, ""];
+        if (method === "PUT") return [A, "Edited campaign", name || c, ""];
+        if (method === "DELETE") return [A, "Deleted campaign", name || c, ""];
+      }
+      if (b === "templates") return [A, method === "DELETE" ? "Deleted saved design" : "Saved a design", name, ""];
+      if (b === "media") return [A, method === "DELETE" ? "Deleted image" : "Uploaded image", name, ""];
+      if (b === "settings") return [A, "Changed campaign settings", "", ""];
+      if (b === "ai") return [A, "Drafted with Claude", name, ""];
+    }
     if (a === "access") {
       if (b === "users" && method === "PUT") return ["Team access", "Changed access", c, (out.sections || []).join(", ") || "No sections"];
       if (b === "users" && method === "DELETE") return ["Team access", "Removed access", c, ""];
     }
-    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", access: "Team access", alerts: "Alerts" };
+    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", access: "Team access", alerts: "Alerts" };
     if (method === "GET") return [AREA[a] || "Other", b ? "Opened a record" : "Opened the list", b || "", ""];
     return [AREA[a] || "Other", method + " /" + seg.join("/"), "", ""];
   }

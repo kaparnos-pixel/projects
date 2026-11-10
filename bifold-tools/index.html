@@ -12,13 +12,13 @@
    operations board (attention feed + pipeline chart | service week + cash commitments) and the application launcher. */
 :root{
   --sales:#1E5A8C; --sales-soft:#E4EEF8; --service:#0E7C7B; --service-soft:#DEF3F2; --finance:#B26A00; --finance-soft:#FBF0DD;
-  --master:#5B4B9A; --master-soft:#ECE8F7; --admin:#475569; --admin-soft:#E9EDF2;
+  --master:#5B4B9A; --master-soft:#ECE8F7; --marketing:#B0306A; --marketing-soft:#FBE6EF; --admin:#475569; --admin-soft:#E9EDF2;
   --hi:#C8102E; --hi-soft:#FCE7EA; --md:#B76E00; --md-soft:#FDF1DC; --lo:#2563A6; --lo-soft:#E5EEF9;
   --card-shadow:0 1px 2px rgba(10,28,51,.06),0 8px 24px rgba(10,28,51,.06);
 }
 @media (prefers-color-scheme:dark){:root{
   --sales:#6FA8DB; --sales-soft:#16293A; --service:#4FC7C3; --service-soft:#10302F; --finance:#F2B357; --finance-soft:#33270F;
-  --master:#B7A8F0; --master-soft:#29233F; --admin:#A9B6C6; --admin-soft:#1E2934;
+  --master:#B7A8F0; --master-soft:#29233F; --marketing:#F08BB8; --marketing-soft:#3A1A2A; --admin:#A9B6C6; --admin-soft:#1E2934;
   --hi:#FF6B7A; --hi-soft:#3A1820; --md:#F2B357; --md-soft:#33270F; --lo:#7FB5EA; --lo-soft:#16293A;
   --card-shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
 }}
@@ -114,7 +114,7 @@ a.app p{margin:2px 0 0;font-size:13px;color:var(--muted);line-height:1.45}
 a.app .st{grid-column:2;margin-top:8px;font-size:12.5px;font-weight:700;color:var(--fg)}
 @media (prefers-reduced-motion:reduce){a.app{transition:none}a.app:hover{transform:none}}
 footer.ft{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);padding-top:8px;border-top:1px solid var(--line)}
-.sales{--c:var(--sales);--cs:var(--sales-soft)}.service{--c:var(--service);--cs:var(--service-soft)}.finance{--c:var(--finance);--cs:var(--finance-soft)}.master{--c:var(--master);--cs:var(--master-soft)}.admin{--c:var(--admin);--cs:var(--admin-soft)}
+.sales{--c:var(--sales);--cs:var(--sales-soft)}.service{--c:var(--service);--cs:var(--service-soft)}.finance{--c:var(--finance);--cs:var(--finance-soft)}.master{--c:var(--master);--cs:var(--master-soft)}.marketing{--c:var(--marketing);--cs:var(--marketing-soft)}.admin{--c:var(--admin);--cs:var(--admin-soft)}
 </style>
 <script src="/assets/access.js"></script>
 </head>
@@ -157,9 +157,10 @@ const ICON={
   pdc:I('<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h6M6 14h4M15.5 13.5l1.5 1.5 3-3"/>'),amc:I('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>'),
   visits:I('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4"/>'),customers:I('<path d="M4 21V5a1 1 0 0 1 1-1h9v17"/><path d="M14 9h5a1 1 0 0 1 1 1v11M8 8h2M8 12h2M8 16h2M3 21h18"/>'),
   activity:I('<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>'),
+  campaigns:I('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
   access:I('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4M12 15v2"/>'),plus:I('<path d="M12 5v14M5 12h14"/>'),
 };
-const FN={pipeline:"sales",pnl:"sales",amc:"service",visits:"service",pdc:"finance",customers:"master",access:"admin",activity:"admin"};
+const FN={pipeline:"sales",pnl:"sales",amc:"service",visits:"service",pdc:"finance",campaigns:"marketing",customers:"master",access:"admin",activity:"admin"};
 const aed=n=>Math.round(n||0).toLocaleString("en-US");
 const short=n=>{n=+n||0;return n>=1e6?(n/1e6).toFixed(n>=1e7?1:2)+"M":n>=1e4?Math.round(n/1e3)+"K":aed(n)};
 const dubai=()=>new Date(Date.now()+4*3600e3);
@@ -201,6 +202,7 @@ function apps(m){
     ["pnl","/pnl/","Sales","PnL Calculator","Profit on each PO before you commit, saved and shared with colleagues.",["pnl"]],
     ["amc","/amc/","Service","AMC Tracker","Branded AMC proposals, awards, expiry alerts and maintenance visits.",["amc","visits"]],
     ["pdc","/pdc/","Finance","PDC & Guarantees","Post-dated cheques, security deposits and advance payment guarantees.",["pdc"]],
+    ["campaigns","/campaigns/","Marketing","Email Campaigns","Branded email campaigns, contact lists, Claude drafting and scheduled sending.",["campaigns"]],
     ["customers","/customers/","Master data","Customers","The single customer list every tool uses.",["customers"]],
     ["access","/access/","Administration","Team access","Choose which tools and sections each person can use.",["manager"]],
     ["activity","/activity/","Administration","Activity log","Who created, edited, uploaded, downloaded, emailed or deleted what, and when.",["manager"]],

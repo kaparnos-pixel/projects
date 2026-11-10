@@ -14,6 +14,7 @@ const SECTIONS = [
   { key: "customers", name: "Customers", hint: "Open the customer list and edit customer details" },
   { key: "amc", name: "AMC proposals & contracts", hint: "Create AMC proposals, award contracts, see contract values" },
   { key: "visits", name: "Maintenance visits & reports", hint: "Schedule and complete visits, upload photos, send visit reports" },
+  { key: "campaigns", name: "Email Campaigns", hint: "Design, schedule and send marketing emails; import and manage contacts" },
 ];
 const KEYS = SECTIONS.map(s => s.key);
 const CACHE_MS = 30000;
@@ -60,6 +61,7 @@ module.exports = function makeAccess(H) {
     if (a === "pnl") return "pnl";
     if (a === "deals") return "pipeline";
     if (a === "cheques") return "pdc";
+    if (a === "mk") return "campaigns";
     if (a === "amc") {
       if (b === "bootstrap" || b === "files") return ["amc", "visits"];
       if (b === "amcs") return "amc";
@@ -97,7 +99,7 @@ module.exports = function makeAccess(H) {
     const add = v => { const e = String(v || "").toLowerCase(); if (emailOk(e)) known.add(e); };
     const scan = async (name, pk, cols) => { try { (await all(await table(name), pk, cols)).forEach(r => cols.forEach(c => add(r[c]))); } catch {} };
     await Promise.all([scan("pnl", "pnl", ["owner"]), scan("deals", "deal", ["owner", "createdBy"]), scan("pdc", "cheque", ["createdBy"]), scan("customers", "customer", ["createdBy"]),
-      scan("amc", "amc", ["owner"]), scan("amcvisits", "visit", ["createdBy", "updatedBy"])]);
+      scan("amc", "amc", ["owner"]), scan("amcvisits", "visit", ["createdBy", "updatedBy"]), scan("mkcampaigns", "bifold", ["createdBy", "updatedBy"]), scan("mkcampaigns", "techhub", ["createdBy", "updatedBy"])]);
     rows.forEach(r => known.add(r.rowKey));
     const listed = new Map(rows.map(r => [r.rowKey, r]));
     const managers = coManagers(co);

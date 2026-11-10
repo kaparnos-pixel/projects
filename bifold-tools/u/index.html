@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Email preferences</title>
+<style>
+:root{--navy:#1B2A4A;--accent:#C0392B;--soft:#EEF3F9;--bg:#EDF0F5;--fg:#1D2733;--muted:#5E6B7A;--line:#DCE3EC;--good:#1F7A4D}
+html[data-co="techhub"]{--navy:#003C50;--accent:#28A08C;--soft:#E6F4F2;--bg:#ECF2F3}
+@media (prefers-color-scheme:dark){:root{--bg:#0F161D;--fg:#E3E9EF;--muted:#93A3B2;--line:#2A3846;--good:#5CC78F}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--fg);font:15px/1.55 Arial,"Helvetica Neue",Helvetica,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px max(16px,env(safe-area-inset-right)) 24px max(16px,env(safe-area-inset-left))}
+.card{width:min(480px,100%);background:#fff;color:#1D2733;border-radius:14px;overflow:hidden;box-shadow:0 18px 48px rgba(10,28,51,.14)}
+.hd{padding:22px 28px;border-bottom:4px solid var(--accent);display:flex;align-items:center;min-height:86px}
+.hd img{height:40px;width:auto;display:block}
+.bd{padding:26px 28px 30px}
+h1{margin:0 0 8px;font-size:21px;color:var(--navy)}
+p{margin:0 0 14px;color:#4A5866}
+b.em{color:#1D2733}
+button{font:inherit;font-weight:700;border-radius:8px;padding:12px 20px;cursor:pointer;border:2px solid var(--navy);background:var(--navy);color:#fff;width:100%}
+button:hover{filter:brightness(1.1)}
+button.link{background:none;border:0;color:var(--navy);text-decoration:underline;padding:6px 0;width:auto;font-weight:600}
+button:disabled{opacity:.6;cursor:default}
+.ok{display:flex;gap:10px;align-items:flex-start;background:#E7F5EE;border-radius:10px;padding:12px 14px;margin:0 0 14px;color:#1F5E3E}
+.ok i{font-style:normal;font-weight:700}
+.err{color:#B4322C;font-weight:600}
+.ft{padding:14px 28px;background:var(--navy);color:#C9D6E6;font-size:12px}
+</style>
+</head>
+<body>
+<main class="card" aria-live="polite">
+  <div class="hd" id="hd"></div>
+  <div class="bd" id="bd"><p>Loading…</p></div>
+  <div class="ft" id="ft"></div>
+</main>
+<script>
+(function () {
+  const q = new URLSearchParams(location.search).get("k") || "";
+  const parts = q.split("/");
+  const co = /^(bifold|techhub)$/.test(parts[0]) ? parts[0] : "bifold";
+  document.documentElement.dataset.co = co;
+  const NAME = { bifold: "Bifold Technologies", techhub: "Tech Hub Information Technology" }[co];
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  document.getElementById("hd").innerHTML = `<img src="/email/${co}.png" alt="${esc(NAME)}">`;
+  document.getElementById("ft").textContent = NAME;
+  const bd = document.getElementById("bd");
+  const url = "/api/public/unsub/" + parts.map(encodeURIComponent).join("/");
+  const call = (m, extra) => fetch(url + (extra || ""), { method: m }).then(r => r.json().then(j => r.ok ? j : Promise.reject(j)));
+
+  function show(d) {
+    if (d.status === "unsubscribed") {
+      bd.innerHTML = `<h1>You're unsubscribed</h1><div class="ok"><i>✓</i><span><b class="em">${esc(d.email)}</b> won't receive marketing emails from ${esc(d.company)} any more.</span></div>
+        <p>It can take a day for any email that was already on its way to stop. You may still hear from us about orders, contracts or support you have with us.</p>
+        <button type="button" class="link" id="re">Unsubscribed by mistake? Subscribe again</button>`;
+      document.getElementById("re").onclick = () => act("POST", "/resubscribe");
+    } else if (d.status === "subscribed" && d.resubscribed) {
+      bd.innerHTML = `<h1>Welcome back</h1><p><b class="em">${esc(d.email)}</b> will receive emails from ${esc(d.company)} again. Thank you.</p>`;
+    } else {
+      bd.innerHTML = `<h1>Unsubscribe from ${esc(d.company)} emails?</h1><p>We'll stop sending marketing emails to <b class="em">${esc(d.email)}</b>.</p><button type="button" id="go">Unsubscribe</button>`;
+      document.getElementById("go").onclick = () => act("POST");
+    }
+  }
+  function act(m, extra) {
+    bd.querySelectorAll("button").forEach(b => { b.disabled = true; });
+    call(m, extra).then(d => { if (extra) d.resubscribed = true; show(d); }).catch(e => { bd.insertAdjacentHTML("beforeend", `<p class="err">${esc((e && e.error) || "Something went wrong. Please try again.")}</p>`); bd.querySelectorAll("button").forEach(b => { b.disabled = false; }); });
+  }
+  if (parts.length < 3) { bd.innerHTML = `<h1>This link is incomplete</h1><p>Please use the full unsubscribe link from the email, or simply reply to the email and ask us to remove you.</p>`; return; }
+  call("GET").then(show).catch(e => { bd.innerHTML = `<h1>We couldn't open this link</h1><p>${esc((e && e.error) || "Please try again in a moment.")}</p>`; });
+})();
+</script>
+</body>
+</html>

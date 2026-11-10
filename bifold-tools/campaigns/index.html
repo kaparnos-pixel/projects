@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Email Campaigns · Bifold Tools</title>
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
+<link rel="stylesheet" href="/campaigns/campaigns.css">
+<script src="/assets/access.js" data-section="campaigns"></script>
+</head>
+<body>
+<div class="brandbar"><div class="in">
+  <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
+  <nav><a href="/">All tools</a><a href="/.auth/logout">Sign out</a></nav>
+</div></div>
+
+<div class="wrap mk">
+  <header class="top" id="pageHead">
+    <div>
+      <h1><span class="tag">Marketing</span>Email Campaigns</h1>
+      <p class="sub" id="pageSub">Design branded emails, send them to your contact lists on a schedule, and let people unsubscribe in one click.</p>
+    </div>
+    <div class="acts" id="headActs"></div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections" id="tabs">
+    <a href="#campaigns" data-tab="campaigns">Campaigns</a>
+    <a href="#contacts" data-tab="contacts">Contacts &amp; lists</a>
+    <a href="#media" data-tab="media">Image library</a>
+    <a href="#settings" data-tab="settings">Settings</a>
+  </nav>
+
+  <div id="setupNote" class="note-banner" hidden></div>
+
+  <!-- Campaigns list -->
+  <section id="v-campaigns" class="view" hidden>
+    <div class="kpis" id="kpis"></div>
+    <div class="tools">
+      <div class="seg" role="group" aria-label="Status" id="cStatus">
+        <button type="button" data-v="" aria-pressed="true">All</button>
+        <button type="button" data-v="draft" aria-pressed="false">Drafts</button>
+        <button type="button" data-v="scheduled" aria-pressed="false">Scheduled</button>
+        <button type="button" data-v="sending" aria-pressed="false">Sending</button>
+        <button type="button" data-v="sent" aria-pressed="false">Sent</button>
+      </div>
+      <input id="cQ" type="search" placeholder="Search campaigns" aria-label="Search campaigns">
+      <span class="cnt" id="cCnt"></span>
+    </div>
+    <div id="cList" class="clist"><div class="empty">Loading campaigns…</div></div>
+  </section>
+
+  <!-- Editor -->
+  <section id="v-edit" class="view" hidden>
+    <div class="ebar">
+      <a href="#campaigns" class="back" aria-label="Back to campaigns">←</a>
+      <input id="eName" class="ename" aria-label="Campaign name" maxlength="150">
+      <span class="stchip" id="eStatus"></span>
+      <span class="saved" id="eSaved"></span>
+      <div class="eacts">
+        <button type="button" id="eTpl" title="Save this design so the team can start from it">Save as design</button>
+        <button type="button" id="eTest">Send test</button>
+        <button type="button" class="primary" id="eSched">Schedule</button>
+      </div>
+    </div>
+    <div class="egrid">
+      <div class="ecol">
+        <div class="panel">
+          <h3 class="ph">Details</h3>
+          <label class="lbl" for="eSubject">Subject line</label>
+          <div class="withbtn"><input id="eSubject" maxlength="200" placeholder="What will make them open it?"><button type="button" class="ai-btn" id="eSuggest" title="Suggest subject lines with Claude">✦ Suggest</button></div>
+          <div class="hint"><span id="eSubLen">0</span> characters · aim for under 60 · merge fields like {{first_name|there}} work here</div>
+          <div id="eSubIdeas" class="ideas" hidden></div>
+          <label class="lbl" for="ePre" style="margin-top:12px">Preview text</label>
+          <input id="ePre" maxlength="250" placeholder="Shown after the subject in most inboxes">
+          <label class="lbl" for="eEd" style="margin-top:12px">Label at the top right (optional)</label>
+          <input id="eEd" maxlength="60" placeholder="e.g. November 2026">
+        </div>
+        <div class="panel">
+          <h3 class="ph">Audience</h3>
+          <div class="kindseg" role="radiogroup" aria-label="Audience" id="eAudMode">
+            <button type="button" data-v="all" aria-pressed="true">Everyone subscribed</button>
+            <button type="button" data-v="tags" aria-pressed="false">Selected lists</button>
+          </div>
+          <div id="eTags" class="tagpick" hidden></div>
+          <div class="audn" id="eAudN"></div>
+        </div>
+        <div class="panel">
+          <h3 class="ph">Content <span class="muted" id="eBlkN"></span></h3>
+          <div id="eBlocks" class="blocks"></div>
+          <div class="addbar">
+            <button type="button" id="eAdd" class="addbtn">+ Add a block</button>
+          </div>
+        </div>
+      </div>
+      <div class="pcol">
+        <div class="pbar">
+          <div class="seg" role="group" aria-label="Preview size" id="pSize">
+            <button type="button" data-v="desk" aria-pressed="true">Desktop</button>
+            <button type="button" data-v="mob" aria-pressed="false">Phone</button>
+          </div>
+          <span class="muted" id="pInbox"></span>
+        </div>
+        <div class="pframe" id="pWrap"><iframe id="pFrame" title="Email preview" sandbox="allow-same-origin allow-popups"></iframe></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sent / sending report -->
+  <section id="v-report" class="view" hidden></section>
+
+  <!-- Contacts -->
+  <section id="v-contacts" class="view" hidden>
+    <div class="lists" id="lists"></div>
+    <div class="tools">
+      <input id="kQ" type="search" placeholder="Search email, name or company" aria-label="Search contacts">
+      <select id="kList" aria-label="List"></select>
+      <select id="kSt" aria-label="Status">
+        <option value="">All statuses</option>
+        <option value="subscribed">Subscribed</option>
+        <option value="unsubscribed">Unsubscribed</option>
+      </select>
+      <span class="cnt" id="kCnt"></span>
+    </div>
+    <div class="bulk" id="bulk" hidden>
+      <b id="bulkN"></b>
+      <button type="button" data-b="addTag">Add to list</button>
+      <button type="button" data-b="removeTag">Remove from list</button>
+      <button type="button" data-b="unsubscribe">Unsubscribe</button>
+      <button type="button" data-b="delete" data-manager class="danger">Delete</button>
+      <button type="button" class="x" id="bulkX" aria-label="Clear selection">×</button>
+    </div>
+    <div class="panel listpanel"><div class="tblwrap">
+      <table class="list ktable">
+        <thead><tr><th class="ck"><input type="checkbox" id="kAll" aria-label="Select all shown"></th><th>Email</th><th>Name</th><th>Company</th><th>Lists</th><th>Status</th><th>Added</th></tr></thead>
+        <tbody id="kRows"></tbody>
+      </table>
+      <div class="empty" id="kEmpty">Loading contacts…</div>
+    </div>
+    <div class="pager" id="kPager"></div></div>
+  </section>
+
+  <!-- Media -->
+  <section id="v-media" class="view" hidden>
+    <label class="drop" id="drop">
+      <input type="file" id="mFile" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+      <b>Drop images here or click to upload</b>
+      <span>JPG or PNG work best in every inbox. Large photos are resized to 1200px wide so emails load fast.</span>
+    </label>
+    <div class="mgrid" id="mGrid"><div class="empty">Loading images…</div></div>
+  </section>
+
+  <!-- Settings -->
+  <section id="v-settings" class="view" hidden></section>
+</div>
+
+<!-- New campaign -->
+<dialog id="newDlg" class="wide">
+  <div class="dwrap">
+    <div class="dhead"><h3>New campaign</h3><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <div class="kindseg" role="tablist" id="newMode">
+      <button type="button" data-v="tpl" aria-pressed="true">Start from a design</button>
+      <button type="button" data-v="ai" aria-pressed="false">✦ Write it with Claude</button>
+    </div>
+    <div id="newTpl" class="tplgrid"></div>
+    <form id="newAi" hidden novalidate>
+      <label class="lbl" for="aiBrief">What is this email about?</label>
+      <textarea id="aiBrief" rows="5" placeholder="e.g. Introduce our Microsoft Teams Direct Routing service to IT managers: calling in Teams with their existing numbers, no PBX to maintain. Invite them to book a short call."></textarea>
+      <div class="fields">
+        <div><label class="lbl" for="aiAud">Who is it for? (optional)</label><input id="aiAud" placeholder="e.g. IT managers in hospitality"></div>
+        <div><label class="lbl" for="aiUrl">Button link (optional)</label><input id="aiUrl" placeholder="https://"></div>
+        <div><label class="lbl" for="aiTone">Tone</label><select id="aiTone"><option value="">Company default</option><option>Warm and friendly</option><option>Formal and executive</option><option>Energetic and upbeat</option><option>Educational</option></select></div>
+        <div><label class="lbl" for="aiLen">Length</label><select id="aiLen"><option value="standard">Standard newsletter</option><option value="short">Short and punchy</option></select></div>
+      </div>
+      <p class="hint">Claude writes the copy and layout in your company's voice. It won't invent prices or figures; add images and check every detail before sending.</p>
+      <div class="err" id="aiErr"></div>
+      <div class="foot"><span></span><div class="r2"><button type="button" data-close>Cancel</button><button type="submit" class="primary" id="aiGo">✦ Generate draft</button></div></div>
+    </form>
+  </div>
+</dialog>
+
+<!-- Block picker -->
+<dialog id="addDlg">
+  <div class="dwrap">
+    <div class="dhead"><h3>Add a block</h3><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <div class="bpick" id="bPick"></div>
+  </div>
+</dialog>
+
+<!-- Image picker -->
+<dialog id="imgDlg" class="wide">
+  <div class="dwrap">
+    <div class="dhead"><h3>Choose an image</h3><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <label class="drop small"><input type="file" id="imgFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden><b>Upload a new image</b><span>or pick one below</span></label>
+    <div class="mgrid pick" id="imgGrid"></div>
+    <div class="fields"><div class="full"><label class="lbl" for="imgUrl">Or paste an image link</label><div class="withbtn"><input id="imgUrl" placeholder="https://"><button type="button" id="imgUse">Use link</button></div></div></div>
+  </div>
+</dialog>
+
+<!-- Test send -->
+<dialog id="testDlg">
+  <form id="testForm" novalidate>
+    <div class="dhead"><h3>Send a test</h3><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <p class="hint">See exactly what your contacts will get. The subject starts with [Test]; links and the unsubscribe link work for the test address.</p>
+    <label class="lbl" for="testTo">Send to (up to 5, separated by commas)</label>
+    <input id="testTo">
+    <div class="err" id="testErr"></div>
+    <div class="foot"><span></span><div class="r2"><button type="button" data-close>Cancel</button><button type="submit" class="primary" id="testGo">Send test</button></div></div>
+  </form>
+</dialog>
+
+<!-- Schedule -->
+<dialog id="schedDlg">
+  <form id="schedForm" novalidate>
+    <div class="dhead"><h3>Schedule this campaign</h3><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <div class="kindseg" role="radiogroup" id="schedMode">
+      <button type="button" data-v="later" aria-pressed="true">At a set time</button>
+      <button type="button" data-v="now" aria-pressed="false">Send now</button>
+    </div>
+    <div id="schedWhen" class="fields"><div><label class="lbl" for="schedDate">Date</label><input type="date" id="schedDate"></div><div><label class="lbl" for="schedTime">Time (UAE)</label><input type="time" id="schedTime" step="900"></div></div>
+    <div class="summary" id="schedSum"></div>
+    <div class="err" id="schedErr"></div>
+    <div class="foot"><span></span><div class="r2"><button type="button" data-close>Cancel</button><button type="submit" class="primary" id="schedGo">Schedule</button></div></div>
+  </form>
+</dialog>
+
+<!-- Contact -->
+<dialog id="kDlg">
+  <form id="kForm" novalidate>
+    <div class="dhead"><h3 id="kTitle">Add a contact</h3><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <div class="fields">
+      <div class="full"><label class="lbl" for="k_email">Email</label><input id="k_email" type="email" required></div>
+      <div><label class="lbl" for="k_first">First name</label><input id="k_first"></div>
+      <div><label class="lbl" for="k_last">Last name</label><input id="k_last"></div>
+      <div class="full"><label class="lbl" for="k_co">Company</label><input id="k_co"></div>
+      <div class="full"><label class="lbl" for="k_tags">Lists (separate with commas)</label><input id="k_tags" list="tagOpts"></div>
+      <div class="full" id="k_stWrap" hidden><label class="lbl" for="k_st">Status</label><select id="k_st"><option value="subscribed">Subscribed</option><option value="unsubscribed">Unsubscribed</option></select><div class="hint" id="k_stHint"></div></div>
+      <div class="full" id="k_reasonWrap" hidden><label class="lbl" for="k_reason">Why are you re-subscribing this person?</label><input id="k_reason" placeholder="e.g. Asked us by email on 12 Nov to be added back"></div>
+    </div>
+    <datalist id="tagOpts"></datalist>
+    <div class="err" id="kErr"></div>
+    <div class="foot"><span class="hint" id="kMeta"></span><div class="r2"><button type="button" data-close>Cancel</button><button type="submit" class="primary" id="kGo">Save</button></div></div>
+  </form>
+</dialog>
+
+<!-- Import -->
+<dialog id="impDlg" class="wide">
+  <div class="dwrap">
+    <div class="dhead"><h3>Import contacts from CSV</h3><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <div id="impStep1">
+      <label class="drop"><input type="file" id="impFile" accept=".csv,text/csv,.txt" hidden><b>Choose a CSV file</b><span>One row per person with at least an email column. Exporting from Excel, Apollo or Zoho? Save as CSV (UTF-8).</span></label>
+    </div>
+    <div id="impStep2" hidden>
+      <p class="hint" id="impInfo"></p>
+      <div class="fields mapf" id="impMap"></div>
+      <div class="tblwrap"><table class="list mini" id="impPrev"></table></div>
+      <div class="fields">
+        <div><label class="lbl" for="impTag">Add everyone to this list</label><input id="impTag" list="tagOpts"></div>
+        <div><label class="lbl" for="impSrc">Where did these contacts come from?</label><input id="impSrc" placeholder="e.g. Apollo export, GITEX leads, customer list"></div>
+      </div>
+      <label class="consent"><input type="checkbox" id="impOk"> These are customers or business contacts we may email about our products and services. People who unsubscribed before stay unsubscribed.</label>
+      <div class="err" id="impErr"></div>
+      <div class="prog" id="impProg" hidden><div></div></div>
+      <div class="foot"><button type="button" id="impBack">Choose another file</button><div class="r2"><button type="button" data-close>Cancel</button><button type="button" class="primary" id="impGo">Import</button></div></div>
+    </div>
+    <div id="impStep3" hidden></div>
+  </div>
+</dialog>
+
+<!-- Prompt (list name, template name) -->
+<dialog id="askDlg">
+  <form id="askForm" novalidate>
+    <div class="dhead"><h3 id="askTitle"></h3><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <label class="lbl" for="askIn" id="askLbl"></label><input id="askIn" list="tagOpts">
+    <div class="err" id="askErr"></div>
+    <div class="foot"><span></span><div class="r2"><button type="button" data-close>Cancel</button><button type="submit" class="primary" id="askGo">OK</button></div></div>
+  </form>
+</dialog>
+
+<script src="/api/mk/render.js"></script>
+<script src="/campaigns/templates.js"></script>
+<script src="/campaigns/app.js"></script>
+</body>
+</html>

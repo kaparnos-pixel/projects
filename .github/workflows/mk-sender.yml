@@ -1,0 +1,46 @@
+name: Email campaign sender
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # every 10 minutes: starts due campaigns and keeps sending large ones
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only list what would be sent"
+        type: boolean
+        default: false
+
+# One run at a time, so a long send is never picked up twice.
+concurrency:
+  group: mk-sender
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+            bifold-tools-api
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install storage client
+        run: npm ci --omit=dev --prefix bifold-tools-api
+      - name: Send due campaigns
+        env:
+          NODE_PATH: bifold-tools-api/node_modules
+          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION }}
+          ACS_CONNECTION: ${{ secrets.ACS_CONNECTION }}
+          MK_SENDER_BIFOLD: ${{ secrets.MK_SENDER_BIFOLD }}
+          MK_SENDER_TECHHUB: ${{ secrets.MK_SENDER_TECHHUB }}
+          MK_SECRET: ${{ secrets.MK_SECRET }}
+          MK_PUBLIC_URL: ${{ vars.MK_PUBLIC_URL }}
+          MK_PUBLIC_URL_TECHHUB: ${{ vars.MK_PUBLIC_URL_TECHHUB }}
+          MK_PER_MINUTE: ${{ vars.MK_PER_MINUTE }}
+          MK_PER_HOUR: ${{ vars.MK_PER_HOUR }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: node .github/scripts/mk-sender.cjs

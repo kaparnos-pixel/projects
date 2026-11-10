@@ -463,11 +463,17 @@ async function deleteCheque(user, id) {
 let amcRoute;
 const amc = () => amcRoute || (amcRoute = require("./amc")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, emailOk, CUST, CPK }));
 
+// ---------- team access (src/access.js) ----------
+let accessMod;
+const access = () => accessMod || (accessMod = require("./access")({ table, getOrNull, all, fail, clean, emailOk, domains, managers }));
+
 // ---------- routing ----------
 async function route(method, seg, user, body) {
   const [a, id, sub] = seg;
+  access().guard(method, seg, body, user);
+  if (a === "access") return access().route(method, seg, user, body);
   if (a === "amc") return amc()(method, seg.slice(1), user, body);
-  if (a === "me" && method === "GET") return { ...user, managers: managers(), domains: domains() };
+  if (a === "me" && method === "GET") { access().touch(user.email); return { ...user, managers: managers(), domains: domains(), allSections: access().SECTIONS }; }
   if (a === "customers") {
     if (!id && method === "GET") return listCustomers();
     if (!id && method === "POST") return createCustomer(user, body);
@@ -502,6 +508,7 @@ async function route(method, seg, user, body) {
 async function dispatch(method, path, getHeader, readBody, log = console) {
   try {
     const user = getUser(getHeader);
+    user.sections = await access().sectionsFor(user);
     const seg = String(path || "").replace(/^\/+|\/+$/g, "").split("/").filter(Boolean).map(decodeURIComponent);
     let body = {};
     if (method === "POST" || method === "PUT") { try { body = (await readBody()) || {}; } catch { fail(400, "The request could not be read."); } }

@@ -367,8 +367,10 @@ module.exports = function makeAmc(H) {
   return async function route(method, seg, user, body) {
     const [a, id, sub] = seg;
     if (a === "bootstrap" && method === "GET") {
-      const [amcs, contracts, visits] = await Promise.all([listAmcs(user), listContracts(), listVisits()]);
-      return { amcs, contracts, visits, features: { ai: AI.ready(), mail: mailReady() } };
+      // Without the AMC section the commercial records stay hidden; contracts and visits are still shown for planning.
+      const canAmc = user.isManager || (user.sections || []).includes("amc");
+      const [amcs, contracts, visits] = await Promise.all([canAmc ? listAmcs(user) : [], listContracts(), listVisits()]);
+      return { amcs, contracts, visits, features: { ai: AI.ready(), mail: mailReady() }, can: { amc: canAmc, visits: user.isManager || (user.sections || []).includes("visits") } };
     }
     if (a === "amcs") {
       if (!id && method === "POST") return createAmc(user, body);

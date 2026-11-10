@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bifold Team Access</title>
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
+<style>
+/* Layout: one access matrix (people × sections) under a default-access panel; checkboxes save as you tick them. */
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:20px}
+.stack{display:grid;gap:16px}
+.panel h2{margin:0 0 4px;font-family:var(--f-display);font-size:16px}
+.panel .sub{margin:0 0 12px}
+.defaults{display:flex;flex-wrap:wrap;gap:8px 18px}
+.defaults label{display:flex;gap:8px;align-items:center;font-weight:600;font-size:13px}
+.defaults input,.matrix input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);margin:0}
+.addrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.addrow input{max-width:320px}
+.addrow select{width:auto}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+.filters input{max-width:300px}
+.listpanel{padding:0;overflow:hidden}
+table.matrix{width:100%;border-collapse:collapse;min-width:980px}
+.matrix th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;padding:10px 8px;border-bottom:1px solid var(--line);text-align:center;vertical-align:bottom;line-height:1.25}
+.matrix th:first-child,.matrix td:first-child{text-align:left;padding-left:16px}
+.matrix th .h{display:block;font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;margin-top:2px}
+.matrix td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:center;vertical-align:middle}
+.matrix tr:last-child td{border-bottom:0}
+.matrix td .e{font-weight:700;overflow-wrap:anywhere}
+.matrix th:first-child,.matrix td:first-child{min-width:230px}
+.matrix td .s{font-size:12px;color:var(--muted)}
+.matrix tr.mgr td{background:var(--accent-soft)}
+.matrix tr.none td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+.tagd{font-size:11px;font-weight:700;border-radius:99px;padding:2px 8px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.tagd.custom{background:var(--good-soft);color:var(--good)}
+.tagd.mgr{background:var(--warn-soft);color:var(--warn)}
+.acts{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.acts select{width:auto;padding:5px 8px;font-size:12.5px}
+.acts button{padding:5px 9px;font-size:12.5px}
+.note{font-size:12.5px;color:var(--muted)}
+</style>
+<script src="/assets/access.js" data-section="manager"></script>
+</head>
+<body>
+<div class="brandbar"><div class="in">
+  <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
+  <nav><a href="/">All tools</a><a href="/pnl/">PnL Calculator</a><a href="/pipeline/">Sales Pipeline</a><a href="/pdc/">PDC &amp; Guarantees</a><a href="/customers/">Customers</a><a href="/amc/">AMC Tracker</a><span id="who"></span><a href="/.auth/logout">Sign out</a></nav>
+</div></div>
+<div class="wrap stack">
+  <header class="top">
+    <div>
+      <h1><span class="tag">Bifold Tools</span>Team access</h1>
+      <p class="sub">Choose which tools and sections each Bifold user can use. Changes save as you tick and apply within a minute. Managers always have full access.</p>
+    </div>
+  </header>
+
+  <section class="panel">
+    <h2>Default for people not listed below</h2>
+    <p class="sub">Applies to anyone who signs in with a Bifold account and has no access set of their own.</p>
+    <div class="defaults" id="defaults"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Give someone access</h2>
+    <div class="addrow">
+      <input id="newEmail" type="email" placeholder="name@bifoldtech.com" aria-label="Email address" autocomplete="off">
+      <select id="newPreset" aria-label="Starting access"></select>
+      <button class="primary" type="button" id="addBtn">Add person</button>
+    </div>
+    <div class="err" id="addErr" role="alert"></div>
+  </section>
+
+  <section>
+    <div class="filters"><input id="q" type="search" placeholder="Search people" aria-label="Search people"><span class="note" id="count"></span></div>
+    <div class="panel listpanel"><div class="tblwrap">
+      <table class="matrix"><thead id="head"></thead><tbody id="rows"></tbody></table>
+    </div><div class="empty" id="empty">Loading…</div></div>
+    <p class="note">People appear here once they have signed in or used a tool. Ticks on a "Default" row are the default access; change any tick to give that person their own access.</p>
+  </section>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const day=iso=>iso?new Date(iso).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"";
+function toast(m,e){const t=document.createElement("div");t.className="toast"+(e?" err":"");t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),e?6000:2200)}
+async function api(method,path,body){
+  let r;try{r=await fetch("/api/"+path,{method,headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,cache:"no-store"})}catch{throw new Error("Can't reach the server. Check your connection and try again.")}
+  const ct=r.headers.get("content-type")||"";
+  if(r.redirected||(r.ok&&r.status!==204&&!ct.includes("json")))throw new Error("Your session has ended. Reload the page to sign in again.");
+  let j=null;if(r.status!==204){try{j=await r.json()}catch{}}
+  if(!r.ok)throw new Error((j&&j.error)||"The request failed.");return j;
+}
+// Starting points for common roles; every tick can still be changed afterwards.
+const PRESETS=[
+  {key:"engineer",name:"Engineer: maintenance visits",sections:["visits"]},
+  {key:"sales",name:"Sales: pipeline, AMCs, PnL, customers",sections:["pipeline","amc","pnl","customers"]},
+  {key:"accounts",name:"Accounts: PDC log, PnL, customers",sections:["pdc","pnl","customers"]},
+  {key:"coordinator",name:"Coordinator: AMCs, visits, customers",sections:["amc","visits","customers"]},
+  {key:"all",name:"Everything",sections:null},
+  {key:"none",name:"No access",sections:[]},
+];
+let D=null,SEC=[];
+const sameSet=(a,b)=>a.length===b.length&&a.every(x=>b.includes(x));
+function presetSections(k){const p=PRESETS.find(x=>x.key===k);return p.sections===null?SEC.map(s=>s.key):p.sections.slice()}
+function renderDefaults(){
+  $("defaults").innerHTML=SEC.map(s=>`<label title="${esc(s.hint)}"><input type="checkbox" data-k="${s.key}" ${D.defaultSections.includes(s.key)?"checked":""}> ${esc(s.name)}</label>`).join("");
+  $("defaults").querySelectorAll("input").forEach(cb=>cb.onchange=async()=>{
+    const next=[...$("defaults").querySelectorAll("input:checked")].map(x=>x.dataset.k);
+    try{D.defaultSections=(await api("PUT","access/default",{sections:next})).defaultSections;toast("Default access saved");render()}catch(e){cb.checked=!cb.checked;toast(e.message,1)}
+  });
+}
+function render(){
+  $("head").innerHTML=`<tr><th>Person</th>${SEC.map(s=>`<th title="${esc(s.hint)}">${esc(s.name)}</th>`).join("")}<th>Access</th><th></th></tr>`;
+  const q=$("q").value.trim().toLowerCase();
+  const list=D.users.filter(u=>!q||u.email.includes(q));
+  $("count").textContent=list.length+" of "+D.users.length+" people";
+  $("rows").innerHTML="";
+  list.forEach(u=>{
+    const eff=u.isManager?SEC.map(s=>s.key):u.listed?u.sections:D.defaultSections;
+    const tr=document.createElement("tr");if(u.isManager)tr.className="mgr";else if(!eff.length)tr.className="none";
+    const tag=u.isManager?'<span class="tagd mgr">Manager: full access</span>':u.listed?'<span class="tagd custom">Own access</span>':'<span class="tagd">Default</span>';
+    tr.innerHTML=`<td><div class="e">${esc(u.email)}</div><div class="s">${u.lastSeen?"Last signed in "+esc(day(u.lastSeen)):"Not signed in yet"}${u.listed&&u.updatedBy?" · set by "+esc(u.updatedBy):""}</div></td>`+
+      SEC.map(s=>`<td><input type="checkbox" data-k="${s.key}" aria-label="${esc(s.name)} for ${esc(u.email)}" ${eff.includes(s.key)?"checked":""} ${u.isManager?"disabled":""}></td>`).join("")+
+      `<td>${tag}</td><td>${u.isManager?"":`<div class="acts"><select aria-label="Apply a role to ${esc(u.email)}"><option value="">Apply role…</option>${PRESETS.map(p=>`<option value="${p.key}">${esc(p.name)}</option>`).join("")}</select>${u.listed?'<button type="button" data-reset>Use default</button>':""}</div>`}</td>`;
+    if(!u.isManager){
+      const save=async(sections,msg)=>{try{const r=await api("PUT","access/users/"+encodeURIComponent(u.email),{sections});Object.assign(u,{listed:true,sections:r.sections,updatedBy:r.updatedBy,updatedAt:r.updatedAt});toast(msg||"Access saved for "+u.email);render()}catch(e){toast(e.message,1);render()}};
+      tr.querySelectorAll("input[type=checkbox]").forEach(cb=>cb.onchange=()=>save([...tr.querySelectorAll("input[type=checkbox]:checked")].map(x=>x.dataset.k)));
+      tr.querySelector("select").onchange=e=>{if(e.target.value)save(presetSections(e.target.value),"Role applied for "+u.email)};
+      const rb=tr.querySelector("[data-reset]");if(rb)rb.onclick=async()=>{try{await api("DELETE","access/users/"+encodeURIComponent(u.email));Object.assign(u,{listed:false,sections:null,updatedBy:""});toast(u.email+" now uses the default");render()}catch(e){toast(e.message,1)}};
+    }
+    $("rows").appendChild(tr);
+  });
+  $("empty").hidden=list.length>0;$("empty").textContent=D.users.length?"No one matches your search.":"No one has signed in yet. Add people above.";
+}
+$("newPreset").innerHTML=PRESETS.map(p=>`<option value="${p.key}">${esc(p.name)}</option>`).join("");
+$("q").oninput=()=>render();
+$("addBtn").onclick=async()=>{
+  const email=$("newEmail").value.trim().toLowerCase();$("addErr").textContent="";
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return $("addErr").textContent="Enter the person's Bifold email address.";
+  try{
+    const r=await api("PUT","access/users/"+encodeURIComponent(email),{sections:presetSections($("newPreset").value)});
+    const u=D.users.find(x=>x.email===email);
+    if(u)Object.assign(u,{listed:true,sections:r.sections,updatedBy:r.updatedBy});else D.users.unshift({email,isManager:false,listed:true,sections:r.sections,updatedBy:r.updatedBy,lastSeen:""});
+    $("newEmail").value="";toast("Access saved for "+email);render();
+  }catch(e){$("addErr").textContent=e.message}
+};
+$("newEmail").onkeydown=e=>{if(e.key==="Enter")$("addBtn").click()};
+(async()=>{
+  try{D=await api("GET","access");SEC=D.sections;$("who").textContent=(window.BIFOLD_ME&&window.BIFOLD_ME.email)||"";renderDefaults();render()}
+  catch(e){$("empty").textContent=e.message}
+})();
+</script>
+</body>
+</html>

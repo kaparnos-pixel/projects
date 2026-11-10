@@ -12,7 +12,7 @@ const STATUS = { draft: "Draft", sent: "Proposal sent", awarded: "Awarded", lost
 const PM_LABEL = { 0: "No scheduled PM", 1: "Monthly", 3: "Quarterly", 6: "Every 6 months", 12: "Once a year" };
 
 /* ============ state ============ */
-const S = { me: null, meId: null, isAdmin: false, features: { ai: false, mail: false },
+const S = { me: null, meId: null, isAdmin: false, features: { ai: false, mail: false }, can: { amc: true, visits: true },
   customers: new Map(), amcs: new Map(), contracts: new Map(), visits: new Map(), amcFilter: "all", visitFilter: "upcoming",
   openAmc: null, openVisit: null, draftFiles: [], ready: false };
 
@@ -137,8 +137,19 @@ const nameOf = email => !email ? "-" : email === S.meId ? "You" : String(email).
 
 /* ============ routing ============ */
 const VIEWS = ["overview", "amcs", "visits"];
+// Team access: without the AMC section, proposals and contract values are hidden; without the visits
+// section, visits are read-only. The API enforces the same rules.
+function applyCan() {
+  const c = S.can;
+  document.querySelectorAll('nav.tabs a[data-v="amcs"], [data-act="new-amc"], [data-act="export-amcs"]').forEach(el => el.hidden = !c.amc);
+  document.querySelectorAll('[data-act="new-visit"]').forEach(el => el.hidden = !c.visits);
+  document.querySelector("#v-overview .view-head p").textContent = c.amc ? "Contracts, renewals and site visits across Bifold's maintenance book." : "Maintenance visits for Bifold's awarded contracts.";
+  route();
+}
 function route() {
-  const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
+  const open = VIEWS.filter(n => n !== "amcs" || S.can.amc);
+  const v = open.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
+  if (location.hash && location.hash.slice(1) !== v) history.replaceState(null, "", "#" + v);
   VIEWS.forEach(n => { $("v-" + n).hidden = n !== v; });
   document.querySelectorAll("nav.tabs a").forEach(a => { if (a.dataset.v === v) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
 }
@@ -155,6 +166,7 @@ function renderAlerts() {
   bar.hidden = false;
   const first = list[0]; const d = daysTo(first.end);
   bar.innerHTML = `<b>${list.length} contract${list.length > 1 ? "s" : ""} need${list.length > 1 ? "" : "s"} renewal</b><span>${esc(first.customerName)} ${d < 0 ? "expired on" : "expires on"} ${esc(fmt(first.end))}${list.length > 1 ? ` and ${list.length - 1} more` : ""}.</span><button type="button" class="sm" id="alertGo">Review</button>`;
+  $("alertGo").hidden = !S.can.amc;
   $("alertGo").onclick = () => { S.amcFilter = "expiring"; syncSeg("amcSeg", "expiring"); location.hash = "amcs"; renderAmcs(); };
 }
 
@@ -174,7 +186,7 @@ function renderOverview() {
     ["Open proposals", pipe.length, aed(pipe.reduce((s, a) => s + num(a.value), 0)) + " in pipeline"],
     ["Visits due in 14 days", due.length, `${doneMonth.length} completed this month`],
     ["Overdue visits", overdue.length, overdue.length ? "Scheduled date has passed" : "Nothing overdue", overdue.length > 0],
-  ].map(([k, v, s, hot]) => `<div class="kpi${hot ? " hot" : ""}"><span class="k">${esc(k)}</span><span class="v mono">${esc(v)}</span><span class="s">${esc(s)}</span></div>`).join("");
+  ].filter(x => S.can.amc || !/value|proposals/i.test(x[0])).map(([k, v, s, hot]) => `<div class="kpi${hot ? " hot" : ""}"><span class="k">${esc(k)}</span><span class="v mono">${esc(v)}</span><span class="s">${esc(s)}</span></div>`).join("");
 
   const att = [];
   alertContracts().forEach(c => att.push({ when: c.end, html: `<span class="dateblock late"><div class="m">${esc(fmt(c.end).split(" ")[1] || "")}</div><div class="d">${esc(fmt(c.end).split(" ")[0])}</div></span><span><span class="t">${esc(c.customerName)}</span><br><span class="sub">${daysTo(c.end) < 0 ? "Contract expired. Start the renewal" : "Contract expires in " + daysTo(c.end) + " days"} · ${esc(c.ref)}</span></span>${chip(contractState(c))}`, open: () => openAmcById(c.amcId) }));
@@ -540,7 +552,12 @@ async function buildContract(c, kind) {
 }
 
 /* ============ amc sheet ============ */
-function openAmcById(id) { const a = S.amcs.get(id); if (a) openAmc(a); else toast("You don't have access to that AMC's commercial record."); }
+function openAmcById(id) {
+  const a = S.amcs.get(id); if (a) return openAmc(a);
+  const vs = [...S.visits.values()].filter(v => v.amcId === id).sort((x, y) => x.scheduledDate.localeCompare(y.scheduledDate));
+  if (!S.can.amc && vs.length) { $("visitContract").value = id; S.visitFilter = "all"; syncSeg("visitSeg", "all"); location.hash = "visits"; renderVisits(); return; }
+  toast("You don't have access to this AMC. Ask Ranjan for access to AMC proposals.");
+}
 function openAmc(a) { S.openAmc = a.id; renderAmcSheet(); if (!$("sAmc").open) $("sAmc").showModal(); }
 $("sAmc").addEventListener("close", () => { S.openAmc = null; });
 let loadingFull = null;
@@ -606,6 +623,7 @@ function wireAmcSheet(a, c) {
   on("x_pdf", b => downloadProposal(a, "pdf", b));
   on("x_share", () => openShare({ kind: "amc", a }));
   on("x_visit", () => openNewVisit(a.id));
+  if (!S.can.visits && $("x_visit")) $("x_visit").hidden = true;
   on("x_renew", b => startRenewal(a, c, b));
   on("x_goRenewal", () => openAmcById(c.renewalAmcId));
   on("x_srDocx", async b => { busy(b, true, ""); try { await save(safeName(c.ref + " " + shortName(c.customerName) + " Service Report") + ".docx", await buildContract(c, "docx")); } catch (e) { toast(errMsg(e)); } finally { busy(b, false); } });
@@ -792,6 +810,7 @@ async function createVisit(c, o) {
   S.visits.set(v.id, v); return v.id;
 }
 function openNewVisit(amcId) {
+  if (!S.can.visits) { toast("You don't have access to maintenance visits. Ask Ranjan for access."); return; }
   const cs = [...S.contracts.values()].filter(c => ["active", "expiring"].includes(contractState(c))).sort((a, b) => a.customerName.localeCompare(b.customerName));
   if (!cs.length) { toast("Mark an AMC as awarded first. Visits belong to awarded contracts.", 4000); return; }
   $("nv_contract").innerHTML = cs.map(c => `<option value="${esc(c.amcId)}">${esc(c.customerName)} · ${esc(c.ref)}</option>`).join("");
@@ -846,6 +865,11 @@ function renderVisitSheet() {
     <button type="button" class="danger sm" id="vf_delete" style="margin-left:auto">Delete</button></div><div class="err" id="vf_err" role="alert"></div></div>`);
   $("vs_body").innerHTML = B.join("");
   renderChecklist(); renderPhotos(); wireVisit();
+  if (!S.can.visits) {
+    $("vs_body").querySelectorAll("input, textarea, select").forEach(el => el.disabled = true);
+    $("vs_body").querySelectorAll(".ck button, .ph .x, .drop, details.more, #vf_ckNew, #vf_ckAdd, #vf_share, #vf_save, #vf_start, #vf_complete, #vf_reopen, #vf_cancel, #vf_delete, #vf_files [data-rm]").forEach(el => el.hidden = true);
+    const n = document.createElement("div"); n.className = "callout"; n.textContent = "View only. Ask Ranjan for access to maintenance visits to update this visit."; $("vs_body").prepend(n);
+  }
 }
 function renderChecklist() {
   const box = $("vf_ck"); box.innerHTML = "";
@@ -1006,6 +1030,7 @@ const csvCell = v => { const s = String(v == null ? "" : v); return /[",\n]/.tes
 async function refresh() {
   const r = await api("GET", "amc/bootstrap");
   S.features = r.features || S.features;
+  if (r.can) { S.can = r.can; applyCan(); }
   const keepFull = new Map([...S.amcs.values()].filter(a => a._full).map(a => [a.id, a]));
   S.amcs.clear();
   r.amcs.forEach(a => { const f = keepFull.get(a.id); S.amcs.set(a.id, f && f.updatedAt === a.updatedAt ? f : a); });

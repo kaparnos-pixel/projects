@@ -96,7 +96,7 @@ function wireDrop(drop, input, onFiles) {
 /* ============ db paths ============ */
 // Every change goes through the API, which checks access and returns the full saved record.
 async function writeAmc(a, patch, logText) {
-  const body = {}; ["customerId", "systems", "value", "status", "proposal", "proposalSource", "proposalStatus", "files"].forEach(k => { if (patch[k] !== undefined) body[k] = patch[k]; });
+  const body = {}; ["customerId", "systems", "value", "status", "proposal", "proposalSource", "proposalStatus", "files", "proposedStart", "termMonths", "terms"].forEach(k => { if (patch[k] !== undefined) body[k] = patch[k]; });
   if (logText) body.log = logText;
   const full = await api("PUT", "amc/amcs/" + encodeURIComponent(a.id), body);
   full._full = true; S.amcs.set(full.id, full); return full;
@@ -289,15 +289,49 @@ wireDrop($("a_drop"), $("a_fileInput"), async files => {
     try { S.draftFiles.push(await uploadFile(f)); } catch (e) { toast(errMsg(e)); } }
   renderDraftFiles();
 });
+/* contract details on the AMC form: defaults follow the template until the creator changes them */
+const PAY_TEXT = {
+  annual: ["Annual advance payment — 100% due on contract signing."],
+  semi: ["Semi-annual payment — 50% on contract signing and 50% at the start of month 7."],
+  quarterly: ["Quarterly payment in advance — four equal instalments of 25%, the first due on contract signing."],
+  monthly: ["Monthly payment in advance — twelve equal instalments, the first due on contract signing."],
+};
+const PM_TEXT = { monthly: "Monthly", quarterly: "Quarterly", semiannual: "Every 6 months", annual: "Once a year", none: "Not included" };
+const PM_MONTHS = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12, none: 0 };
+const touched = new Set();
+const defStart = () => addMonths(today().slice(0, 8) + "01", 1);
+const endFor = (start, months) => start ? addDays(addMonths(start, +months || 12), -1) : "";
+function applyDefaults() {
+  const v = num($("a_value").value), small = !v || v < 15000, cust = S.customers.get($("a_customer").value) || {};
+  const set = (id, val) => { if (!touched.has(id)) $(id).value = val; };
+  set("a_start", defStart()); set("a_end", endFor($("a_start").value, $("a_months").value));
+  set("a_attn", cust.contactName || ""); set("a_loc", cust.emirate && cust.emirate !== "Outside UAE" ? cust.emirate + ", UAE" : "Dubai, UAE");
+  set("a_pm", small ? "quarterly" : "monthly"); set("a_pay", small ? "annual" : "semi");
+  set("a_cov", v > 60000 ? "Mon–Sat, 8 AM – 8 PM" : "Mon–Sat, 9 AM – 6 PM");
+}
+["a_start", "a_months", "a_end", "a_attn", "a_loc", "a_pm", "a_pay", "a_cov", "a_valid"].forEach(id => $(id).addEventListener("input", () => { touched.add(id); if (id === "a_start" || id === "a_months") applyDefaults(); }));
+["a_start", "a_months", "a_pm", "a_pay", "a_valid"].forEach(id => $(id).addEventListener("change", () => { touched.add(id); applyDefaults(); }));
+$("a_customer").addEventListener("change", applyDefaults); $("a_value").addEventListener("input", applyDefaults);
+function readTerms() {
+  return { proposedStart: $("a_start").value, termMonths: +$("a_months").value,
+    terms: { endDate: $("a_end").value, attention: $("a_attn").value.trim(), location: $("a_loc").value.trim(), pm: $("a_pm").value, payment: $("a_pay").value, coverage: $("a_cov").value.trim(), validDays: +$("a_valid").value } };
+}
 function openAmcForm(a) {
   editingAmc = a || null;
+  touched.clear();
+  const t = (a && a.terms) || {};
+  $("a_start").value = (a && a.proposedStart) || ""; $("a_months").value = String((a && a.termMonths) || 12); $("a_end").value = t.endDate || "";
+  $("a_attn").value = t.attention || ""; $("a_loc").value = t.location || ""; $("a_pm").value = t.pm || "quarterly"; $("a_pay").value = t.payment || "annual";
+  $("a_cov").value = t.coverage || ""; $("a_valid").value = String(t.validDays || 30);
+  if (a) { ["a_start", "a_months", "a_end", "a_valid"].forEach(id => touched.add(id)); ["attention:a_attn", "location:a_loc", "pm:a_pm", "payment:a_pay", "coverage:a_cov"].forEach(p => { const [k, id] = p.split(":"); if (t[k]) touched.add(id); }); if (!a.proposedStart) touched.delete("a_start"); if (!t.endDate) touched.delete("a_end"); }
+  $("a_more").open = !!a;
   $("dAmcTitle").textContent = a ? "Edit AMC " + a.ref : "New AMC";
   fillCustomerSelect($("a_customer"), a ? a.customerId : "");
   $("a_systems").value = a ? a.systems || "" : ""; $("a_value").value = a ? money(num(a.value)) : ""; valueHint();
   S.draftFiles = a ? (a.files || []).slice() : []; renderDraftFiles();
   $("a_filesWrap").hidden = false;
   $("a_note").textContent = a ? "Changing the systems or value marks the proposal for redrafting." : (S.features.ai ? "Claude drafts the rest of the proposal in the Bifold AMC format after you save." : "The proposal is filled from the Bifold AMC template after you save.");
-  $("a_err").textContent = ""; $("dAmc").showModal();
+  $("a_err").textContent = ""; applyDefaults(); $("dAmc").showModal();
 }
 $("fAmc").onsubmit = async e => {
   e.preventDefault();
@@ -306,14 +340,21 @@ $("fAmc").onsubmit = async e => {
   if (!systems) { $("a_err").textContent = "Describe the systems the AMC covers."; return; }
   if (!(value > 0)) { $("a_err").textContent = "Enter the annual AMC value in AED, excluding VAT."; return; }
   const cust = S.customers.get(cid);
+  const T = readTerms();
+  if (T.terms.endDate && T.proposedStart && T.terms.endDate <= T.proposedStart) { $("a_err").textContent = "The contract end date must be after the start date."; $("a_more").open = true; return; }
   busy($("a_save"), true, "Saving");
   try {
     if (editingAmc) {
       const changed = editingAmc.systems !== systems || num(editingAmc.value) !== value || editingAmc.customerId !== cid;
-      const a = await writeAmc(editingAmc, { customerId: cid, customerName: cust.name, systems, value, files: S.draftFiles, proposalStale: changed ? true : !!editingAmc.proposalStale }, changed ? "Edited systems / value" : "Edited AMC");
+      const patch = Object.assign({ customerId: cid, customerName: cust.name, systems, value, files: S.draftFiles }, T);
+      const p = editingAmc.proposal;
+      if (p && editingAmc.systems === systems && editingAmc.customerId === cid) {
+        patch.proposal = assemble(Object.assign({}, editingAmc, T, { value }), cust, contentFromProposal(p)); patch.proposalSource = editingAmc.proposalSource || "template";
+      }
+      await writeAmc(editingAmc, patch, patch.proposal ? "Edited contract details (proposal updated)" : changed ? "Edited systems / value" : "Edited AMC details");
       $("dAmc").close(); toast("AMC updated"); renderAll();
     } else {
-      const a = await api("POST", "amc/amcs", { customerId: cid, systems, value, files: S.draftFiles });
+      const a = await api("POST", "amc/amcs", Object.assign({ customerId: cid, systems, value, files: S.draftFiles }, T));
       a._full = true; a.proposalStatus = "generating"; S.amcs.set(a.id, a);
       $("dAmc").close(); toast("AMC saved — drafting the proposal"); renderAll(); openAmc(a);
       generateProposal(a, "");
@@ -361,7 +402,7 @@ function fallbackContent(a, cust) {
   return {
     subtitle: PLAN[cat], planName: PLAN[cat].replace(" Plan", ""), letterSubjectTopic: PLAN[cat].replace(" Plan", " Services"),
     letter: [`Bifold Technologies LLC is pleased to submit this Annual Maintenance Contract (AMC) proposal for the support and maintenance of the systems in use at ${cust.name}. The engagement covers ${sysOne}, with structured preventive maintenance, rapid fault diagnosis, and committed response timelines.`,
-      "This proposal outlines the scope of services, response and restoration commitments, service hours, deliverables, exclusions, and commercial terms for a twelve-month engagement. The terms herein are valid for thirty days from the date of issue.",
+      `This proposal outlines the scope of services, response and restoration commitments, service hours, deliverables, exclusions, and commercial terms for a ${termWords(a)} engagement. The terms herein are valid for ${(a.terms && a.terms.validDays) || 30} days from the date of issue.`,
       "We look forward to the opportunity of supporting your operations and building a long-term partnership with your team."],
     understanding: { paragraphs: [`${cust.name} relies on the following systems for its day-to-day operations: ${sysOne}. Each element must remain available and correctly configured to sustain business continuity.`,
       `The engagement is to be delivered as an AMC providing ${pm.toLowerCase()} preventive maintenance, remote support during business hours, onsite attendance for major faults, configuration management, and committed response and restoration timelines aligned to incident priority.`],
@@ -382,27 +423,45 @@ function fallbackContent(a, cust) {
       { heading: "Disclaimers & Liability", bullets: ["No liability for force majeure events outside the reasonable control of either party.", "The customer is responsible for the legality of all software in use.", "No software will be installed without written approval from the customer.", "Bifold is not responsible for cyberattacks, toll fraud, hacking incidents, or resulting loss arising from factors outside its control."] },
       { heading: "Confidentiality", bullets: ["This proposal is confidential and intended solely for the named recipient. It may not be reproduced or disclosed to any third party without the prior written consent of Bifold Technologies LLC.", "All Bifold engineers are bound by confidentiality obligations covering client systems, data, and operational information.", "A non-disclosure agreement (NDA) will be executed before the first onsite visit, if not already in place."] },
       { heading: "System Size Assumption", text: `This agreement is based on the current footprint of ${sysOne}. Scope and commercials may be reviewed if the estate is materially expanded beyond this baseline.` }] },
-    lineItemDesc: `Annual Maintenance Contract — ${PLAN[cat].replace(" Plan", "")} (${sysLines.join(", ").slice(0, 160)}) — 12 Months`,
+    lineItemDesc: `Annual Maintenance Contract — ${PLAN[cat].replace(" Plan", "")} (${sysLines.join(", ").slice(0, 160)}) — ${termMonthsOf(a.proposedStart || defStart(), (a.terms && a.terms.endDate) || endFor(a.proposedStart || defStart(), a.termMonths || 12))} Months`,
     paymentTerms: size === "small" ? ["Annual advance payment — 100% due on contract signing."] : ["Semi-annual payment — 50% on contract signing and 50% at the start of month 7."],
     _short: short,
   };
 }
 function validContent(c) { return c && typeof c === "object" && Array.isArray(c.letter) && c.scope && Array.isArray(c.scope.streams) && c.servicePlan && Array.isArray(c.servicePlan.rows) && c.response && Array.isArray(c.response.rows) && c.exclusions && Array.isArray(c.exclusions.groups); }
 function assemble(a, cust, content) {
+  const T = a.terms || {};
   const v = num(a.value), vat = Math.round(v * 0.05 * 100) / 100, total = v + vat;
-  const t = today(); const start = a.proposedStart || addMonths(t.slice(0, 8) + "01", 1); const end = addDays(addMonths(start, a.termMonths || 12), -1);
+  const t = today(); const start = a.proposedStart || defStart(); const end = T.endDate || endFor(start, a.termMonths || 12);
+  const months = termMonthsOf(start, end); const validDays = T.validDays || 30; const valid = addDays(t, validDays);
   const short = shortName(cust.name);
-  const pay = (content.paymentTerms && content.paymentTerms.length ? content.paymentTerms : ["Annual advance payment — 100% due on contract signing."]).concat(["Support engagement commences upon contract signing and receipt of the first payment.", "VAT applicable at the prevailing rate (currently 5%).", "Additional charges may apply for customer-caused damages or scope outside this agreement."]);
+  const attention = T.attention || cust.contactName || "The Management";
+  const pay = (T.payment ? PAY_TEXT[T.payment] : content.paymentTerms && content.paymentTerms.length ? content.paymentTerms : PAY_TEXT.annual).concat(["Support engagement commences upon contract signing and receipt of the first payment.", "VAT applicable at the prevailing rate (currently 5%).", "Additional charges may apply for customer-caused damages or scope outside this agreement."]);
+  // Contract details chosen on the form win over the drafted service-plan rows.
+  const rows = (content.servicePlan.rows || []).map(r => r.slice());
+  const setRow = (re, label, val, note) => { const r = rows.find(x => re.test(String(x[0]))); if (r) { r[1] = val; if (note) r[2] = note; } else rows.push([label, val, note || ""]); };
+  if (T.pm) setRow(/^preventive maintenance/i, "Preventive Maintenance", PM_TEXT[T.pm], T.pm === "none" ? "Corrective support only" : "Scheduled health checks");
+  if (T.pm && T.pm !== "none") { const r = rows.find(x => /service reports/i.test(x[0])); if (r) r[1] = PM_TEXT[T.pm]; }
+  if (T.coverage) setRow(/^coverage hours/i, "Coverage Hours", T.coverage, /24/.test(T.coverage) ? "Round-the-clock cover" : "P1 best-effort outside hours");
   return {
-    meta: { customer: cust.name, attention: cust.contactName || "The Management", proposalNo: a.ref, date: fmt(t), validUntil: fmt(addDays(t, 30)), subtitle: content.subtitle, headerTitle: "AMC Proposal — " + short },
-    letter: { toName: cust.contactName ? cust.contactName : "The Management", toLocation: cust.emirate && cust.emirate !== "Outside UAE" ? cust.emirate + ", UAE" : "Dubai, UAE", subject: `Annual Maintenance Contract Proposal — ${content.letterSubjectTopic || content.planName} (Reference: ${a.ref})`, salutation: cust.contactName ? "Dear " + cust.contactName + "," : "Dear Sir/Madam,", body: content.letter, signoff: "Sincerely," },
-    about: ABOUT, understanding: content.understanding, scope: content.scope, servicePlan: content.servicePlan, response: content.response, documentation: content.documentation,
-    commercial: { intro: `The commercial terms set out below cover the full ${a.termMonths || 12}-month engagement from ${fmt(start)} to ${fmt(end)}.`, lineItems: [{ desc: content.lineItemDesc || ("Annual Maintenance Contract — " + content.planName + " — 12 Months"), amount: money(v) }], subtotal: money(v), vat: money(vat), vatLabel: "VAT @ 5%", total: money(total), paymentTerms: pay,
-      validity: ["All values are quoted in UAE Dirhams (AED).", `Proposal validity: 30 days from the date of issue (valid until ${fmt(addDays(t, 30))}).`] },
+    meta: { customer: cust.name, attention, proposalNo: a.ref, date: fmt(t), dateISO: t, validUntil: fmt(valid), validISO: valid, subtitle: content.subtitle, headerTitle: "AMC Proposal — " + short },
+    letter: { toName: attention, toLocation: T.location || (cust.emirate && cust.emirate !== "Outside UAE" ? cust.emirate + ", UAE" : "Dubai, UAE"), subject: `Annual Maintenance Contract Proposal — ${content.letterSubjectTopic || content.planName} (Reference: ${a.ref})`, salutation: attention && attention !== "The Management" ? "Dear " + attention.split(",")[0].trim() + "," : "Dear Sir/Madam,", body: content.letter, signoff: "Sincerely," },
+    about: ABOUT, understanding: content.understanding, scope: content.scope, servicePlan: Object.assign({}, content.servicePlan, { rows }), response: content.response, documentation: content.documentation,
+    commercial: { intro: `The commercial terms set out below cover the full ${months}-month engagement from ${fmt(start)} to ${fmt(end)}.`, startISO: start, endISO: end, vatPct: 5, valueNum: v,
+      lineItems: [{ desc: content.lineItemDesc || ("Annual Maintenance Contract — " + content.planName + " — 12 Months"), amount: money(v) }], subtotal: money(v), vat: money(vat), vatLabel: "VAT @ 5%", total: money(total), paymentTerms: pay,
+      validity: ["All values are quoted in UAE Dirhams (AED).", `Proposal validity: ${validDays} days from the date of issue (valid until ${fmt(valid)}).`] },
     exclusions: content.exclusions,
     signoff: { intro: `By signing below, both parties acknowledge agreement to the scope, service levels, commercial terms, and conditions set out in this Annual Maintenance Contract proposal. This document, upon signature, constitutes the binding agreement between Bifold Technologies LLC and ${cust.name} for the contract period stated.`, period: `${fmt(start)} to ${fmt(end)}`, plan: content.planName, total: `${aed(total)} (inclusive of VAT)`, governing: "This agreement is governed by the laws of the United Arab Emirates. Either party may terminate this agreement with two months prior written notice. Any material change in scope requires written approval from both parties." },
   };
 }
+function contentFromProposal(p) {
+  const m = String(p.letter.subject || "").match(/Proposal — (.*) \(Reference/);
+  return { subtitle: p.meta.subtitle, planName: p.signoff.plan, letterSubjectTopic: m ? m[1] : p.signoff.plan, letter: p.letter.body, understanding: p.understanding, scope: p.scope,
+    servicePlan: p.servicePlan, response: p.response, documentation: p.documentation, exclusions: p.exclusions, lineItemDesc: (p.commercial.lineItems[0] || {}).desc,
+    paymentTerms: (p.commercial.paymentTerms || []).filter(x => !/commences upon|prevailing rate|Additional charges/.test(x)) };
+}
+function termWords(a) { const m = termMonthsOf(a.proposedStart || defStart(), (a.terms && a.terms.endDate) || endFor(a.proposedStart || defStart(), a.termMonths || 12)); return ({ 6: "six-month", 12: "twelve-month", 24: "twenty-four-month", 36: "thirty-six-month" })[m] || m + "-month"; }
+function termMonthsOf(start, end) { return Math.max(1, Math.round((parseISO(end) - parseISO(start)) / 86400000 / 30.44)); }
 // Claude drafts the proposal in four parts in parallel (server side, if set up); any part that fails
 // is filled from the standard template, so a proposal is always produced.
 async function generateProposal(a, notes) {
@@ -410,7 +469,10 @@ async function generateProposal(a, notes) {
   const base = fallbackContent(a, cust);
   let content = Object.assign({}, base), parts = 0;
   if (S.features.ai) {
-    const req = part => api("POST", "amc/ai", { kind: "proposal", part, customerName: cust.name, location: cust.emirate || "", systems: a.systems, value: num(a.value), termMonths: a.termMonths || 12, notes, renewal: !!a.renewalOf }).catch(() => null);
+    const T = a.terms || {};
+    const fixed = [T.pm && "Preventive maintenance: " + PM_TEXT[T.pm], T.coverage && "Support hours: " + T.coverage, T.payment && "Payment: " + PAY_TEXT[T.payment][0]].filter(Boolean).join(". ");
+    const allNotes = [fixed && "Contract details already agreed (match them): " + fixed, notes].filter(Boolean).join("\n");
+    const req = part => api("POST", "amc/ai", { kind: "proposal", part, customerName: cust.name, location: T.location || cust.emirate || "", systems: a.systems, value: num(a.value), termMonths: a.termMonths || 12, notes: allNotes, renewal: !!a.renewalOf }).catch(() => null);
     const [intro, scope, service, terms] = await Promise.all(["intro", "scope", "service", "terms"].map(req));
     if (intro && Array.isArray(intro.letter) && intro.letter.length && intro.understanding) { Object.assign(content, { subtitle: intro.subtitle || base.subtitle, planName: intro.planName || base.planName, letterSubjectTopic: intro.letterSubjectTopic || base.letterSubjectTopic, letter: intro.letter, understanding: intro.understanding, lineItemDesc: intro.lineItemDesc || base.lineItemDesc, paymentTerms: Array.isArray(intro.paymentTerms) && intro.paymentTerms.length ? intro.paymentTerms : base.paymentTerms }); parts++; }
     if (scope && scope.scope && Array.isArray(scope.scope.streams) && scope.scope.streams.length) { content.scope = scope.scope; parts++; }
@@ -523,7 +585,7 @@ function proposalBlock(a) {
   const shares = (a.shares || []).slice(-3).reverse().map(s => `<div><time>${esc(fmt(s.at))}</time><span>${esc(s.mode === "draft" ? "Outlook draft for" : "Emailed to")} ${esc(s.to)} · ${esc(nameOf(s.by))}</span></div>`).join("");
   return `${a.proposalStale ? '<div class="callout warn">Systems or value changed since this proposal was drafted. Redraft before sending.</div>' : ""}
     <div class="facts"><div class="fact"><div class="k">Proposal no.</div><div class="v mono">${esc(a.ref)}</div></div><div class="fact"><div class="k">Drafted</div><div class="v">${esc(fmt(a.proposalAt))}</div><div class="sub">${a.proposalSource === "claude" ? "by Claude" : a.proposalSource === "mixed" ? "Claude + template" : "from template"}</div></div><div class="fact"><div class="k">Total incl. VAT</div><div class="v mono">${esc("AED " + a.proposal.commercial.total)}</div></div></div>
-    <div class="docrow"><button type="button" class="sm" id="x_prev">Preview</button><button type="button" class="sm" id="x_docx">Download Word</button><button type="button" class="sm" id="x_pdf">Download PDF</button><button type="button" class="accent sm" id="x_share">Share with customer</button><button type="button" class="ghost sm" id="x_regen">Redraft</button></div>
+    <div class="docrow"><button type="button" class="sm" id="x_prev">Preview</button><button type="button" class="sm" id="x_editp">Edit proposal</button><button type="button" class="sm" id="x_docx">Download Word</button><button type="button" class="sm" id="x_pdf">Download PDF</button><button type="button" class="accent sm" id="x_share">Share with customer</button><button type="button" class="ghost sm" id="x_regen">Redraft</button></div>
     ${shares ? `<div class="log">${shares}</div>` : ""}`;
 }
 function wireAmcSheet(a, c) {
@@ -537,6 +599,7 @@ function wireAmcSheet(a, c) {
   on("x_gen", async b => { busy(b, true, "Drafting"); const n = await writeAmc(a, { proposalStatus: "generating" }).catch(() => a); S.amcs.set(n.id, n); renderAll(); generateProposal(n, ""); });
   on("x_regen", () => { $("rg_notes").value = ""; $("dRegen").showModal(); });
   on("x_prev", () => openPreview(a));
+  on("x_editp", () => openEditor(a));
   on("x_docx", b => downloadProposal(a, "docx", b));
   on("x_pdf", b => downloadProposal(a, "pdf", b));
   on("x_share", () => openShare({ kind: "amc", a }));
@@ -568,6 +631,7 @@ $("fRegen").onsubmit = async e => {
 function openPreview(a) {
   $("pv_ref").textContent = a.ref; $("pv_body").innerHTML = proposalHTML(a.proposal, false);
   $("pv_docx").onclick = () => downloadProposal(a, "docx", $("pv_docx")); $("pv_pdf").onclick = () => downloadProposal(a, "pdf", $("pv_pdf"));
+  $("pv_edit").onclick = () => { $("sPrev").close(); openEditor(S.amcs.get(a.id) || a); };
   $("sPrev").showModal();
 }
 async function startRenewal(a, c, btn) {
@@ -580,19 +644,122 @@ async function startRenewal(a, c, btn) {
   } catch (e) { toast(errMsg(e)); busy(btn, false); }
 }
 
+/* ============ proposal editor ============ */
+// Text sections round-trip through a light markup: "## " heading, "- " bullet, anything else a paragraph.
+function groupsToText(intro, groups) {
+  const out = []; if (intro) out.push(intro, "");
+  (groups || []).forEach(g => { out.push("## " + (g.heading || "")); if (g.text) out.push(g.text); (g.bullets || []).forEach(b => out.push("- " + b)); out.push(""); });
+  return out.join("\n").trim();
+}
+function textToGroups(text) {
+  const intro = [], groups = []; let cur = null;
+  String(text || "").split("\n").forEach(raw => { const l = raw.trim(); if (!l) return;
+    if (l.startsWith("## ")) { cur = { heading: l.slice(3).trim(), bullets: [] }; groups.push(cur); return; }
+    if (/^[-•*]\s+/.test(l)) { if (!cur) { cur = { heading: "", bullets: [] }; groups.push(cur); } cur.bullets.push(l.replace(/^[-•*]\s+/, "")); return; }
+    if (cur) cur.text = cur.text ? cur.text + " " + l : l; else intro.push(l); });
+  groups.forEach(g => { if (!g.bullets.length) delete g.bullets; });
+  return { intro: intro.join(" "), groups };
+}
+const linesOf = t => String(t || "").split("\n").map(x => x.trim()).filter(Boolean);
+const parasOf = t => String(t || "").split(/\n\s*\n/).map(x => x.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean);
+function isoFromFmt(s) { const m = String(s || "").match(/^(\d{1,2}) (\w{3}) (\d{4})$/); if (!m) return ""; const mi = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].indexOf(m[2]); return mi < 0 ? "" : m[3] + "-" + pad(mi + 1) + "-" + pad(+m[1]); }
+function rowsEditor(box, rows, cols, labels) {
+  box.innerHTML = "";
+  rows.forEach((r, i) => {
+    const d = document.createElement("div"); d.className = "erow c" + cols;
+    d.innerHTML = labels.map((l, j) => `<input aria-label="${esc(l)}" placeholder="${esc(l)}" value="${esc(r[j] || "")}" data-j="${j}">`).join("") + `<button type="button" class="ghost sm" aria-label="Remove row">✕</button>`;
+    d.querySelectorAll("input").forEach(inp => inp.oninput = () => { r[+inp.dataset.j] = inp.value; });
+    d.querySelector("button").onclick = () => { rows.splice(i, 1); rowsEditor(box, rows, cols, labels); };
+    box.appendChild(d);
+  });
+}
+let editing = null;
+function openEditor(a) {
+  const p = a.proposal; if (!p) { toast("Draft the proposal first."); return; }
+  const cfg = JSON.parse(JSON.stringify(p)); editing = { a, cfg };
+  const m = cfg.meta, L = cfg.letter, cm = cfg.commercial;
+  $("pe_ref").textContent = a.ref + " · " + a.customerName;
+  $("pe_date").value = m.dateISO || isoFromFmt(m.date); $("pe_valid").value = m.validISO || isoFromFmt(m.validUntil);
+  $("pe_attn").value = m.attention || ""; $("pe_loc").value = L.toLocation || ""; $("pe_subtitle").value = m.subtitle || ""; $("pe_plan").value = cfg.signoff.plan || "";
+  $("pe_subject").value = L.subject || ""; $("pe_salut").value = L.salutation || ""; $("pe_letter").value = (L.body || []).join("\n\n");
+  const period = String(cfg.signoff.period || "").split(" to ");
+  $("pe_start").value = cm.startISO || isoFromFmt(period[0]); $("pe_end").value = cm.endISO || isoFromFmt(period[1]);
+  $("pe_value").value = money(cm.valueNum != null ? cm.valueNum : num(a.value)); $("pe_vat").value = String(cm.vatPct != null ? cm.vatPct : 5);
+  $("pe_item").value = (cm.lineItems[0] || {}).desc || "";
+  $("pe_pay").value = (cm.paymentTerms || []).join("\n");
+  rowsEditor($("pe_plan_rows"), cfg.servicePlan.rows = cfg.servicePlan.rows || [], 3, ["Parameter", "Coverage", "Notes"]);
+  rowsEditor($("pe_sla_rows"), cfg.response.rows = cfg.response.rows || [], 5, ["Priority", "Description", "Response", "Action plan", "Restoration"]);
+  $("pe_flow").value = (cfg.response.workflow || []).join("\n");
+  $("pe_under").value = groupsToText((cfg.understanding.paragraphs || []).join("\n\n"), [{ heading: "Engagement Drivers", bullets: cfg.understanding.drivers || [] }]);
+  $("pe_scope").value = groupsToText(cfg.scope.intro, cfg.scope.streams);
+  $("pe_docs").value = groupsToText(cfg.documentation.intro, cfg.documentation.groups);
+  $("pe_excl").value = groupsToText("", cfg.exclusions.groups);
+  peHint(); $("pe_err").textContent = ""; $("sEdit").showModal();
+}
+function peHint() { const v = num($("pe_value").value), r = num($("pe_vat").value); $("pe_valueHint").textContent = v ? `+ VAT ${money(v * r / 100)} = ${aed(v + v * r / 100)} total` : ""; }
+$("pe_value").oninput = peHint; $("pe_vat").oninput = peHint;
+$("pe_plan_add").onclick = () => { editing.cfg.servicePlan.rows.push(["", "", ""]); rowsEditor($("pe_plan_rows"), editing.cfg.servicePlan.rows, 3, ["Parameter", "Coverage", "Notes"]); };
+$("pe_sla_add").onclick = () => { const rs = editing.cfg.response.rows; rs.push(["P" + (rs.length + 1), "", "", "", ""]); rowsEditor($("pe_sla_rows"), rs, 5, ["Priority", "Description", "Response", "Action plan", "Restoration"]); };
+$("fEdit").onsubmit = async e => {
+  e.preventDefault(); const err = m => { $("pe_err").textContent = m; };
+  const { a, cfg } = editing; const g = id => $(id).value.trim();
+  const start = g("pe_start"), end = g("pe_end"), date = g("pe_date") || today(), valid = g("pe_valid");
+  const v = num(g("pe_value")), rate = num(g("pe_vat"));
+  if (!start || !end || end <= start) return err("Set a contract start date and an end date after it.");
+  if (valid && valid < date) return err("The validity date can't be before the proposal date.");
+  if (!(v > 0)) return err("Enter the annual AMC value, excluding VAT.");
+  if (rate < 0 || rate > 20) return err("Enter a VAT rate between 0 and 20%.");
+  if (!parasOf(g("pe_letter")).length) return err("The cover letter needs at least one paragraph.");
+  const vat = Math.round(v * rate) / 100, total = v + vat, months = termMonthsOf(start, end);
+  const validDays = valid ? Math.round((parseISO(valid) - parseISO(date)) / 86400000) : 30;
+  const attention = g("pe_attn") || "The Management";
+  Object.assign(cfg.meta, { attention, date: fmt(date), dateISO: date, validUntil: fmt(valid || addDays(date, 30)), validISO: valid || addDays(date, 30), subtitle: g("pe_subtitle") || cfg.meta.subtitle });
+  Object.assign(cfg.letter, { toName: attention, toLocation: g("pe_loc") || "Dubai, UAE", subject: g("pe_subject"), salutation: g("pe_salut") || "Dear Sir/Madam,", body: parasOf(g("pe_letter")) });
+  const und = textToGroups(g("pe_under"));
+  cfg.understanding = { paragraphs: parasOf(g("pe_under").split(/^##.*$/m)[0]), drivers: und.groups.flatMap(x => x.bullets || []) };
+  const sc = textToGroups(g("pe_scope")); cfg.scope = { intro: sc.intro, streams: sc.groups };
+  const dc = textToGroups(g("pe_docs")); cfg.documentation = { intro: dc.intro, groups: dc.groups };
+  cfg.exclusions = { groups: textToGroups(g("pe_excl")).groups };
+  cfg.servicePlan.rows = cfg.servicePlan.rows.filter(r => r.some(x => String(x || "").trim()));
+  cfg.response.rows = cfg.response.rows.filter(r => r.some(x => String(x || "").trim()));
+  cfg.response.workflow = linesOf(g("pe_flow"));
+  Object.assign(cfg.commercial, { intro: `The commercial terms set out below cover the full ${months}-month engagement from ${fmt(start)} to ${fmt(end)}.`, startISO: start, endISO: end, valueNum: v, vatPct: rate,
+    lineItems: [{ desc: g("pe_item") || cfg.commercial.lineItems[0].desc, amount: money(v) }], subtotal: money(v), vat: money(vat), vatLabel: `VAT @ ${money(rate)}%`, total: money(total),
+    paymentTerms: linesOf(g("pe_pay")), validity: ["All values are quoted in UAE Dirhams (AED).", `Proposal validity: ${validDays} days from the date of issue (valid until ${fmt(valid || addDays(date, 30))}).`] });
+  Object.assign(cfg.signoff, { period: `${fmt(start)} to ${fmt(end)}`, plan: g("pe_plan") || cfg.signoff.plan, total: `${aed(total)} (inclusive of VAT)` });
+  const T = Object.assign({}, a.terms || {}, { endDate: end, attention: g("pe_attn"), location: g("pe_loc"), validDays: [15, 30, 45, 60, 90].includes(validDays) ? validDays : (a.terms || {}).validDays || 30 });
+  const btn = $("pe_save"); busy(btn, true, "Saving");
+  try {
+    await writeAmc(S.amcs.get(a.id) || a, { proposal: cfg, proposalSource: a.proposalSource || "template", value: v, proposedStart: start, termMonths: [6, 12, 24, 36].includes(months) ? months : (a.termMonths || 12), terms: T }, "Edited proposal");
+    $("sEdit").close(); toast("Proposal saved"); renderAll();
+  } catch (x) { err(errMsg(x)); } finally { busy(btn, false); }
+};
 /* ============ award ============ */
 let awarding = null;
-function awardEnd() { const s = $("aw_start").value; $("aw_end").value = s ? addDays(addMonths(s, +$("aw_months").value), -1) : ""; }
-["aw_start", "aw_months"].forEach(id => $(id).addEventListener("change", awardEnd)); $("aw_start").addEventListener("input", awardEnd);
+// Contract end: follows start + term; a date typed by hand stays put; a pre-filled custom end moves with the start.
+let awEndManual = false, awPrevStart = "";
+function awardEnd() { if (awEndManual) return; const s = $("aw_start").value; $("aw_end").value = s ? addDays(addMonths(s, +$("aw_months").value), -1) : ""; awPrevStart = s; }
+$("aw_end").addEventListener("input", () => { awEndManual = true; });
+function awStartChanged() {
+  const s = $("aw_start").value, e = $("aw_end").value;
+  if (!awEndManual && awPrevStart && e && s && $("aw_end").dataset.custom === "1") { $("aw_end").value = addDays(e, Math.round((parseISO(s) - parseISO(awPrevStart)) / 86400000)); awPrevStart = s; }
+  else { $("aw_end").dataset.custom = ""; awardEnd(); }
+}
+$("aw_start").addEventListener("change", awStartChanged);
+$("aw_months").addEventListener("change", () => { $("aw_end").dataset.custom = ""; awEndManual = false; awardEnd(); });
 function openAward(a) {
   awarding = a; const c = S.contracts.get(a.id); const t = today();
   $("aw_sub").textContent = a.ref + " · " + a.customerName + " · " + aed(num(a.value)) + " excl. VAT";
   $("aw_date").value = c ? c.awardDate : t; $("aw_start").value = c ? c.start : (a.proposedStart && a.proposedStart >= t ? a.proposedStart : t);
   $("aw_months").value = String(c ? c.months : (a.termMonths || 12)); $("aw_lpo").value = c ? c.lpo || "" : "";
-  $("aw_pm").value = String(c ? c.pmMonths : 3); $("aw_alert").value = String(c ? c.alertDays : 60);
+  const T = a.terms || {}; const pEnd = T.endDate || (a.proposal && a.proposal.commercial && a.proposal.commercial.endISO) || "";
+  awEndManual = false; $("aw_end").dataset.custom = ""; awPrevStart = $("aw_start").value;
+  const presetEnd = c ? c.end : (pEnd && a.proposedStart && $("aw_start").value === a.proposedStart ? pEnd : "");
+  $("aw_pm").value = String(c ? c.pmMonths : (T.pm ? PM_MONTHS[T.pm] : 3)); $("aw_alert").value = String(c ? c.alertDays : 60);
   $("aw_email").value = c ? c.notifyEmail : (S.meId || "");
   $("aw_schedule").checked = !c; $("aw_schedule").parentElement.hidden = !!c;
-  awardEnd(); $("aw_err").textContent = ""; $("dAward").showModal();
+  if (presetEnd) { $("aw_end").value = presetEnd; $("aw_end").dataset.custom = "1"; } else awardEnd();
+  $("aw_err").textContent = ""; $("dAward").showModal();
 }
 $("fAward").onsubmit = async e => {
   e.preventDefault(); const a = S.amcs.get(awarding.id) || awarding; const prev = S.contracts.get(a.id);
@@ -601,7 +768,7 @@ $("fAward").onsubmit = async e => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v("aw_email"))) { $("aw_err").textContent = "Enter the email address that should get the expiry alerts."; return; }
   const btn = $("fAward").querySelector("button[type=submit]"); busy(btn, true, "Saving");
   try {
-    const r = await api("POST", "amc/amcs/" + encodeURIComponent(a.id) + "/award", { awardDate: v("aw_date"), start: v("aw_start"), months: +v("aw_months"), lpo: v("aw_lpo"),
+    const r = await api("POST", "amc/amcs/" + encodeURIComponent(a.id) + "/award", { awardDate: v("aw_date"), start: v("aw_start"), end: v("aw_end"), months: +v("aw_months"), lpo: v("aw_lpo"),
       pmMonths: +v("aw_pm"), alertDays: +v("aw_alert"), notifyEmail: v("aw_email"), schedule: !prev && $("aw_schedule").checked, checklist: defaultChecklist(a.systems) });
     r.amc._full = true; S.amcs.set(r.amc.id, r.amc); S.contracts.set(r.contract.amcId, r.contract); r.visits.forEach(x => S.visits.set(x.id, x));
     if (a.renewalOf && S.contracts.get(a.renewalOf)) S.contracts.get(a.renewalOf).status = "renewed";

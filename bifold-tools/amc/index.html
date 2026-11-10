@@ -82,6 +82,7 @@ input,select,textarea{font:inherit;color:var(--fg);background:var(--surface);bor
 textarea{resize:vertical;min-height:72px}
 label.f{display:grid;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted);min-width:0}
 label.f .req{color:var(--crimson)}
+label.f input,label.f select,label.f textarea{font-weight:400;color:var(--fg)}
 .hint{font-size:12px;color:var(--muted);font-weight:400}
 .seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:7px;overflow-x:auto;max-width:100%;background:var(--surface)}
 .seg button{border:0;border-radius:0;padding:7px 12px;font-weight:500;color:var(--muted)}
@@ -153,7 +154,7 @@ dialog{border:0;padding:0;max-width:none;background:var(--surface);color:var(--f
 dialog::backdrop{background:rgba(10,20,32,.45)}
 dialog.sheet{margin:0 0 0 auto;height:100%;max-height:100%;width:min(760px,100vw);border-left:1px solid var(--line)}
 dialog.modal{border-radius:12px;border:1px solid var(--line);width:min(620px,calc(100vw - 24px));max-height:calc(100% - 24px)}
-.sheet-in{display:flex;flex-direction:column;height:100%}
+.sheet-in{display:flex;flex-direction:column;height:100%;padding:0;gap:0}
 .sheet-head{padding:16px 20px 14px;padding-top:calc(16px + env(safe-area-inset-top,0px));padding-right:max(20px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);display:grid;gap:8px;background:var(--surface)}
 .sheet-head .top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
 .sheet-head h2{font-size:20px;font-weight:700;color:var(--steel-deep)}
@@ -200,6 +201,12 @@ dialog.modal{border-radius:12px;border:1px solid var(--line);width:min(620px,cal
 .ck .res button[aria-pressed="true"][data-r="issue"]{background:var(--crimson);color:#fff}
 .ck .res button[aria-pressed="true"][data-r="na"]{background:var(--muted);color:var(--surface)}
 .ck input{grid-column:1/-1;padding:5px 8px;font-size:13px}
+.egrid{display:grid;gap:6px}
+.erow{display:grid;gap:6px;align-items:start;padding:8px;border:1px solid var(--line);border-radius:8px}
+.erow.c3{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.4fr) auto}
+.erow.c5{grid-template-columns:60px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr) auto}
+.erow input{padding:6px 8px;font-size:13px}
+@media (max-width:640px){.erow.c3,.erow.c5{grid-template-columns:1fr}}
 .photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .ph{border:1px solid var(--line);border-radius:8px;overflow:hidden;display:grid;background:var(--sunk);min-width:0}
 .ph img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;max-width:100%}
@@ -316,6 +323,20 @@ details.more>summary{cursor:pointer;color:var(--steel-deep);font-weight:600;font
       <input id="a_value" class="mono" inputmode="decimal" required placeholder="0">
       <span class="money-hint" id="a_valueHint"></span>
     </label>
+    <details class="full more" id="a_more">
+      <summary>Contract details: pre-filled from the template, change anything you need</summary>
+      <div class="grid2" style="margin-top:12px">
+        <label class="f">Contract start<input id="a_start" type="date"></label>
+        <label class="f">Term<select id="a_months"><option value="12">12 months</option><option value="24">24 months</option><option value="36">36 months</option><option value="6">6 months</option></select></label>
+        <label class="f">Contract end<input id="a_end" type="date"><span class="hint">Follows the start and term unless you change it.</span></label>
+        <label class="f">Proposal valid for<select id="a_valid"><option value="15">15 days</option><option value="30" selected>30 days</option><option value="45">45 days</option><option value="60">60 days</option><option value="90">90 days</option></select></label>
+        <label class="f">Attention (addressed to)<input id="a_attn" maxlength="120" placeholder="The Management"></label>
+        <label class="f">Location on the letter<input id="a_loc" maxlength="120" placeholder="Dubai, UAE"></label>
+        <label class="f">Preventive maintenance<select id="a_pm"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="semiannual">Every 6 months</option><option value="annual">Once a year</option><option value="none">No scheduled PM</option></select></label>
+        <label class="f">Support hours<input id="a_cov" list="covList" maxlength="80"><datalist id="covList"><option value="Mon–Sat, 9 AM – 6 PM"><option value="Mon–Fri, 8 AM – 5 PM"><option value="Sun–Thu, 8 AM – 5 PM"><option value="Mon–Sat, 8 AM – 8 PM"><option value="24×7"></datalist></label>
+        <label class="f full">Payment terms<select id="a_pay"><option value="annual">100% annual advance on signing</option><option value="semi">Semi-annual: 50% on signing, 50% at month 7</option><option value="quarterly">Quarterly in advance (4 × 25%)</option><option value="monthly">Monthly in advance (12 equal instalments)</option></select></label>
+      </div>
+    </details>
     <div class="f full" id="a_filesWrap">
       <span class="f" style="font-size:12.5px;font-weight:600;color:var(--muted)">Files <span class="hint">(customer RFQ, site survey, asset list…)</span></span>
       <div class="files" id="a_files"></div>
@@ -352,7 +373,7 @@ details.more>summary{cursor:pointer;color:var(--steel-deep);font-weight:600;font
     <label class="f">Award date <span class="req">*</span><input id="aw_date" type="date" required></label>
     <label class="f">Contract start <span class="req">*</span><input id="aw_start" type="date" required></label>
     <label class="f">Term<select id="aw_months"><option value="12">12 months</option><option value="24">24 months</option><option value="36">36 months</option><option value="6">6 months</option></select></label>
-    <label class="f">Contract end<input id="aw_end" type="date" readonly tabindex="-1" style="background:var(--sunk)"></label>
+    <label class="f">Contract end<input id="aw_end" type="date"><span class="hint">Follows the start and term unless you change it.</span></label>
     <label class="f">LPO / PO number<input id="aw_lpo" class="mono"></label>
     <label class="f">Preventive maintenance<select id="aw_pm"><option value="1">Monthly</option><option value="3" selected>Quarterly</option><option value="6">Every 6 months</option><option value="12">Once a year</option><option value="0">No scheduled PM</option></select></label>
     <label class="f">Alert before expiry<select id="aw_alert"><option value="90">90 days</option><option value="60" selected>60 days</option><option value="45">45 days</option><option value="30">30 days</option></select></label>
@@ -411,9 +432,52 @@ details.more>summary{cursor:pointer;color:var(--steel-deep);font-weight:600;font
 <!-- Proposal preview -->
 <dialog class="sheet" id="sPrev"><div class="sheet-in">
   <div class="sheet-head"><div class="top"><div><div class="ref" id="pv_ref"></div><h2>Proposal preview</h2></div><button class="ghost" type="button" data-close aria-label="Close">✕</button></div>
-    <div class="docrow"><button type="button" class="sm" id="pv_docx">Word</button><button type="button" class="sm" id="pv_pdf">PDF</button></div></div>
+    <div class="docrow"><button type="button" class="sm" id="pv_edit">Edit proposal</button><button type="button" class="sm" id="pv_docx">Word</button><button type="button" class="sm" id="pv_pdf">PDF</button></div></div>
   <div class="sheet-body"><div class="proposal" id="pv_body"></div></div>
 </div></dialog>
+
+<!-- Proposal editor -->
+<dialog class="sheet" id="sEdit"><form class="sheet-in" id="fEdit" novalidate>
+  <div class="sheet-head">
+    <div class="top"><div style="min-width:0"><div class="ref" id="pe_ref"></div><h2>Edit proposal</h2></div><button class="ghost" type="button" data-close aria-label="Close">✕</button></div>
+    <p class="muted small" style="margin:0">Everything is pre-filled from the drafted proposal. Change what you need and save; totals, VAT and dates update across the document.</p>
+  </div>
+  <div class="sheet-body">
+    <div class="sec"><h3>Cover &amp; letter</h3><div class="grid2">
+      <label class="f">Proposal date<input id="pe_date" type="date"></label>
+      <label class="f">Valid until<input id="pe_valid" type="date"></label>
+      <label class="f">Attention (addressed to)<input id="pe_attn" maxlength="120"></label>
+      <label class="f">Location on the letter<input id="pe_loc" maxlength="120"></label>
+      <label class="f">Plan title on the cover<input id="pe_subtitle" maxlength="120"></label>
+      <label class="f">Service plan name<input id="pe_plan" maxlength="120"></label>
+      <label class="f full">Letter subject<input id="pe_subject" maxlength="250"></label>
+      <label class="f full">Salutation<input id="pe_salut" maxlength="120"></label>
+      <label class="f full">Letter body <span class="hint">Leave a blank line between paragraphs.</span><textarea id="pe_letter" rows="8"></textarea></label>
+    </div></div>
+    <div class="sec"><h3>Contract &amp; commercial</h3><div class="grid2">
+      <label class="f">Contract start<input id="pe_start" type="date"></label>
+      <label class="f">Contract end<input id="pe_end" type="date"></label>
+      <label class="f">Annual AMC value, AED excl. VAT<input id="pe_value" class="mono" inputmode="decimal"><span class="money-hint" id="pe_valueHint"></span></label>
+      <label class="f">VAT rate %<input id="pe_vat" class="mono" inputmode="decimal"></label>
+      <label class="f full">Line item description<textarea id="pe_item" rows="2"></textarea></label>
+      <label class="f full">Payment terms <span class="hint">One per line.</span><textarea id="pe_pay" rows="4"></textarea></label>
+    </div></div>
+    <div class="sec"><h3>Service plan summary</h3><div class="egrid" id="pe_plan_rows"></div><div><button type="button" class="sm" id="pe_plan_add">Add row</button></div></div>
+    <div class="sec"><h3>Response &amp; restoration (SLA)</h3><div class="egrid" id="pe_sla_rows"></div><div><button type="button" class="sm" id="pe_sla_add">Add priority</button></div>
+      <label class="f">Support workflow <span class="hint">One step per line.</span><textarea id="pe_flow" rows="4"></textarea></label></div>
+    <div class="sec"><h3>Text sections</h3>
+      <p class="muted small" style="margin:0">Start a heading line with <span class="mono">## </span> and a bullet line with <span class="mono">- </span>. Other lines are paragraphs.</p>
+      <label class="f">Understanding of requirement<textarea id="pe_under" rows="8"></textarea></label>
+      <label class="f">Scope of work<textarea id="pe_scope" rows="12"></textarea></label>
+      <label class="f">Documentation deliverables<textarea id="pe_docs" rows="8"></textarea></label>
+      <label class="f">Exclusions, assumptions &amp; liability<textarea id="pe_excl" rows="12"></textarea></label>
+    </div>
+    <div class="sec" style="position:sticky;bottom:-28px;background:var(--surface);padding:12px 0 4px;border-top:1px solid var(--line)">
+      <div class="docrow"><button class="primary" type="submit" id="pe_save">Save proposal</button><button type="button" data-close>Cancel</button></div>
+      <div class="err" id="pe_err" role="alert"></div>
+    </div>
+  </div>
+</form></dialog>
 
 <!-- Visit sheet -->
 <dialog class="sheet" id="sVisit"><div class="sheet-in">

@@ -45,7 +45,7 @@ module.exports = function makeAmc(H) {
   }
   function amcFull(e, user) {
     const d = unpackJson(e);
-    return { ...amcSummary(e), proposal: d.proposal || null, files: d.files || [], history: d.history || [], shares: d.shares || [], etag: e.etag, canDelete: user.isManager || e.owner === user.email };
+    return { ...amcSummary(e), proposal: d.proposal || null, terms: d.terms || {}, files: d.files || [], history: d.history || [], shares: d.shares || [], etag: e.etag, canDelete: user.isManager || e.owner === user.email };
   }
   async function loadAmc(user, id) {
     const e = await getOrNull(await table(AMC), APK, id);
@@ -61,6 +61,25 @@ module.exports = function makeAmc(H) {
   function filesIn(arr) {
     return (Array.isArray(arr) ? arr : []).slice(0, 60).map(f => ({ id: clean(f.id, 60), name: clean(f.name, 200), type: clean(f.type, 120), size: num(f.size), by: clean(f.by, 150), at: clean(f.at, 40) })).filter(f => /^[0-9a-f-]{36}$/.test(f.id));
   }
+  // Contract details the creator can set before drafting (all optional; the proposal falls back to template defaults).
+  const PAY = ["annual", "semi", "quarterly", "monthly"], PM = ["monthly", "quarterly", "semiannual", "annual", "none"];
+  function termsIn(t) {
+    t = t && typeof t === "object" ? t : {};
+    const out = {
+      endDate: isDate(clean(t.endDate, 10)) ? clean(t.endDate, 10) : "", attention: clean(t.attention, 120), location: clean(t.location, 120),
+      payment: PAY.includes(t.payment) ? t.payment : "", pm: PM.includes(t.pm) ? t.pm : "", coverage: clean(t.coverage, 80),
+      validDays: [15, 30, 45, 60, 90].includes(num(t.validDays)) ? num(t.validDays) : 30,
+    };
+    return out;
+  }
+  function startIn(s, termMonths, endDate) {
+    const start = clean(s, 10);
+    if (start && !isDate(start)) fail(400, "The contract start date is not valid.");
+    if (start && endDate && endDate <= start) fail(400, "The contract end date must be after the start date.");
+    if (start && endDate && Date.parse(endDate) - Date.parse(start) > 5.1 * 365 * 864e5) fail(400, "A contract term can't be longer than 5 years.");
+    return start;
+  }
+  const monthsIn = v => [6, 12, 24, 36].includes(num(v)) ? num(v) : 12;
   async function nextRef(custName) {
     const code = String(custName).replace(/\b(LLC|L\.L\.C\.?|FZE|FZ-LLC|FZCO|Co\.?|Company|Limited|Ltd\.?|Est\.?|Establishment|Trading)\b/gi, "").trim()
       .split(/\s+/).filter(Boolean).map((w, i, a) => a.length > 1 ? w.slice(0, i < 2 ? 4 : 1) : w.slice(0, 8)).join("").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) || "CUST";
@@ -79,13 +98,15 @@ module.exports = function makeAmc(H) {
     const systems = clean(b.systems, 6000); if (!systems) fail(400, "Describe the systems the AMC covers.");
     const value = Math.round(num(b.value) * 100) / 100; if (!(value > 0) || value > 1e9) fail(400, "Enter the annual AMC value in AED, excluding VAT.");
     const c = await customerName(customerId);
+    const terms = termsIn(b.terms), termMonths = monthsIn(b.termMonths);
+    const proposedStart = startIn(b.proposedStart || extra.proposedStart, termMonths, terms.endDate);
     const id = crypto.randomUUID();
     const t = now();
     const e = {
       partitionKey: APK, rowKey: id, ref: await nextRef(c.name), customerId, customerName: c.name, systems, value, status: "draft", owner: user.email,
-      planName: "", subtitle: "", proposalStatus: "pending", proposalSource: "", proposalAt: "", proposalStale: false, sentAt: "", termMonths: 12,
-      proposedStart: clean(extra.proposedStart, 10), renewalOf: clean(extra.renewalOf, 60), award: "", createdAt: t, updatedAt: t, updatedBy: user.email,
-      ...packJson({ proposal: null, files: filesIn(b.files), history: [log(user, extra.logText || "Created AMC")], shares: [] }),
+      planName: "", subtitle: "", proposalStatus: "pending", proposalSource: "", proposalAt: "", proposalStale: false, sentAt: "", termMonths,
+      proposedStart, renewalOf: clean(extra.renewalOf, 60), award: "", createdAt: t, updatedAt: t, updatedBy: user.email,
+      ...packJson({ proposal: null, terms, files: filesIn(b.files), history: [log(user, extra.logText || "Created AMC")], shares: [] }),
     };
     await (await table(AMC)).createEntity(e);
     return amcFull(await (await table(AMC)).getEntity(APK, id), user);
@@ -104,6 +125,12 @@ module.exports = function makeAmc(H) {
       const c = customerId !== e.customerId ? await customerName(customerId) : { name: e.customerName };
       const changed = customerId !== e.customerId || systems !== e.systems || value !== num(e.value);
       Object.assign(next, { customerId, customerName: c.name, systems, value, proposalStale: changed && !!d.proposal ? true : !!e.proposalStale });
+    }
+    if (b.terms !== undefined || b.proposedStart !== undefined || b.termMonths !== undefined) {
+      const terms = b.terms !== undefined ? termsIn(b.terms) : (d.terms || {});
+      const termMonths = b.termMonths !== undefined ? monthsIn(b.termMonths) : num(e.termMonths) || 12;
+      next.proposedStart = startIn(b.proposedStart !== undefined ? b.proposedStart : e.proposedStart, termMonths, terms.endDate);
+      next.termMonths = termMonths; d.terms = terms;
     }
     if (b.status !== undefined) {
       const s = String(b.status);
@@ -157,7 +184,13 @@ module.exports = function makeAmc(H) {
     const alertDays = [30, 45, 60, 90].includes(num(b.alertDays)) ? num(b.alertDays) : 60;
     const notifyEmail = clean(b.notifyEmail, 150).toLowerCase();
     if (!emailOk(notifyEmail)) fail(400, "Enter a Bifold email address for the expiry alerts.");
-    const end = addDays(addMonths(start, months), -1);
+    let end = addDays(addMonths(start, months), -1);
+    const wantEnd = clean(b.end, 10);
+    if (wantEnd) {
+      if (!isDate(wantEnd) || wantEnd <= start) fail(400, "The contract end date must be after the start date.");
+      if (Date.parse(wantEnd) - Date.parse(start) > 5.1 * 365 * 864e5) fail(400, "A contract term can't be longer than 5 years.");
+      end = wantEnd;
+    }
     const ct = await table(CON);
     const prev = await getOrNull(ct, KPK, id);
     const cust = await getOrNull(await table(CUST), CPK, e.customerId) || {};
@@ -179,11 +212,11 @@ module.exports = function makeAmc(H) {
     await (await table(AMC)).updateEntity(next, "Replace", { etag: e.etag }).catch(etagFail("AMC"));
     const visits = [];
     if (!prev && b.schedule && pmMonths > 0) {
-      const count = Math.floor(months / pmMonths);
-      for (let k = 0; k < count; k++) {
-        const date = addDays(addMonths(start, k * pmMonths), 14); if (date > end) break;
-        visits.push(await createVisit(user, { amcId: id, type: "pm", scheduledDate: date, notes: `Planned preventive maintenance ${k + 1} of ${count}`, checklist: b.checklist }));
-      }
+      // One PM visit per cycle across the whole contract period (start to end), two weeks into each cycle.
+      const dates = [];
+      for (let k = 0; k < 120; k++) { const date = addDays(addMonths(start, k * pmMonths), 14); if (date > end) break; dates.push(date); }
+      for (let k = 0; k < dates.length; k++)
+        visits.push(await createVisit(user, { amcId: id, type: "pm", scheduledDate: dates[k], notes: `Planned preventive maintenance ${k + 1} of ${dates.length}`, checklist: b.checklist }));
     }
     return { amc: amcFull(await (await table(AMC)).getEntity(APK, id), user), contract: conOut(await ct.getEntity(KPK, id)), visits };
   }
@@ -192,7 +225,8 @@ module.exports = function makeAmc(H) {
     const ct = await table(CON); const c = await getOrNull(ct, KPK, id);
     if (!c) fail(400, "Only an awarded AMC can be renewed.");
     if (c.renewalAmcId) fail(409, "A renewal has already been started for this contract.");
-    const n = await createAmc(user, { customerId: e.customerId, systems: e.systems, value: e.value, files: [] }, { proposedStart: addDays(c.end, 1), renewalOf: id, logText: "Created as renewal of " + e.ref });
+    const prevTerms = unpackJson(e).terms || {};
+    const n = await createAmc(user, { customerId: e.customerId, systems: e.systems, value: e.value, files: [], termMonths: e.termMonths, terms: { ...prevTerms, endDate: "" } }, { proposedStart: addDays(c.end, 1), renewalOf: id, logText: "Created as renewal of " + e.ref });
     await ct.updateEntity({ partitionKey: KPK, rowKey: id, renewalAmcId: n.id, updatedAt: now() }, "Merge");
     return { amc: n, contract: conOut(await ct.getEntity(KPK, id)) };
   }

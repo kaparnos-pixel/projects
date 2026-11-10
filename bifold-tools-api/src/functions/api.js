@@ -7,6 +7,7 @@ app.http("api", {
   route: "{*path}",
   handler: async (req, ctx) => {
     const r = await dispatch(req.method, req.params.path, n => req.headers.get(n), () => req.json(), ctx);
+    if (r.raw) return { status: r.status, body: r.raw, headers: r.headers };
     return r.body === undefined
       ? { status: r.status, headers: { "Cache-Control": "no-store" } }
       : { status: r.status, jsonBody: r.body, headers: { "Cache-Control": "no-store" } };

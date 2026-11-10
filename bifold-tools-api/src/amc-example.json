@@ -1,0 +1,320 @@
+{
+ "letter": {
+  "toLocation": "Dubai, UAE",
+  "subject": "Annual Maintenance Contract Proposal — Avaya IP Office Telephony Support Services (Reference: ITSLA2026-StudioRep01)",
+  "salutation": "Dear Sir/Madam,",
+  "body": [
+   "Bifold Technologies LLC is pleased to submit this Annual Maintenance Contract (AMC) proposal for the support and maintenance of your Avaya IP Office telephone system at Studio Republik Fitness Center LLC. Following our review of your environment — an Avaya IP Office PBX serving twelve IP handsets over a single PSTN line — we have structured a telephony support engagement designed to keep your voice communications stable, with rapid fault diagnosis, configuration management, and scheduled preventive maintenance.",
+   "This proposal outlines the scope of services, response and restoration commitments, service hours, deliverables, exclusions, and commercial terms for a twelve-month engagement. The terms herein are valid for thirty days from the date of issue.",
+   "We look forward to the opportunity of supporting your telephony operations and building a long-term partnership with your team."
+  ],
+  "signoff": "Sincerely,"
+ },
+ "understanding": {
+  "paragraphs": [
+   "Studio Republik Fitness Center LLC operates a fitness and wellness facility in Dubai that depends on reliable voice communication for reception, membership services, departmental coordination, and inbound and outbound calling. The voice environment comprises an Avaya IP Office PBX, twelve Avaya IP telephone handsets, and a single PSTN line carrying external calls — each element of which must remain operational to sustain member service and day-to-day operations.",
+   "Based on our review of your requirements, the engagement is to be delivered as a telephony support AMC providing scheduled preventive maintenance, remote support during business hours, on-call onsite attendance for major faults, configuration and moves/adds/changes management, and committed response and restoration timelines aligned to incident priority."
+  ],
+  "drivers": [
+   "Continuous availability of the telephone system for reception and member services.",
+   "Rapid fault diagnosis and restoration of the PBX and handsets.",
+   "Orderly configuration management of extensions, call routing, and voicemail.",
+   "Coordination with the telecom provider on PSTN line faults.",
+   "A single point of accountability for the voice system."
+  ]
+ },
+ "scope": {
+  "intro": "The following service streams are included within this telephony support engagement. The complete scope is delivered as a unified managed service package under a single annual fee.",
+  "streams": [
+   {
+    "heading": "A. PBX System Support & Maintenance",
+    "bullets": [
+     "Administration and support of the Avaya IP Office PBX.",
+     "System configuration management and parameter tuning.",
+     "Firmware and software updates as released and validated.",
+     "Periodic backup of the system configuration."
+    ]
+   },
+   {
+    "heading": "B. IP Telephone (Handset) Support",
+    "bullets": [
+     "Support and troubleshooting of the twelve Avaya IP handsets.",
+     "Handset registration, reset, and reconfiguration.",
+     "Configuration of replacement handsets (hardware supplied separately).",
+     "Resolution of audio, registration, and connectivity issues."
+    ]
+   },
+   {
+    "heading": "C. Call Routing & Features Administration",
+    "bullets": [
+     "Extension and user moves, adds, and changes (MAC).",
+     "Voicemail, auto-attendant, hunt group, and call routing configuration.",
+     "Time profiles, call barring, and dial plan adjustments.",
+     "Caller ID, call forwarding, and feature configuration."
+    ]
+   },
+   {
+    "heading": "D. PSTN Line & Connectivity Coordination",
+    "bullets": [
+     "Diagnosis of inbound and outbound call faults.",
+     "Coordination with the telecom provider on PSTN line issues.",
+     "Trunk and line configuration on the PBX.",
+     "Verification of line status and call quality."
+    ]
+   },
+   {
+    "heading": "E. Preventive Maintenance & Health Checks",
+    "bullets": [
+     "Scheduled inspection of PBX health, system logs, and licenses.",
+     "Verification of configuration backups and firmware status.",
+     "Handset and network connectivity checks.",
+     "Documented findings and recommendations."
+    ]
+   },
+   {
+    "heading": "F. Support Coordination & Reporting",
+    "bullets": [
+     "Ticket logging, lifecycle management, and escalation.",
+     "Coordination with the onsite facilities or IT contact.",
+     "Periodic service reporting and status updates.",
+     "Advisory on future telephony requirements."
+    ]
+   }
+  ]
+ },
+ "servicePlan": {
+  "intro": "The following table summarises the coverage parameters under the telephony support package selected for this engagement.",
+  "rows": [
+   [
+    "Service Plan",
+    "IP Telephony Support",
+    "Standard telephony AMC package"
+   ],
+   [
+    "Covered System",
+    "Avaya IP Office PBX",
+    "Single PBX platform"
+   ],
+   [
+    "Covered Endpoints",
+    "12 IP Handsets",
+    "Avaya IP telephones"
+   ],
+   [
+    "PSTN Lines",
+    "1 Line",
+    "Telco coordination included"
+   ],
+   [
+    "Preventive Maintenance",
+    "Quarterly",
+    "Scheduled health checks"
+   ],
+   [
+    "Remote Support",
+    "Business Hours",
+    "Diagnosis and resolution"
+   ],
+   [
+    "Onsite Support",
+    "On-Call + PM Visits",
+    "Major faults and scheduled PM"
+   ],
+   [
+    "Moves, Adds & Changes",
+    "Included",
+    "Reasonable volume"
+   ],
+   [
+    "Firmware & Software Updates",
+    "Included",
+    "As released and validated"
+   ],
+   [
+    "Configuration Backup",
+    "Included",
+    "Periodic system backup"
+   ],
+   [
+    "Email Support",
+    "Included",
+    "Ticketing and request handling"
+   ],
+   [
+    "Telephone Support",
+    "Included",
+    "Business hours and P1 emergency"
+   ],
+   [
+    "Named Engineer Contacts",
+    "2",
+    "Primary and secondary engineers"
+   ],
+   [
+    "Future Consultation",
+    "Included",
+    "Advisory on new initiatives"
+   ],
+   [
+    "Coverage Hours",
+    "Business Hours",
+    "Mon–Sat, 9 AM – 6 PM"
+   ],
+   [
+    "PBX / Handset Hardware",
+    "Excluded",
+    "Parts and replacements separate"
+   ],
+   [
+    "PSTN Line Rental & Calls",
+    "Excluded",
+    "Billed by telecom provider"
+   ],
+   [
+    "Avaya Licenses & Support",
+    "Excluded",
+    "Client to hold valid entitlements"
+   ],
+   [
+    "Service Reports",
+    "Quarterly",
+    "Operational status reporting"
+   ]
+  ]
+ },
+ "response": {
+  "intro": "All incidents logged with Bifold Technologies are classified by priority and managed against the following committed response and restoration timelines. Timelines are measured during covered business hours; Emergency (P1) incidents are handled on a best-effort basis outside business hours.",
+  "rows": [
+   [
+    "P1",
+    "Emergency — phone system down",
+    "1 hour",
+    "2 hours",
+    "8 business hours"
+   ],
+   [
+    "P2",
+    "High — multiple handsets or major feature affected",
+    "2 hours",
+    "4 hours",
+    "1 business day"
+   ],
+   [
+    "P3",
+    "Medium — single handset or minor feature",
+    "4 hours",
+    "Next business day",
+    "2 business days"
+   ],
+   [
+    "P4",
+    "Low — service request / MAC",
+    "1 business day",
+    "2 business days",
+    "3 business days"
+   ]
+  ],
+  "workflow": [
+   "Support requests are raised via phone or email to the Bifold service desk.",
+   "Each request receives a ticket acknowledgement and reference number.",
+   "Tickets are assigned to a named engineer based on priority and skill set.",
+   "Engineers respond within the committed SLA timeline, remotely where possible.",
+   "Incidents are resolved within the restoration target and closed with the client."
+  ]
+ },
+ "documentation": {
+  "intro": "As part of the AMC engagement, Bifold Technologies will produce and maintain the following documentation set covering the live telephony environment at Studio Republik Fitness Center LLC. Documentation is reviewed and updated periodically through the contract term.",
+  "groups": [
+   {
+    "heading": "System Documentation",
+    "bullets": [
+     "Avaya IP Office system configuration overview.",
+     "Extension and user numbering plan.",
+     "Licensing and firmware version record."
+    ]
+   },
+   {
+    "heading": "Call Handling Documentation",
+    "bullets": [
+     "Call routing, hunt group, and auto-attendant configuration.",
+     "Voicemail and time profile settings.",
+     "PSTN trunk and dial plan overview."
+    ]
+   },
+   {
+    "heading": "Operational Documentation",
+    "bullets": [
+     "Handset inventory and assignment list.",
+     "Configuration backup records.",
+     "Escalation matrix and contact list."
+    ]
+   },
+   {
+    "heading": "As-Built Records",
+    "bullets": [
+     "Updated configuration records reflecting all approved changes."
+    ]
+   }
+  ]
+ },
+ "exclusions": {
+  "groups": [
+   {
+    "heading": "Scope Exclusions",
+    "bullets": [
+     "Supply, repair, or replacement of PBX hardware, handsets, and spare parts.",
+     "Avaya software licenses, version upgrades, and Avaya manufacturer support entitlements.",
+     "PSTN line rental, call charges, and telecom provider fees.",
+     "Cabling, structured cabling, and new point or outlet installation.",
+     "Major system upgrades, version migrations, or redesign projects.",
+     "LAN/network infrastructure beyond the telephony system (diagnostic assistance only).",
+     "Site visits beyond the included onsite attendance (chargeable)."
+    ]
+   },
+   {
+    "heading": "Future Purchases",
+    "bullets": [
+     "New hardware, handsets, and software purchases are chargeable separately.",
+     "This agreement covers engineering time and managed service delivery only.",
+     "Replacement parts, consumables, and licenses are excluded.",
+     "Installation of new equipment proceeds only after customer approval."
+    ]
+   },
+   {
+    "heading": "Customer Obligations",
+    "bullets": [
+     "Provide reasonable remote and onsite access to the PBX and network.",
+     "Maintain valid Avaya licenses and an active PSTN line with the telecom provider.",
+     "Maintain power, network, and environmental conditions required by the PBX.",
+     "Refrain from unauthorised changes or third-party repairs to in-scope systems.",
+     "Approve the remote access software used by Bifold engineers."
+    ]
+   },
+   {
+    "heading": "Security & Responsibility Model",
+    "text": "Bifold Technologies provides support and configuration services for the telephony system under this engagement. Responsibility for the security of the wider network, internet connectivity, user accounts, and connected systems remains with the client. Bifold issues advisory recommendations on telephony security, including secure remote access, password management, and toll-fraud prevention."
+   },
+   {
+    "heading": "Disclaimers & Liability",
+    "bullets": [
+     "No liability for force majeure events outside the reasonable control of either party.",
+     "The customer is responsible for the legality of all software in use.",
+     "No software will be installed without written approval from the customer.",
+     "Bifold is not responsible for toll fraud, cyberattacks, hacking incidents, or resulting loss arising from factors outside its control."
+    ]
+   },
+   {
+    "heading": "Confidentiality",
+    "bullets": [
+     "This proposal and all information contained within it is confidential and intended solely for the named recipient. It may not be reproduced, circulated, or disclosed to any third party without the prior written consent of Bifold Technologies LLC.",
+     "All Bifold engineers are bound by confidentiality obligations covering client systems, data, and operational information.",
+     "A non-disclosure agreement (NDA) will be executed before the first onsite visit, if not already in place."
+    ]
+   },
+   {
+    "heading": "System Size Assumption",
+    "text": "This agreement is based on the current footprint of one Avaya IP Office PBX, twelve IP handsets, and one PSTN line. Scope and commercials may be reviewed if the number of handsets, lines, or sites increases, or if the telephony infrastructure is materially expanded beyond the current baseline."
+   }
+  ]
+ }
+}

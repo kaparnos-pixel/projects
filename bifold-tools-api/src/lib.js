@@ -1,4 +1,5 @@
-// Bifold Tools API: shared customers, saved PnL documents with per-document sharing, the sales pipeline and the PDC cheque log.
+// Bifold Tools API: shared customers, saved PnL documents with per-document sharing, the sales pipeline, the PDC cheque log
+// and the AMC Tracker (src/amc.js).
 // Storage: Azure Table Storage (setting STORAGE_CONNECTION).
 // Settings:
 //   STORAGE_CONNECTION  connection string of the storage account (required)
@@ -45,7 +46,7 @@ async function all(t, pk, select) {
 const CHUNK = 30000, MAX_CHUNKS = 20;
 function packJson(obj) {
   const s = JSON.stringify(obj);
-  if (s.length > CHUNK * MAX_CHUNKS) fail(413, "This PnL is too large to save. Split it into smaller documents.");
+  if (s.length > CHUNK * MAX_CHUNKS) fail(413, "This record is too large to save. Split it into smaller documents.");
   const out = { dataChunks: Math.max(1, Math.ceil(s.length / CHUNK)) };
   for (let i = 0; i < out.dataChunks; i++) out["data" + i] = s.slice(i * CHUNK, (i + 1) * CHUNK);
   return out;
@@ -458,9 +459,14 @@ async function deleteCheque(user, id) {
   await t.deleteEntity(QPK, id);
 }
 
+// ---------- AMC Tracker (src/amc.js) ----------
+let amcRoute;
+const amc = () => amcRoute || (amcRoute = require("./amc")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, emailOk, CUST, CPK }));
+
 // ---------- routing ----------
 async function route(method, seg, user, body) {
   const [a, id, sub] = seg;
+  if (a === "amc") return amc()(method, seg.slice(1), user, body);
   if (a === "me" && method === "GET") return { ...user, managers: managers(), domains: domains() };
   if (a === "customers") {
     if (!id && method === "GET") return listCustomers();
@@ -500,6 +506,7 @@ async function dispatch(method, path, getHeader, readBody, log = console) {
     let body = {};
     if (method === "POST" || method === "PUT") { try { body = (await readBody()) || {}; } catch { fail(400, "The request could not be read."); } }
     const out = await route(method, seg, user, body);
+    if (out && out.__binary) return { status: 200, raw: out.__binary, headers: out.headers };
     return out === undefined ? { status: 204 } : { status: 200, body: out };
   } catch (e) {
     if (e instanceof HttpError) return { status: e.status, body: { error: e.message, ...(e.data || {}) } };

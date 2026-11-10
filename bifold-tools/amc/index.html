@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bifold AMC Tracker</title>
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
+<style>
+/* Layout: sticky brand bar with four views (Overview, AMCs, Visits, Customers); registers as tables; records open in side sheets that go full-screen on phones. */
+:root{
+  --bg:#F3F6F9; --surface:#FFFFFF; --sunk:#E9EFF5; --line:#D6E0E9; --line-strong:#B4C5D6;
+  --fg:#1F2733; --muted:#5E6B7A; --steel:#1E5A8C; --steel-deep:#174A73; --steel-fg:#FFFFFF; --steel-soft:#E3ECF4;
+  --crimson:#D81F2A; --crimson-soft:#F8E4E7;
+  --ok:#1F7A4D; --ok-soft:#E1F2E8; --warn:#9A5B00; --warn-soft:#FDF0D8; --bad:#B3261E; --bad-soft:#FBE5E3;
+  --violet:#5B4B9A; --violet-soft:#ECE8F7;
+  --shadow:0 18px 50px rgba(20,40,64,.18);
+  --font-display:Arial,"Helvetica Neue",Helvetica,sans-serif;
+  --font-body:Arial,"Helvetica Neue",Helvetica,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0E151D; --surface:#152029; --sunk:#101A23; --line:#24323F; --line-strong:#35485A;
+  --fg:#E4EBF2; --muted:#93A4B5; --steel:#6fa8db; --steel-deep:#A9C9E6; --steel-fg:#0E151D; --steel-soft:#1A2D3E;
+  --crimson:#f0545c; --crimson-soft:#3A1A20;
+  --ok:#6FD39A; --ok-soft:#143322; --warn:#F2B357; --warn-soft:#3A2A10; --bad:#FF8A80; --bad-soft:#3C1A18;
+  --violet:#B7A8F0; --violet-soft:#29233F; --shadow:0 18px 50px rgba(0,0,0,.5);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E151D; --surface:#152029; --sunk:#101A23; --line:#24323F; --line-strong:#35485A;
+  --fg:#E4EBF2; --muted:#93A4B5; --steel:#6fa8db; --steel-deep:#A9C9E6; --steel-fg:#0E151D; --steel-soft:#1A2D3E;
+  --crimson:#f0545c; --crimson-soft:#3A1A20;
+  --ok:#6FD39A; --ok-soft:#143322; --warn:#F2B357; --warn-soft:#3A2A10; --bad:#FF8A80; --bad-soft:#3C1A18;
+  --violet:#B7A8F0; --violet-soft:#29233F; --shadow:0 18px 50px rgba(0,0,0,.5);
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14px;line-height:1.5}
+h1,h2,h3{font-family:var(--font-display);margin:0;letter-spacing:-.01em;text-wrap:balance}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.small{font-size:12.5px}
+
+/* top bar */
+.bar{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar-in{max-width:1280px;margin:0 auto;padding-block:10px 0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand-mark{width:34px;height:34px;border-radius:7px;background:var(--steel);color:var(--steel-fg);display:grid;place-items:center;font-family:var(--font-display);font-weight:800;font-size:13px;letter-spacing:.02em;flex:none}
+.brand h1{font-size:22px;font-weight:700;color:var(--fg);line-height:1.15}
+.brand .sub{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.access{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:99px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.access.full{background:var(--steel-soft);color:var(--steel-deep)}
+nav.tabs{flex-basis:100%;display:flex;gap:2px;overflow-x:auto;margin-top:2px}
+nav.tabs a{padding:9px 14px 10px;color:var(--muted);text-decoration:none;font-weight:600;border-bottom:3px solid transparent;white-space:nowrap}
+nav.tabs a:hover{color:var(--fg)}
+nav.tabs a[aria-current="page"]{color:var(--steel-deep);border-bottom-color:var(--crimson)}
+nav.tabs .n{font-family:var(--font-mono);font-size:11px;background:var(--sunk);border-radius:99px;padding:1px 7px;margin-left:6px;color:var(--muted)}
+
+.wrap{max-width:1280px;margin:0 auto;padding-block:22px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+.view{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;min-width:0}
+.wrap>*{min-width:0}
+.view-head{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end;justify-content:space-between}
+.view-head h2{font-size:22px;font-weight:700}
+.view-head p{margin:2px 0 0;color:var(--muted);max-width:70ch}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* controls */
+button,.btn{font:inherit;font-weight:600;border-radius:7px;border:1px solid var(--line-strong);background:var(--surface);color:var(--fg);padding:8px 13px;cursor:pointer;line-height:1.2;white-space:nowrap}
+button:hover{border-color:var(--steel)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--steel);outline-offset:2px}
+button.primary{background:var(--steel);color:var(--steel-fg);border-color:var(--steel)}
+button.primary:hover{filter:brightness(1.08)}
+button.accent{background:var(--crimson);border-color:var(--crimson);color:#fff}
+button.ghost{border-color:transparent;background:transparent;padding:6px 9px}
+button.ghost:hover{background:var(--sunk)}
+button.danger{color:var(--bad);border-color:var(--bad)}
+button.danger.armed{background:var(--bad);color:var(--surface)}
+button.sm{padding:5px 9px;font-size:12.5px}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line-strong);border-radius:7px;padding:8px 10px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:72px}
+label.f{display:grid;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted);min-width:0}
+label.f .req{color:var(--crimson)}
+.hint{font-size:12px;color:var(--muted);font-weight:400}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:7px;overflow-x:auto;max-width:100%;background:var(--surface)}
+.seg button{border:0;border-radius:0;padding:7px 12px;font-weight:500;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--steel);color:var(--steel-fg)}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.filters .search{flex:1 1 220px;max-width:340px}
+.filters select{width:auto;max-width:100%}
+.count{margin-left:auto;color:var(--muted);font-size:13px}
+
+/* alerts strip */
+.alertbar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:11px 14px;border-radius:9px;background:var(--crimson-soft);color:var(--crimson);border:1px solid color-mix(in srgb,var(--crimson) 35%,transparent)}
+.alertbar b{font-family:var(--font-display)}
+.alertbar button{margin-left:auto;border-color:var(--crimson);color:var(--crimson);background:transparent}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:3px;min-width:0}
+.kpi .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.kpi .v{font-family:var(--font-display);font-size:24px;font-weight:700;color:var(--steel-deep);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .s{font-size:12.5px;color:var(--muted)}
+.kpi.hot .v{color:var(--crimson)}
+.cols{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.cols{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;min-width:0}
+.panel>h3{font-size:15px;padding:13px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.list{display:grid}
+.li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line);cursor:pointer;text-align:left;background:none;border-left:0;border-right:0;border-top:0;border-radius:0;font-weight:400;white-space:normal;width:100%}
+.li:last-child{border-bottom:0}
+.li:hover{background:var(--sunk)}
+.li .t{font-weight:600}
+.dateblock{width:46px;text-align:center;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex:none;background:var(--surface)}
+.dateblock .m{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--steel);color:var(--steel-fg);padding:1px 0}
+.dateblock .d{font-family:var(--font-display);font-size:17px;font-weight:700;padding:2px 0}
+.dateblock.late .m{background:var(--crimson);color:#fff}
+.empty{padding:34px 20px;text-align:center;color:var(--muted);display:grid;gap:8px;justify-items:center}
+.empty strong{color:var(--fg);font-family:var(--font-display);font-size:15px}
+
+/* registers */
+.register{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+.register table{min-width:900px}
+th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--sunk);white-space:nowrap}
+td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover td{background:var(--sunk)}
+td.r,th.r{text-align:right}
+.sub{color:var(--muted);font-size:12.5px;margin:0}
+.ref{font-family:var(--font-mono);font-size:12px;color:var(--steel-deep);font-weight:500}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap;background:var(--sunk);color:var(--muted)}
+.chip.draft{background:var(--sunk);color:var(--muted)}
+.chip.sent{background:var(--violet-soft);color:var(--violet)}
+.chip.awarded,.chip.active,.chip.completed{background:var(--ok-soft);color:var(--ok)}
+.chip.lost,.chip.cancelled{background:var(--sunk);color:var(--muted);text-decoration:line-through}
+.chip.expiring,.chip.overdue{background:var(--warn-soft);color:var(--warn)}
+.chip.expired{background:var(--bad-soft);color:var(--bad)}
+.chip.renewed{background:var(--steel-soft);color:var(--steel-deep)}
+.chip.scheduled{background:var(--steel-soft);color:var(--steel-deep)}
+.chip.in_progress{background:var(--violet-soft);color:var(--violet)}
+.chip.gen{background:var(--steel-soft);color:var(--steel-deep)}
+.term{display:grid;gap:4px;min-width:150px}
+.term .track{height:6px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.term .fill{height:100%;background:var(--steel)}
+.term.expiring .fill{background:var(--warn)}.term.expired .fill{background:var(--bad)}
+
+/* side sheet */
+dialog{border:0;padding:0;max-width:none;background:var(--surface);color:var(--fg);box-shadow:var(--shadow)}
+dialog::backdrop{background:rgba(10,20,32,.45)}
+dialog.sheet{margin:0 0 0 auto;height:100%;max-height:100%;width:min(760px,100vw);border-left:1px solid var(--line)}
+dialog.modal{border-radius:12px;border:1px solid var(--line);width:min(620px,calc(100vw - 24px));max-height:calc(100% - 24px)}
+.sheet-in{display:flex;flex-direction:column;height:100%}
+.sheet-head{padding:16px 20px 14px;padding-top:calc(16px + env(safe-area-inset-top,0px));padding-right:max(20px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);display:grid;gap:8px;background:var(--surface)}
+.sheet-head .top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.sheet-head h2{font-size:20px;font-weight:700;color:var(--steel-deep)}
+.sheet-body{overflow-y:auto;padding:18px 20px 28px;padding-right:max(20px,env(safe-area-inset-right,0px));padding-bottom:calc(28px + env(safe-area-inset-bottom,0px));display:grid;gap:20px;align-content:start;flex:1}
+.sec{display:grid;gap:10px}
+.sec>h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:10px}
+.sec>h3::after{content:"";flex:1;height:1px;background:var(--line)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.fact{background:var(--sunk);border-radius:8px;padding:9px 11px;min-width:0}
+.fact .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.fact .v{font-weight:600;overflow-wrap:anywhere}
+.systems{white-space:pre-wrap;background:var(--sunk);border-radius:8px;padding:10px 12px;font-size:13.5px}
+.docrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.callout{padding:11px 13px;border-radius:8px;background:var(--steel-soft);color:var(--steel-deep);font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.callout.warn{background:var(--warn-soft);color:var(--warn)}
+.callout.bad{background:var(--bad-soft);color:var(--bad)}
+.callout.ok{background:var(--ok-soft);color:var(--ok)}
+.files{display:grid;gap:6px}
+.file{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:0}
+.file .ext{font-family:var(--font-mono);font-size:10.5px;font-weight:600;background:var(--steel-soft);color:var(--steel-deep);border-radius:4px;padding:2px 6px;text-transform:uppercase;flex:none}
+.file .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drop{border:1.5px dashed var(--line-strong);border-radius:9px;padding:14px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer;background:var(--surface)}
+.drop.over{border-color:var(--steel);background:var(--steel-soft)}
+.drop input{display:none}
+.log{display:grid;gap:6px;font-size:12.5px}
+.log div{display:flex;gap:10px}
+.log time{font-family:var(--font-mono);color:var(--muted);flex:none;font-size:11.5px;padding-top:1px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+.grid2 .full{grid-column:1/-1}
+@media (max-width:560px){.grid2{grid-template-columns:1fr}}
+.modal form{display:grid;gap:16px;padding:20px}
+.modal h2{font-size:18px;color:var(--steel-deep)}
+.formfoot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding-top:14px}
+.formfoot .right{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.err{color:var(--bad);font-size:13px;min-height:1em}
+.money-hint{font-family:var(--font-mono);font-size:12px;color:var(--muted)}
+.checklist{display:grid;gap:6px}
+.ck{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px}
+.ck .item{font-weight:500}
+.ck .res{display:inline-flex;border:1px solid var(--line-strong);border-radius:6px;overflow:hidden}
+.ck .res button{border:0;border-radius:0;padding:4px 9px;font-size:12px;font-weight:600;color:var(--muted);background:var(--surface)}
+.ck .res button+button{border-left:1px solid var(--line)}
+.ck .res button[aria-pressed="true"][data-r="ok"]{background:var(--ok);color:var(--surface)}
+.ck .res button[aria-pressed="true"][data-r="issue"]{background:var(--crimson);color:#fff}
+.ck .res button[aria-pressed="true"][data-r="na"]{background:var(--muted);color:var(--surface)}
+.ck input{grid-column:1/-1;padding:5px 8px;font-size:13px}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.ph{border:1px solid var(--line);border-radius:8px;overflow:hidden;display:grid;background:var(--sunk);min-width:0}
+.ph img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;max-width:100%}
+.ph input{border:0;border-top:1px solid var(--line);border-radius:0;font-size:12.5px;padding:6px 8px}
+.ph .x{position:absolute;top:6px;right:6px;background:var(--surface)}
+.ph{position:relative}
+.proposal{font-family:Arial,Helvetica,sans-serif;font-size:13.5px;line-height:1.55;color:var(--fg)}
+.proposal h2{font-family:Arial,Helvetica,sans-serif;font-size:16px;color:var(--steel);border-bottom:2px solid var(--crimson);padding-bottom:4px;margin:22px 0 10px}
+.proposal h3{font-family:Arial,Helvetica,sans-serif;font-size:14px;color:var(--steel-deep);margin:14px 0 6px}
+.proposal p{margin:0 0 10px}
+.proposal ul{margin:0 0 10px;padding-left:20px}
+.proposal table{margin:6px 0 12px;font-size:12.5px}
+.proposal th{background:var(--steel);color:var(--steel-fg);font-size:11.5px;letter-spacing:0;text-transform:none}
+.proposal td{padding:6px 10px}
+.proposal .tw{overflow-x:auto}
+.pcover{background:var(--steel);color:#fff;border-radius:8px;padding:18px 20px;display:grid;gap:4px;border-bottom:4px solid var(--crimson)}
+.pcover .k{font-size:11px;letter-spacing:.14em;color:#C9DBEA}
+.pcover .t{font-family:var(--font-display);font-size:22px;font-weight:800}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(22px + env(safe-area-inset-bottom,0px));background:var(--steel-deep);color:var(--surface);padding:10px 16px;border-radius:8px;font-weight:600;z-index:100;max-width:calc(100vw - 32px);box-shadow:var(--shadow)}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+details.more>summary{cursor:pointer;color:var(--steel-deep);font-weight:600;font-size:13px}
+.linky{background:none;border:0;padding:0;color:var(--steel-deep);font-weight:600;text-decoration:underline;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="brandbar"><div class="in">
+  <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
+  <nav><a href="/">All tools</a><a href="/pnl/">PnL Calculator</a><a href="/pipeline/">Sales Pipeline</a><a href="/pdc/">PDC &amp; Guarantees</a><a href="/customers/">Customers</a><span id="who"></span><a href="/.auth/logout">Sign out</a></nav>
+</div></div>
+<header class="bar">
+  <div class="bar-in">
+    <div class="brand">
+      <h1><span class="tag">Bifold Tools</span>AMC Tracker</h1>
+    </div>
+    <span class="access" id="accessTag">Loading…</span>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#overview" data-v="overview">Overview</a>
+      <a href="#amcs" data-v="amcs">AMCs<span class="n" id="nAmcs">0</span></a>
+      <a href="#visits" data-v="visits">Maintenance visits<span class="n" id="nVisits">0</span></a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="alertbar" id="alertbar" hidden></div>
+  <div class="callout warn" id="offline" hidden></div>
+
+  <!-- OVERVIEW -->
+  <section id="v-overview" class="view" hidden>
+    <div class="view-head">
+      <div><h2>Overview</h2><p>Contracts, renewals and site visits across Bifold's maintenance book.</p></div>
+      <div class="actions"><button class="primary" type="button" data-act="new-amc">New AMC</button><button type="button" data-act="new-visit">Schedule visit</button></div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="cols">
+      <div class="panel"><h3>Needs attention</h3><div class="list" id="attention"></div></div>
+      <div class="panel"><h3>Next visits <button class="ghost sm" type="button" onclick="location.hash='visits'">All visits</button></h3><div class="list" id="nextVisits"></div></div>
+    </div>
+  </section>
+
+  <!-- AMCS -->
+  <section id="v-amcs" class="view" hidden>
+    <div class="view-head">
+      <div><h2>Annual maintenance contracts</h2><p id="amcScope">Proposals and awarded contracts.</p></div>
+      <div class="actions"><button type="button" data-act="export-amcs">Export CSV</button><button class="primary" type="button" data-act="new-amc">New AMC</button></div>
+    </div>
+    <div class="filters">
+      <input class="search" id="amcSearch" type="search" placeholder="Search customer, ref or system" aria-label="Search AMCs">
+      <div class="seg" id="amcSeg" role="group" aria-label="Status">
+        <button type="button" data-f="all" aria-pressed="true">All</button><button type="button" data-f="open" aria-pressed="false">Proposals</button><button type="button" data-f="awarded" aria-pressed="false">Awarded</button><button type="button" data-f="expiring" aria-pressed="false">Expiring</button><button type="button" data-f="closed" aria-pressed="false">Lost / ended</button>
+      </div>
+      <span class="count" id="amcCount"></span>
+    </div>
+    <div class="register"><table><thead><tr><th>Reference</th><th>Customer</th><th>Systems covered</th><th class="r">Annual value</th><th>Status</th><th>Contract term</th><th>Owner</th></tr></thead><tbody id="amcRows"></tbody></table>
+      <div class="empty" id="amcEmpty" hidden><strong>No AMCs yet</strong><span>Create the first proposal: pick a customer, describe the systems and enter the annual value.</span><button class="primary" type="button" data-act="new-amc">New AMC</button></div>
+    </div>
+  </section>
+
+  <!-- VISITS -->
+  <section id="v-visits" class="view" hidden>
+    <div class="view-head">
+      <div><h2>Maintenance visits</h2><p>Preventive and corrective visits for awarded contracts, with photos and customer reports.</p></div>
+      <div class="actions"><button class="primary" type="button" data-act="new-visit">Schedule visit</button></div>
+    </div>
+    <div class="filters">
+      <input class="search" id="visitSearch" type="search" placeholder="Search customer, engineer or report" aria-label="Search visits">
+      <div class="seg" id="visitSeg" role="group" aria-label="Show">
+        <button type="button" data-f="upcoming" aria-pressed="true">Upcoming</button><button type="button" data-f="overdue" aria-pressed="false">Overdue</button><button type="button" data-f="completed" aria-pressed="false">Completed</button><button type="button" data-f="all" aria-pressed="false">All</button>
+      </div>
+      <select id="visitContract" aria-label="Contract"><option value="">All contracts</option></select>
+      <span class="count" id="visitCount"></span>
+    </div>
+    <div class="register"><table><thead><tr><th>Date</th><th>Customer</th><th>Type</th><th>Engineer(s)</th><th>Status</th><th>Report</th></tr></thead><tbody id="visitRows"></tbody></table>
+      <div class="empty" id="visitEmpty" hidden><strong>No visits in this list</strong><span>Visits appear here once an AMC is marked as awarded, or when you schedule one.</span></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- AMC create / edit -->
+<dialog class="modal" id="dAmc"><form id="fAmc" novalidate>
+  <h2 id="dAmcTitle">New AMC</h2>
+  <div class="grid2">
+    <label class="f full">Customer <span class="req">*</span>
+      <span style="display:flex;gap:8px"><select id="a_customer" required></select><button type="button" class="sm" id="a_newCust">New</button></span>
+    </label>
+    <label class="f full">Systems covered by the AMC <span class="req">*</span>
+      <textarea id="a_systems" rows="4" required placeholder="e.g. Avaya IP Office 500 PBX, 24 IP phones, 2 SIP trunks&#10;FortiGate 100F firewall, 6 Aruba switches"></textarea>
+      <span class="hint">List each system with quantities. This drives the scope, service plan and SLA in the proposal.</span>
+    </label>
+    <label class="f">Annual AMC value, AED excl. VAT <span class="req">*</span>
+      <input id="a_value" class="mono" inputmode="decimal" required placeholder="0">
+      <span class="money-hint" id="a_valueHint"></span>
+    </label>
+    <div class="f full" id="a_filesWrap">
+      <span class="f" style="font-size:12.5px;font-weight:600;color:var(--muted)">Files <span class="hint">(customer RFQ, site survey, asset list…)</span></span>
+      <div class="files" id="a_files"></div>
+      <label class="drop" id="a_drop">Drop files here or click to upload — PDF, Word, Excel, images<input type="file" id="a_fileInput" multiple></label>
+    </div>
+  </div>
+  <div class="callout" id="a_note">Claude drafts the rest of the proposal in the Bifold AMC format after you save.</div>
+  <div class="err" id="a_err" role="alert"></div>
+  <div class="formfoot"><span></span><div class="right"><button type="button" data-close>Cancel</button><button class="primary" type="submit" id="a_save">Save AMC</button></div></div>
+</form></dialog>
+
+<!-- Customer (shared list) -->
+<dialog class="modal" id="dCust"><form id="fCust" novalidate>
+  <h2>Add customer</h2>
+  <p class="muted small" style="margin:-8px 0 0">Saved to the shared customer list used by every Bifold tool.</p>
+  <div class="grid2">
+    <label class="f full">Customer name <span class="req">*</span><input id="c_name" required maxlength="150" autocomplete="organization"></label>
+    <label class="f">Contact person<input id="c_contact" maxlength="100" placeholder="Attention line on proposals"></label>
+    <label class="f">Phone<input id="c_phone" maxlength="50" type="tel"></label>
+    <label class="f">Email<input id="c_email" type="email" maxlength="150"></label>
+    <label class="f">TRN<input id="c_trn" class="mono" maxlength="30"></label>
+    <label class="f">Emirate<select id="c_emirate"><option></option><option>Abu Dhabi</option><option>Dubai</option><option>Sharjah</option><option>Ajman</option><option>Umm Al Quwain</option><option>Ras Al Khaimah</option><option>Fujairah</option><option>Outside UAE</option></select></label>
+    <label class="f">Address<input id="c_address" maxlength="300"></label>
+  </div>
+  <div class="err" id="c_err" role="alert"></div>
+  <div class="formfoot"><span></span><div class="right"><button type="button" data-close>Cancel</button><button class="primary" type="submit" id="c_save">Add customer</button></div></div>
+</form></dialog>
+
+<!-- Award -->
+<dialog class="modal" id="dAward"><form id="fAward" novalidate>
+  <h2>Mark AMC as awarded</h2>
+  <p class="muted small" id="aw_sub" style="margin:-8px 0 0"></p>
+  <div class="grid2">
+    <label class="f">Award date <span class="req">*</span><input id="aw_date" type="date" required></label>
+    <label class="f">Contract start <span class="req">*</span><input id="aw_start" type="date" required></label>
+    <label class="f">Term<select id="aw_months"><option value="12">12 months</option><option value="24">24 months</option><option value="36">36 months</option><option value="6">6 months</option></select></label>
+    <label class="f">Contract end<input id="aw_end" type="date" readonly tabindex="-1" style="background:var(--sunk)"></label>
+    <label class="f">LPO / PO number<input id="aw_lpo" class="mono"></label>
+    <label class="f">Preventive maintenance<select id="aw_pm"><option value="1">Monthly</option><option value="3" selected>Quarterly</option><option value="6">Every 6 months</option><option value="12">Once a year</option><option value="0">No scheduled PM</option></select></label>
+    <label class="f">Alert before expiry<select id="aw_alert"><option value="90">90 days</option><option value="60" selected>60 days</option><option value="45">45 days</option><option value="30">30 days</option></select></label>
+    <label class="f">Send expiry alerts to <span class="req">*</span><input id="aw_email" type="email" required placeholder="you@bifoldtech.com"><span class="hint">ranjan@bifoldtech.com is always copied.</span></label>
+    <label class="f full" style="display:flex;gap:8px;align-items:center;font-weight:500;color:var(--fg)"><input type="checkbox" id="aw_schedule" checked style="width:auto"> Schedule the preventive maintenance visits for the whole term</label>
+  </div>
+  <div class="err" id="aw_err" role="alert"></div>
+  <div class="formfoot"><span></span><div class="right"><button type="button" data-close>Cancel</button><button class="primary" type="submit">Mark awarded</button></div></div>
+</form></dialog>
+
+<!-- Visit schedule -->
+<dialog class="modal" id="dNewVisit"><form id="fNewVisit" novalidate>
+  <h2>Schedule a maintenance visit</h2>
+  <div class="grid2">
+    <label class="f full">Contract <span class="req">*</span><select id="nv_contract" required></select></label>
+    <label class="f">Visit type<select id="nv_type"><option value="pm">Preventive maintenance</option><option value="corrective">Corrective maintenance</option><option value="emergency">Emergency call-out</option><option value="survey">Site survey / audit</option></select></label>
+    <label class="f">Date <span class="req">*</span><input id="nv_date" type="date" required></label>
+    <label class="f">Time<input id="nv_time" type="time"></label>
+    <label class="f">Engineer(s)<input id="nv_eng" placeholder="e.g. Zin Htet Ko"></label>
+    <label class="f full">Notes for the engineer<textarea id="nv_notes" rows="2"></textarea></label>
+  </div>
+  <div class="err" id="nv_err" role="alert"></div>
+  <div class="formfoot"><span></span><div class="right"><button type="button" data-close>Cancel</button><button class="primary" type="submit">Schedule visit</button></div></div>
+</form></dialog>
+
+<!-- Share -->
+<dialog class="modal" id="dShare"><form id="fShare" novalidate>
+  <h2 id="sh_title">Share with customer</h2>
+  <div class="grid2">
+    <label class="f full">To <span class="req">*</span><input id="sh_to" placeholder="customer@company.com"><span class="hint">Separate several addresses with commas.</span></label>
+    <label class="f full">Cc<input id="sh_cc"></label>
+    <label class="f full">Subject<input id="sh_subject"></label>
+    <label class="f full">Message<textarea id="sh_msg" rows="6"></textarea></label>
+  </div>
+  <div class="callout" id="sh_how"></div>
+  <div class="err" id="sh_err" role="alert"></div>
+  <div class="formfoot"><button type="button" data-close>Cancel</button><div class="right"><button type="button" id="sh_dl">Download PDF</button><button class="primary" type="submit" id="sh_send">Send email</button></div></div>
+</form></dialog>
+
+<!-- Regenerate -->
+<dialog class="modal" id="dRegen"><form id="fRegen" novalidate>
+  <h2>Redraft the proposal</h2>
+  <label class="f">Anything Claude should change? <span class="hint">Optional — e.g. "24×7 support for P1", "monthly onsite PM", "semi-annual payment".</span><textarea id="rg_notes" rows="4"></textarea></label>
+  <div class="formfoot"><span></span><div class="right"><button type="button" data-close>Cancel</button><button class="primary" type="submit">Redraft</button></div></div>
+</form></dialog>
+
+<!-- AMC sheet -->
+<dialog class="sheet" id="sAmc"><div class="sheet-in">
+  <div class="sheet-head">
+    <div class="top"><div style="min-width:0"><div class="ref" id="s_ref"></div><h2 id="s_customer"></h2></div><button class="ghost" type="button" data-close aria-label="Close">✕</button></div>
+    <div class="docrow" id="s_chips"></div>
+  </div>
+  <div class="sheet-body" id="s_body"></div>
+</div></dialog>
+
+<!-- Proposal preview -->
+<dialog class="sheet" id="sPrev"><div class="sheet-in">
+  <div class="sheet-head"><div class="top"><div><div class="ref" id="pv_ref"></div><h2>Proposal preview</h2></div><button class="ghost" type="button" data-close aria-label="Close">✕</button></div>
+    <div class="docrow"><button type="button" class="sm" id="pv_docx">Word</button><button type="button" class="sm" id="pv_pdf">PDF</button></div></div>
+  <div class="sheet-body"><div class="proposal" id="pv_body"></div></div>
+</div></dialog>
+
+<!-- Visit sheet -->
+<dialog class="sheet" id="sVisit"><div class="sheet-in">
+  <div class="sheet-head">
+    <div class="top"><div style="min-width:0"><div class="ref" id="vs_ref"></div><h2 id="vs_customer"></h2></div><button class="ghost" type="button" data-close aria-label="Close">✕</button></div>
+    <div class="docrow" id="vs_chips"></div>
+  </div>
+  <div class="sheet-body" id="vs_body"></div>
+</div></dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="/assets/amc/gen.js"></script>
+<script src="/amc/app.js"></script>
+</body>
+</html>

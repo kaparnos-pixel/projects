@@ -28,6 +28,25 @@ td .s{font-size:12px;color:var(--muted)}
 .panel+.panel{margin-top:16px}
 h2{font-family:var(--f-display);font-weight:700;font-size:16px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;gap:8px}
 fieldset{border:0;margin:0;padding:0;min-width:0}
+/* documents */
+.dgrp+.dgrp{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.dhd{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.dhd b{font-size:13px}
+.dhd button{padding:6px 10px;font-size:12px}
+.dfile{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:var(--bg-soft,transparent)}
+.dfile .ic{flex:0 0 30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:10px;font-weight:800;letter-spacing:.02em;background:var(--accent-soft);color:var(--accent)}
+.dfile .bd{flex:1;min-width:0}
+.dfile .nm{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;color:inherit;text-decoration:none}
+.dfile .nm:hover{text-decoration:underline}
+.dfile .mt{font-size:12px;color:var(--muted)}
+.dfile .acts{display:flex;gap:2px}
+.dfile .acts button,.dfile .acts a{border:0;background:transparent;padding:4px 6px;font-size:12px;color:var(--muted);cursor:pointer;text-decoration:none;border-radius:6px}
+.dfile .acts button:hover,.dfile .acts a:hover{background:var(--accent-soft);color:var(--accent)}
+.dempty{font-size:12px;color:var(--muted);padding:6px 0}
+.dsum{font-size:12px;margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--accent-soft)}
+.dsum.over{background:var(--warn-soft);color:var(--warn);font-weight:600}
+.ddrop.over{outline:2px dashed var(--accent);outline-offset:4px;border-radius:10px}
+td .att{font-size:11px;color:var(--muted);margin-left:6px;white-space:nowrap}
 fieldset:disabled button{display:none}
 .custrow{display:flex;gap:6px}
 .custrow select{flex:1}
@@ -198,6 +217,23 @@ aside{position:sticky;top:16px}
           <div class="legend" id="legend"></div>
           <div class="be" id="be"></div>
         </section>
+        <section class="panel ddrop" id="docsPanel">
+          <h2>Documents</h2>
+          <p class="hint" id="docsHint" hidden>Save the PnL first, then attach the customer PO and supplier invoices.</p>
+          <div id="docsBody">
+            <div class="dgrp">
+              <div class="dhd"><b>Customer PO</b><button type="button" id="addPo">Upload PO</button></div>
+              <div id="poList"></div>
+            </div>
+            <div class="dgrp">
+              <div class="dhd"><b>Supplier invoices</b><button type="button" id="addInv">Add invoice</button></div>
+              <div id="invList"></div>
+              <div id="invSum"></div>
+            </div>
+            <p class="hint" style="margin:10px 0 0">PDF, image, Word, Excel or email files up to 10 MB. You can also drop files here.</p>
+          </div>
+          <input type="file" id="docFile" hidden accept=".pdf,.png,.jpg,.jpeg,.heic,.webp,.doc,.docx,.xls,.xlsx,.csv,.msg,.eml,.zip">
+        </section>
       </aside>
     </div>
   </section>
@@ -244,6 +280,28 @@ aside{position:sticky;top:16px}
 </dialog>
 
 <!-- Confirm -->
+<dialog id="invDlg">
+  <form id="invForm" method="dialog">
+    <h3 id="invTitle">Supplier invoice</h3>
+    <label><span class="lbl">Document type</span><select id="invKind"><option value="invoice">Supplier invoice</option><option value="po">Customer PO</option></select></label>
+    <label id="invFileWrap"><span class="lbl">File *</span><input type="file" id="invFile" accept=".pdf,.png,.jpg,.jpeg,.heic,.webp,.doc,.docx,.xls,.xlsx,.msg,.eml,.zip"></label>
+    <div id="invOnly">
+    <div class="fields">
+      <label><span class="lbl">Supplier</span><input id="invSupplier" maxlength="120" list="supList" placeholder="e.g. Mindware"></label>
+      <label><span class="lbl">Invoice no.</span><input id="invRef" maxlength="60"></label>
+    </div>
+    <div class="fields">
+      <label><span class="lbl">Invoice date</span><input id="invDate" type="date"></label>
+      <label><span class="lbl">Amount (AED, excluding VAT)</span><input id="invAmount" class="num" type="text" inputmode="decimal" placeholder="0"></label>
+    </div>
+    <datalist id="supList"></datalist>
+    <p class="hint" style="margin:0">The amount is compared with the estimated project cost, so you can see the actual spend against the PnL.</p>
+    </div>
+    <div class="err" id="invErr"></div>
+    <div class="foot"><button type="button" id="invCancel">Cancel</button><button class="primary" type="submit" id="invSave">Attach invoice</button></div>
+  </form>
+</dialog>
+
 <dialog id="confirmDlg">
   <form method="dialog">
     <h3 id="cfTitle"></h3>
@@ -326,7 +384,7 @@ function renderList(){
     (!q||[d.id,d.customerName,d.poNo,d.title,d.owner].join(" ").toLowerCase().includes(q)));
   $("docRows").innerHTML=rows.map(d=>`<tr data-id="${esc(d.id)}" tabindex="0">
     <td class="mono">${esc(d.id)}</td>
-    <td><div class="t">${esc(d.customerName||"No customer")}</div><div class="s">${esc([d.poNo,d.title&&d.title!==[d.customerName,d.poNo].filter(Boolean).join(" · ")?d.title:""].filter(Boolean).join(" · "))}</div></td>
+    <td><div class="t">${esc(d.customerName||"No customer")}${d.docs&&(d.docs.po||d.docs.invoices)?`<span class="att" title="Attached documents">${[d.docs.po?"PO":"",d.docs.invoices?d.docs.invoices+" inv.":""].filter(Boolean).join(" · ")}</span>`:""}</div><div class="s">${esc([d.poNo,d.title&&d.title!==[d.customerName,d.poNo].filter(Boolean).join(" · ")?d.title:""].filter(Boolean).join(" · "))}</div></td>
     <td>${esc(d.company)}</td>
     <td class="r mono">${aed(d.poValue)}</td>
     <td class="r mono ${d.netProfit<0?"neg":""}">${aed(d.netProfit)}</td>
@@ -363,7 +421,7 @@ function renderDocMeta(){
   if(DOC){$("roleChip").className="chip "+role;$("roleChip").textContent=role==="manager"?"Manager access":role==="owner"?"Owner":role==="edit"?"Can edit":"View only"}
   $("editFs").disabled=!editable;$("roNote").hidden=editable;
   $("saveBtn").hidden=!editable;$("shareBtn").hidden=!(DOC&&DOC.canShare);$("delBtn").hidden=!(DOC&&DOC.canShare);
-  setStatus();
+  setStatus();renderDocs();
 }
 function setStatus(){
   const el=$("docStatus");
@@ -411,6 +469,7 @@ $("addLine").onclick=()=>{S.lines.push({d:"",c:"Hardware",q:1,u:0});renderLines(
 
 function update(){
   const r=compute(S), t=num(S.target);
+  if(DOC)renderDocs();
   S.lines.forEach((l,i)=>{const el=$("t"+i);if(el)el.textContent=(num(l.q)*num(l.u)).toLocaleString("en-US",{maximumFractionDigits:0})});
   $("directTotal").textContent=aed(r.direct);
   $("vatHint").textContent=r.po?`With 5% VAT the customer pays ${aed(r.po*1.05)}. VAT is passed to the FTA and is not counted as income.`:"Use the PO amount before VAT. VAT is not income.";
@@ -443,7 +502,7 @@ async function save(){
   busy=true;setStatus();$("saveBtn").textContent="Saving…";
   try{
     const body={title:S.title,data:S};
-    const d=DOC?await api("PUT","pnl/"+encodeURIComponent(DOC.id),{...body,etag:DOC.etag}):await api("POST","pnl",body);
+    const d=DOC?await api("PUT","pnl/"+encodeURIComponent(DOC.id),{...body,etag:DOC.etag,base:DOC.updatedAt}):await api("POST","pnl",body);
     const isNew=!DOC;DOC=d;S=Object.assign(BLANK(),d.data);dirty=false;
     if(isNew){lastHash="#"+d.id;history.replaceState(null,"","#"+d.id);document.title=d.id+" · Instant PnL Calculator"}
     renderDocMeta();toast(isNew?`Saved as ${d.id}`:"Saved");
@@ -458,6 +517,84 @@ $("delBtn").onclick=async()=>{
   try{await api("DELETE","pnl/"+encodeURIComponent(DOC.id));dirty=false;toast("Deleted "+DOC.id);location.hash="list"}catch(e){toast(e.message,true)}
 };
 $("backBtn").onclick=e=>{e.preventDefault();location.hash="list"};
+
+/* ---------- documents: customer PO and supplier invoices ---------- */
+const FILE_MAX=10*1048576;
+const fsize=n=>n>1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024))+" KB";
+const ext=n=>(String(n).split(".").pop()||"").slice(0,4).toUpperCase();
+const fday=d=>d?new Date(d+(d.length===10?"T00:00:00":"")).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"";
+let invEdit=null,pendingKind="po";
+function fileUrl(f,dl){return "/api/pnl/"+encodeURIComponent(DOC.id)+"/files/"+f.id+(dl?"/download":"")}
+function fileRow(f,canEdit){
+  const meta=f.kind==="invoice"?[f.supplier,f.ref&&"No. "+f.ref,f.date&&fday(f.date),f.amount?aed(f.amount):""].filter(Boolean).join(" · "):"";
+  return `<div class="dfile" data-id="${esc(f.id)}"><span class="ic">${esc(ext(f.name)||"FILE")}</span><div class="bd">
+    <a class="nm" href="${fileUrl(f)}" target="_blank" rel="noopener" title="${esc(f.name)}">${esc(f.name)}</a>
+    ${meta?`<div class="mt">${esc(meta)}</div>`:""}<div class="mt">${fsize(f.size)} · ${esc(shortName(f.by))}, ${esc(when(f.at))}</div></div>
+    <div class="acts"><a href="${fileUrl(f,true)}" title="Download" aria-label="Download ${esc(f.name)}">⤓</a>${canEdit?`<button type="button" data-edit="${esc(f.id)}" title="Edit details">Edit</button>`:""}${canEdit?`<button type="button" data-rm="${esc(f.id)}" title="Remove" aria-label="Remove ${esc(f.name)}">✕</button>`:""}</div></div>`;
+}
+function renderDocs(){
+  const saved=!!DOC, can=saved&&DOC.canEdit, files=saved?(DOC.files||[]):[];
+  $("docsHint").hidden=saved;$("docsBody").hidden=!saved;
+  if(!saved)return;
+  $("addPo").hidden=!can;$("addInv").hidden=!can;
+  const po=files.filter(f=>f.kind==="po"), inv=files.filter(f=>f.kind!=="po");
+  $("poList").innerHTML=po.map(f=>fileRow(f,can)).join("")||`<div class="dempty">No PO attached yet.</div>`;
+  $("addPo").textContent=po.length?"Add another":"Upload PO";
+  $("invList").innerHTML=inv.map(f=>fileRow(f,can)).join("")||`<div class="dempty">No supplier invoices yet.</div>`;
+  const total=inv.reduce((a,f)=>a+num(f.amount),0), est=compute(S).cost;
+  $("invSum").innerHTML=total?`<div class="dsum${est&&total>est?" over":""}">Invoiced so far <b>${aed(total)}</b> of estimated cost ${aed(est)}${est?` (${pct(total/est*100)})`:""}${est&&total>est?`: ${aed(total-est)} over the estimate`:""}</div>`:"";
+  document.querySelectorAll("#docsBody [data-rm]").forEach(b=>b.onclick=()=>removeDoc(b.dataset.rm));
+  document.querySelectorAll("#docsBody [data-edit]").forEach(b=>b.onclick=()=>openInv(files.find(f=>f.id===b.dataset.edit)));
+  $("supList").innerHTML=[...new Set(inv.map(f=>f.supplier).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join("");
+}
+function b64(file){return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(",")[1]||"");r.onerror=()=>no(new Error("That file couldn't be read."));r.readAsDataURL(file)})}
+async function uploadDoc(file,kind,meta){
+  if(!DOC)throw new Error("Save the PnL first.");
+  if(file.size>FILE_MAX)throw new Error(`${file.name} is larger than 10 MB.`);
+  if(!file.size)throw new Error("The file is empty.");
+  const r=await api("POST","pnl/"+encodeURIComponent(DOC.id)+"/files",{kind,name:file.name,type:file.type||"application/octet-stream",data:await b64(file),...(meta||{})});
+  DOC.files=r.files;if(r.etag)DOC.etag=r.etag;renderDocs();renderListDocsLater();return r.file;
+}
+function renderListDocsLater(){const d=DOCS.find(x=>DOC&&x.id===DOC.id);if(d){const f=DOC.files||[];d.docs={po:f.filter(x=>x.kind==="po").length,invoices:f.filter(x=>x.kind==="invoice").length}}}
+async function removeDoc(fid){
+  const f=(DOC.files||[]).find(x=>x.id===fid);if(!f)return;
+  if(!(await confirmBox("Remove this document?",`${f.name} will be removed from ${DOC.id} for everyone.`,"Remove")))return;
+  try{const r=await api("DELETE","pnl/"+encodeURIComponent(DOC.id)+"/files/"+fid);DOC.files=r.files;if(r.etag)DOC.etag=r.etag;renderDocs();renderListDocsLater();toast("Document removed")}catch(e){toast(e.message,true)}
+}
+$("addPo").onclick=()=>{pendingKind="po";$("docFile").value="";$("docFile").click()};
+$("docFile").onchange=async e=>{const f=e.target.files[0];if(!f)return;
+  if(pendingKind==="invoice"){openInv(null,f);return}
+  try{toast("Uploading "+f.name+"…");await uploadDoc(f,"po");toast("Customer PO attached")}catch(err){toast(err.message,true)}};
+function syncKind(){const po=$("invKind").value==="po";$("invOnly").hidden=po;if(!invEdit){$("invTitle").textContent=po?"Upload customer PO":"Add supplier invoice";$("invSave").textContent=po?"Attach PO":"Attach invoice"}}
+$("invKind").onchange=syncKind;
+function openInv(f,file,kind){
+  invEdit=f||null;$("invForm").reset();$("invErr").textContent="";$("invKind").value=f?f.kind==="po"?"po":"invoice":kind||"invoice";
+  $("invTitle").textContent=f?"Document details":"Add supplier invoice";$("invFileWrap").hidden=!!f;$("invSave").textContent=f?"Save details":"Attach invoice";syncKind();
+  if(f){$("invSupplier").value=f.supplier||"";$("invRef").value=f.ref||"";$("invDate").value=f.date||"";$("invAmount").value=f.amount?fmtIn(f.amount):""}
+  if(file){const dt=new DataTransfer();dt.items.add(file);$("invFile").files=dt.files}
+  $("invDlg").showModal();(f||file?$("invSupplier"):$("invFile")).focus();
+}
+$("addInv").onclick=()=>openInv(null,null,"invoice");
+$("invCancel").onclick=()=>$("invDlg").close();
+$("invForm").onsubmit=async e=>{
+  e.preventDefault();$("invErr").textContent="";
+  const kind=$("invKind").value;
+  const meta=kind==="po"?{kind}:{kind,supplier:$("invSupplier").value,ref:$("invRef").value,date:$("invDate").value,amount:num($("invAmount").value)};
+  $("invSave").disabled=true;
+  try{
+    if(invEdit){const r=await api("PUT","pnl/"+encodeURIComponent(DOC.id)+"/files/"+invEdit.id,meta);DOC.files=r.files;if(r.etag)DOC.etag=r.etag;renderDocs();toast("Invoice details saved")}
+    else{const file=$("invFile").files[0];if(!file)throw new Error("Choose the invoice file.");$("invSave").textContent="Uploading…";await uploadDoc(file,kind,meta);toast(kind==="po"?"Customer PO attached":"Invoice attached")}
+    $("invDlg").close();
+  }catch(err){$("invErr").textContent=err.message}finally{$("invSave").disabled=false;if(invEdit)$("invSave").textContent="Save details";else syncKind()}
+};
+// Drop files on the Documents panel: one file opens the details dialog (choose PO or invoice); several are added as invoices.
+(()=>{const p=$("docsPanel");
+  p.ondragover=e=>{if(!DOC||!DOC.canEdit)return;e.preventDefault();p.classList.add("over")};
+  p.ondragleave=()=>p.classList.remove("over");
+  p.ondrop=async e=>{p.classList.remove("over");if(!DOC||!DOC.canEdit)return;e.preventDefault();const fs=[...e.dataTransfer.files];if(!fs.length)return;
+    if(fs.length===1){openInv(null,fs[0],(DOC.files||[]).some(f=>f.kind==="po")?"invoice":"po");return}
+    let n=0;for(const f of fs){try{await uploadDoc(f,"invoice");n++}catch(err){toast(err.message,true)}}if(n)toast(n+" invoices attached. Add their amounts with Edit.")};
+})();
 
 /* ---------- customers ---------- */
 $("newCustBtn").onclick=()=>{$("custForm").reset();$("custErr").textContent="";$("custDlg").showModal();$("cName").focus()};

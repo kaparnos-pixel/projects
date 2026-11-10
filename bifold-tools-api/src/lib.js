@@ -10,6 +10,7 @@
 //   BIFOLD_MANAGERS     comma-separated emails who can view, edit and share every PnL (default ranjan@bifoldtech.com)
 
 const { TableClient } = require("@azure/data-tables");
+const { BlobServiceClient } = require("@azure/storage-blob");
 const crypto = require("crypto");
 
 class HttpError extends Error {
@@ -185,7 +186,7 @@ async function deleteCustomer(user, id) {
 
 // ---------- PnL documents ----------
 const PNL = "pnl", PPK = "pnl";
-const SUMMARY_COLS = ["RowKey", "co", "title", "company", "customerId", "customerName", "poNo", "poValue", "directCost", "netProfit", "netPct", "owner", "acl", "createdAt", "updatedAt", "updatedBy"];
+const SUMMARY_COLS = ["RowKey", "co", "title", "company", "customerId", "customerName", "poNo", "poValue", "directCost", "netProfit", "netPct", "owner", "acl", "files", "createdAt", "updatedAt", "updatedBy"];
 
 // Same formula as the page, so list figures match the document.
 function compute(d) {
@@ -211,12 +212,13 @@ function summaryOut(e, role) {
   return {
     id: e.rowKey, co: rowCo(e), title: e.title || "", company: e.company || "", customerId: e.customerId || "", customerName: e.customerName || "",
     poNo: e.poNo || "", poValue: num(e.poValue), directCost: num(e.directCost), netProfit: num(e.netProfit), netPct: num(e.netPct),
+    docs: (() => { const f = pnlFiles(e); return { po: f.filter(x => x.kind === "po").length, invoices: f.filter(x => x.kind === "invoice").length, invoiced: f.reduce((a, x) => a + (x.kind === "invoice" ? num(x.amount) : 0), 0) }; })(),
     owner: e.owner, createdAt: e.createdAt, updatedAt: e.updatedAt, updatedBy: e.updatedBy, role,
   };
 }
 function fullOut(e, role) {
   return {
-    ...summaryOut(e, role), data: unpackJson(e), etag: e.etag,
+    ...summaryOut(e, role), data: unpackJson(e), files: pnlFiles(e), etag: e.etag,
     canEdit: canEdit(role), canShare: canShare(role), access: canShare(role) ? aclOf(e) : undefined,
   };
 }
@@ -264,22 +266,29 @@ async function updatePnl(user, id, b) {
   const { e, role } = await loadDoc(user, id);
   if (!canEdit(role)) fail(403, "You can view this PnL but not change it. Ask its owner or a manager for edit rights.");
   const next = {
-    partitionKey: PPK, rowKey: id, co: rowCo(e), ...docFields(b, writeCo(user)), owner: e.owner, acl: e.acl, createdAt: e.createdAt,
+    partitionKey: PPK, rowKey: id, co: rowCo(e), ...docFields(b, writeCo(user)), owner: e.owner, acl: e.acl, files: e.files || "[]", createdAt: e.createdAt,
     updatedAt: new Date().toISOString(), updatedBy: user.email,
   };
+  const t = await table(PNL);
   try {
-    await (await table(PNL)).updateEntity(next, "Replace", { etag: b.etag || e.etag });
+    await t.updateEntity(next, "Replace", { etag: b.etag || e.etag });
   } catch (err) {
-    if (err.statusCode === 412) fail(409, "Someone else saved this PnL after you opened it. Reload it to see their changes, then make yours again.");
-    throw err;
+    if (err.statusCode !== 412) throw err;
+    // Attaching documents changes the row too. If nobody saved the figures since this person opened them, save anyway.
+    const cur = await getOrNull(t, PPK, id);
+    if (!cur || !b.base || cur.updatedAt !== b.base) fail(409, "Someone else saved this PnL after you opened it. Reload it to see their changes, then make yours again.");
+    try { await t.updateEntity({ ...next, files: cur.files || "[]" }, "Replace", { etag: cur.etag }); }
+    catch (err2) { if (err2.statusCode === 412) fail(409, "Someone else changed this PnL at the same moment. Try saving again."); throw err2; }
   }
   return getPnl(user, id);
 }
 async function deletePnl(user, id) {
-  const { role } = await loadDoc(user, id);
+  const { e, role } = await loadDoc(user, id);
   if (!canShare(role)) fail(403, "Only the owner or a manager can delete this PnL.");
   writeCo(user);
   await (await table(PNL)).deleteEntity(PPK, id);
+  const c = await pnlBlobs();
+  await Promise.all(pnlFiles(e).map(f => c.deleteBlob(f.id).catch(() => {})));
 }
 async function setAccess(user, id, b) {
   const { e, role } = await loadDoc(user, id);
@@ -582,6 +591,76 @@ async function alerts(user) {
   return { count: out.length, items: out.slice(0, 40) };
 }
 
+// ---------- PnL documents: customer PO and supplier invoices (Blob Storage "pnl-files") ----------
+// The list lives in the PnL row's "files" column, apart from the PnL figures, so attaching a document never
+// conflicts with someone editing the numbers. Anyone who can open the PnL can view its documents;
+// people who can edit it can add, describe and remove them.
+const PNL_FILE_MAX = 10 * 1048576;
+const FILE_KINDS = ["po", "invoice", "other"];
+function pnlFiles(e) { try { const a = JSON.parse(e.files || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } }
+let pnlContainer;
+async function pnlBlobs() {
+  if (!pnlContainer) {
+    const cs = process.env.STORAGE_CONNECTION; if (!cs) fail(500, "Storage is not set up yet. Add the STORAGE_CONNECTION setting to the Static Web App.");
+    pnlContainer = BlobServiceClient.fromConnectionString(cs).getContainerClient("pnl-files");
+    await pnlContainer.createIfNotExists();
+  }
+  return pnlContainer;
+}
+const fileMeta = b => ({ supplier: clean(b.supplier, 120), ref: clean(b.ref, 60), date: /^\d{4}-\d{2}-\d{2}$/.test(clean(b.date, 10)) ? clean(b.date, 10) : "", amount: Math.max(0, Math.round(num(b.amount) * 100) / 100) });
+// Change the file list with a retry, in case two people attach documents at the same moment.
+async function changeFiles(id, fn) {
+  const t = await table(PNL);
+  for (let i = 0; i < 4; i++) {
+    const e = await getOrNull(t, PPK, id); if (!e) fail(404, "This PnL doesn't exist or was deleted.");
+    const files = fn(pnlFiles(e));
+    try { const r = await t.updateEntity({ partitionKey: PPK, rowKey: id, files: JSON.stringify(files) }, "Merge", { etag: e.etag }); return { files, etag: r && r.etag }; }
+    catch (err) { if (err.statusCode !== 412) throw err; }
+  }
+  fail(409, "The documents were changed by someone else at the same time. Try again.");
+}
+async function addPnlFile(user, id, b) {
+  const { e, role } = await loadDoc(user, id);
+  if (!canEdit(role)) fail(403, "You can view this PnL but not add documents to it.");
+  const co = writeCo(user);
+  if (pnlFiles(e).length >= 60) fail(400, "A PnL can hold at most 60 documents.");
+  const kind = FILE_KINDS.includes(b.kind) ? b.kind : "other";
+  const name = clean(b.name, 200) || "document"; const type = clean(b.type, 120) || "application/octet-stream";
+  const buf = Buffer.from(String(b.data || ""), "base64");
+  if (!buf.length) fail(400, "The file is empty.");
+  if (buf.length > PNL_FILE_MAX) fail(413, `${name} is larger than 10 MB.`);
+  const fid = crypto.randomUUID();
+  await (await pnlBlobs()).getBlockBlobClient(fid).uploadData(buf, { blobHTTPHeaders: { blobContentType: type }, metadata: { name: encodeURIComponent(name), pnl: id, co } });
+  const f = { id: fid, kind, name, type, size: buf.length, by: user.email, at: new Date().toISOString(), ...fileMeta(b) };
+  return { file: f, ...(await changeFiles(id, l => l.concat(f))) };
+}
+async function editPnlFile(user, id, fid, b) {
+  const { role } = await loadDoc(user, id);
+  if (!canEdit(role)) fail(403, "You can view this PnL but not change its documents.");
+  writeCo(user);
+  let found = false;
+  const out = await changeFiles(id, l => l.map(f => { if (f.id !== fid) return f; found = true; return { ...f, ...fileMeta(b), kind: FILE_KINDS.includes(b.kind) ? b.kind : f.kind }; }));
+  if (!found) fail(404, "That document is no longer attached.");
+  return out;
+}
+async function removePnlFile(user, id, fid) {
+  const { role } = await loadDoc(user, id);
+  if (!canEdit(role)) fail(403, "You can view this PnL but not remove its documents.");
+  writeCo(user);
+  const out = await changeFiles(id, l => l.filter(f => f.id !== fid));
+  await (await pnlBlobs()).deleteBlob(fid).catch(() => {});
+  return out;
+}
+async function getPnlFile(user, id, fid, download) {
+  const { e } = await loadDoc(user, id);
+  const f = pnlFiles(e).find(x => x.id === fid);
+  if (!f) fail(404, "That document is no longer attached.");
+  let buf;
+  try { buf = await (await pnlBlobs()).getBlockBlobClient(fid).downloadToBuffer(); } catch (err) { if (err.statusCode === 404) fail(404, "That document is no longer available."); throw err; }
+  const inline = !download && /^(image\/|application\/pdf$)/.test(f.type);
+  return { __binary: buf, headers: { "Content-Type": f.type || "application/octet-stream", "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(f.name)}`, "Cache-Control": "private, no-store" } };
+}
+
 // ---------- routing ----------
 async function route(method, seg, user, body) {
   const [a, id, sub] = seg;
@@ -601,6 +680,13 @@ async function route(method, seg, user, body) {
     if (!id && method === "GET") return listPnl(user);
     if (!id && method === "POST") return createPnl(user, body);
     if (id && sub === "access" && method === "PUT") return setAccess(user, id, body);
+    if (id && sub === "files") {
+      const fid = seg[3];
+      if (!fid && method === "POST") return addPnlFile(user, id, body);
+      if (fid && method === "GET") return getPnlFile(user, id, fid, seg[4] === "download");
+      if (fid && method === "PUT") return editPnlFile(user, id, fid, body);
+      if (fid && method === "DELETE") return removePnlFile(user, id, fid);
+    }
     if (id && !sub && method === "GET") return getPnl(user, id);
     if (id && !sub && method === "PUT") return updatePnl(user, id, body);
     if (id && !sub && method === "DELETE") return deletePnl(user, id);

@@ -562,6 +562,10 @@ const mk = () => mkMod || (mkMod = require("./mk")({ table, getOrNull, packJson,
 let pcrMod;
 const pcr = () => pcrMod || (pcrMod = require("./pcr")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CUST, CPK, CO, rowCo, inCo, writeCo, mailReadyFor, diff: (a, b) => audit().diff(a, b), record: x => audit().record(x) }));
 
+// ---------- Suppliers & Vendors (src/suppliers.js) ----------
+let supMod;
+const sup = () => supMod || (supMod = require("./suppliers")({ table, getOrNull, all, fail, clean, num, CO, rowCo, inCo, writeCo, diff: (a, b) => audit().diff(a, b) }));
+
 // ---------- team access (src/access.js) ----------
 let accessMod;
 let auditMod;
@@ -688,6 +692,7 @@ async function route(method, seg, user, body) {
   if (a === "amc") return amc()(method, seg.slice(1), user, body);
   if (a === "mk") return mk().route(method, seg.slice(1), user, body);
   if (a === "pcr") return pcr().route(method, seg.slice(1), user, body);
+  if (a === "suppliers") return sup().route(method, seg.slice(1), user, body);
   if (a === "alerts" && method === "GET") return alerts(user);
   if (a === "audit" && method === "GET") return audit().list(user, id);
   if (a === "me" && method === "GET") { if (access().touch(user.email) && user.aud) { user.aud.signin = true; user.aud.noAccess = !user.isManager && !user.sections.length; }

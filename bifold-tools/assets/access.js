@@ -143,6 +143,7 @@
     amc: I('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>'),
     visits: I('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4"/>'),
     customers: I('<path d="M4 21V5a1 1 0 0 1 1-1h9v17"/><path d="M14 9h5a1 1 0 0 1 1 1v11M8 8h2M8 12h2M8 16h2M3 21h18"/>'),
+    suppliers: I('<path d="M3 9l1.5-5h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v8h14v-8M10 21v-5h4v5"/>'),
     access: I('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4M12 15v2"/>'),
     log: I('<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>'),
     completion: I('<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8.5 14.5l2.5 2.5 4.5-5"/>'),
@@ -161,10 +162,10 @@
       { href: "/completion/", label: "Completion Reports", icon: "completion", need: ["completion"] }] },
     { group: "Marketing", items: [{ href: "/campaigns/", label: "Email Campaigns", icon: "campaigns", need: ["campaigns"], subs: [["#campaigns", "Campaigns", ["campaigns"]], ["#contacts", "Contacts & lists", ["campaigns"]], ["#media", "Image library", ["campaigns"]]] }] },
     { group: "Finance", items: [{ href: "/pdc/", label: "PDC & Guarantees", icon: "pdc", need: ["pdc"] }] },
-    { group: "Master data", items: [{ href: "/customers/", label: "Customers", icon: "customers", need: ["customers"] }] },
+    { group: "Master data", items: [{ href: "/customers/", label: "Customers", icon: "customers", need: ["customers"] }, { href: "/suppliers/", label: "Suppliers & Vendors", icon: "suppliers", need: ["suppliers", "pdc"], subs: [["#dir", "Directory", []], ["#what", "Who supplies what", []], ["#people", "All contacts", []]] }] },
     { group: "Administration", items: [{ href: "/access/", label: "Team access", icon: "access", need: ["manager"] }, { href: "/activity/", label: "Activity log", icon: "log", need: ["manager"] }] },
   ];
-  const SECTION_NAMES = { pnl: "PnL", pipeline: "Pipeline", pdc: "PDC", customers: "Customers", amc: "AMC proposals", visits: "Visits", campaigns: "Campaigns", completion: "Completion" };
+  const SECTION_NAMES = { pnl: "PnL", pipeline: "Pipeline", pdc: "PDC", customers: "Customers", suppliers: "Suppliers", amc: "AMC proposals", visits: "Visits", campaigns: "Campaigns", completion: "Completion" };
   const allowed = (m, keys) => !keys.length || keys.some(k => k === "manager" ? m.isManager : m.isManager || (m.sections || []).includes(k));
   const path = location.pathname.replace(/index\.html$/, "");
   const initials = e => { const p = String(e).split("@")[0].split(/[._-]+/).filter(Boolean); return ((p[0] || "?")[0] + (p[1] ? p[1][0] : (p[0] || "")[1] || "")).toUpperCase(); };
@@ -219,7 +220,7 @@
     top.innerHTML = `<button class="bx-ib bx-burger" type="button" aria-label="Open menu">${ICON.menu}</button>
       <div class="bx-crumb"><a href="/">${esc(m.co === "all" ? "Group Tools" : BR.tools)}</a>${group ? `<i>/</i><span>${esc(group)}</span>` : ""}<i>/</i><b>${esc(pageTitle)}</b></div>
       ${m.group ? `<label class="bx-co"><span>Company</span><select aria-label="Company">${[["bifold", "Bifold"], ["techhub", "Tech Hub"]].concat(isHome ? [["all", "Group (read-only)"]] : []).map(([k, l]) => `<option value="${k}"${k === m.co ? " selected" : ""}>${l}</option>`).join("")}</select></label>` : ""}
-      <button class="bx-search" type="button" aria-label="Search tools and customers">${ICON.search}<span class="t">Search tools and customers</span><kbd>Ctrl K</kbd></button>
+      <button class="bx-search" type="button" aria-label="Search tools, customers and suppliers">${ICON.search}<span class="t">Search tools, customers, suppliers</span><kbd>Ctrl K</kbd></button>
       <button class="bx-ib bx-bell" type="button" aria-label="Alerts">${ICON.bell}<span class="dot" hidden></span></button>
       <button class="bx-user" type="button" aria-label="Account"><span class="bx-av">${esc(initials(m.email))}</span><span class="u"><b>${esc(nameOf(m.email))}</b><span>${esc(role)}</span></span></button>`;
     document.body.prepend(top); document.body.prepend(side);
@@ -227,7 +228,7 @@
     if (coSel) coSel.onchange = () => { store.set("bx-co", coSel.value); location.reload(); };
 
     // sub-links for the AMC tracker follow the hash
-    const syncSub = () => side.querySelectorAll("a.sub").forEach(a => { const h = (location.hash || (path.startsWith("/campaigns/") ? "#campaigns" : "#overview")).replace(/^#(edit|report)\/.*$/, "#campaigns"); a.classList.toggle("on", h === a.dataset.hash); });
+    const syncSub = () => side.querySelectorAll("a.sub").forEach(a => { const h = (location.hash || (path.startsWith("/campaigns/") ? "#campaigns" : path.startsWith("/suppliers/") ? "#dir" : "#overview")).replace(/^#(edit|report)\/.*$/, "#campaigns"); a.classList.toggle("on", h === a.dataset.hash); });
     syncSub(); addEventListener("hashchange", syncSub);
     top.querySelector(".bx-burger").onclick = () => document.body.classList.toggle("bx-open");
     side.addEventListener("click", e => { if (e.target.closest("a")) document.body.classList.remove("bx-open"); });
@@ -266,12 +267,12 @@
     };
 
     // command palette: tools and customers
-    let CUST = null;
+    let CUST = null, SUP = null;
     const openPal = () => {
       close();
       const scrim = document.createElement("div"); scrim.className = "bx-scrim";
       pop = document.createElement("div"); pop.className = "bx-pop bx-pal"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "Search");
-      pop.innerHTML = `<div class="in">${ICON.search}<input type="text" placeholder="Jump to a tool or customer…" aria-label="Search"></div><div class="res"></div><div class="ft"><span>↑ ↓ to move</span><span>Enter to open</span><span>Esc to close</span></div>`;
+      pop.innerHTML = `<div class="in">${ICON.search}<input type="text" placeholder="Jump to a tool, customer, supplier or contact…" aria-label="Search"></div><div class="res"></div><div class="ft"><span>↑ ↓ to move</span><span>Enter to open</span><span>Esc to close</span></div>`;
       document.body.append(scrim, pop);
       const input = pop.querySelector("input"), res = pop.querySelector(".res"); let sel = 0, hits = [];
       const shut = () => { scrim.remove(); close(); };
@@ -282,7 +283,12 @@
         const q = input.value.trim().toLowerCase();
         const custs = (CUST || []).filter(c => q && [c.name, c.contactName, c.emirate].join(" ").toLowerCase().includes(q)).slice(0, 8)
           .map(c => ({ href: "/customers/?q=" + encodeURIComponent(c.name), label: c.name, small: [c.contactName, c.emirate].filter(Boolean).join(" · "), icon: "customers", kind: "Customers" }));
-        hits = toolHits(q).concat(custs); sel = Math.min(sel, Math.max(0, hits.length - 1));
+        const sups = [];
+        (SUP || []).forEach(sp => { if (!q) return;
+          if ([sp.name, sp.brands.join(" "), sp.categories.join(" "), sp.supplies].join(" ").toLowerCase().includes(q)) sups.push({ href: "/suppliers/#s=" + encodeURIComponent(sp.id), label: sp.name, small: sp.brands.slice(0, 4).join(", ") || sp.kind, icon: "suppliers", kind: "Suppliers" });
+          sp.contacts.forEach(c => { if ([c.name, c.email, c.mobile].join(" ").toLowerCase().includes(q)) sups.push({ href: "/suppliers/#s=" + encodeURIComponent(sp.id), label: c.name, small: [c.role, sp.name].filter(Boolean).join(" · "), icon: "suppliers", kind: "Supplier contacts" }); }); });
+        sups.sort((a, b) => a.kind.localeCompare(b.kind) * -1);
+        hits = toolHits(q).concat(custs, sups.filter(x => x.kind === "Suppliers").slice(0, 6), sups.filter(x => x.kind !== "Suppliers").slice(0, 6)); sel = Math.min(sel, Math.max(0, hits.length - 1));
         let last = ""; res.innerHTML = hits.map((h, i) => (h.kind !== last ? `<div class="gh">${(last = h.kind)}</div>` : "") + `<a href="${esc(h.href)}" class="${i === sel ? "sel" : ""}">${ICON[h.icon]}<span>${esc(h.label)}</span>${h.small ? `<small>${esc(h.small)}</small>` : ""}</a>`).join("") || `<div class="bx-empty">Nothing matches "${esc(input.value)}".</div>`;
         res.querySelectorAll("a").forEach(a => a.onclick = shut);
       };
@@ -294,6 +300,7 @@
         if (e.key === "Escape") shut();
       };
       draw(); input.focus();
+      if (!SUP && allowed(m, ["suppliers", "pdc"]) && m.co !== "all") fetch("/api/suppliers", { cache: "no-store" }).then(r => r.ok ? r.json() : []).then(c => { SUP = c; draw(); }).catch(() => {});
       if (!CUST) fetch("/api/customers", { cache: "no-store" }).then(r => r.ok ? r.json() : []).then(c => { CUST = c; draw(); }).catch(() => {});
     };
     top.querySelector(".bx-search").onclick = openPal;
@@ -313,7 +320,7 @@
       brandPage(m);
       build(m);
       if (!m.isManager) document.querySelectorAll("[data-manager]").forEach(el => { el.hidden = true; });
-      const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/amc/": ["amc", "visits"], "/campaigns/": ["campaigns"], "/completion/": ["completion"], "/access/": ["manager"], "/activity/": ["manager"] };
+      const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/suppliers/": ["suppliers", "pdc"], "/amc/": ["amc", "visits"], "/campaigns/": ["campaigns"], "/completion/": ["completion"], "/access/": ["manager"], "/activity/": ["manager"] };
       document.querySelectorAll("body > :not(.bx-side) a[href]").forEach(a => { const k = LINK[a.getAttribute("href")]; if (k && !allowed(m, k)) a.hidden = true; });
       if (m.noAccess) block(m, "You don't have access yet");
       else if (pageNeeds.length && !allowed(m, pageNeeds)) block(m, "You don't have access to this tool");

@@ -12,6 +12,7 @@ const SECTIONS = [
   { key: "pipeline", name: "Sales Pipeline", hint: "Deals from lead to PO" },
   { key: "pdc", name: "PDC & Guarantees Log", hint: "Post-dated cheques, deposits and guarantees" },
   { key: "customers", name: "Customers", hint: "Open the customer list and edit customer details" },
+  { key: "suppliers", name: "Suppliers & Vendors", hint: "Supplier and vendor directory: who supplies what, and their contacts" },
   { key: "amc", name: "AMC proposals & contracts", hint: "Create AMC proposals, award contracts, see contract values" },
   { key: "visits", name: "Maintenance visits & reports", hint: "Schedule and complete visits, upload photos, send visit reports" },
   { key: "completion", name: "Project completion reports", hint: "Completion reports with BoQ, serial numbers, site pictures, warranty and customer sign-off" },
@@ -64,6 +65,7 @@ module.exports = function makeAccess(H) {
     if (a === "cheques") return "pdc";
     if (a === "mk") return "campaigns";
     if (a === "pcr") return "completion";
+    if (a === "suppliers") return method === "GET" ? ["suppliers", "pdc"] : "suppliers";
     if (a === "amc") {
       if (b === "bootstrap" || b === "files") return ["amc", "visits"];
       if (b === "amcs") return "amc";
@@ -100,7 +102,7 @@ module.exports = function makeAccess(H) {
     const known = new Set(Object.keys(seen));
     const add = v => { const e = String(v || "").toLowerCase(); if (emailOk(e)) known.add(e); };
     const scan = async (name, pk, cols) => { try { (await all(await table(name), pk, cols)).forEach(r => cols.forEach(c => add(r[c]))); } catch {} };
-    await Promise.all([scan("pnl", "pnl", ["owner"]), scan("deals", "deal", ["owner", "createdBy"]), scan("pdc", "cheque", ["createdBy"]), scan("customers", "customer", ["createdBy"]),
+    await Promise.all([scan("pnl", "pnl", ["owner"]), scan("deals", "deal", ["owner", "createdBy"]), scan("pdc", "cheque", ["createdBy"]), scan("customers", "customer", ["createdBy"]), scan("suppliers", "supplier", ["createdBy", "updatedBy"]),
       scan("amc", "amc", ["owner"]), scan("pcr", "pcr", ["owner", "updatedBy"]), scan("amcvisits", "visit", ["createdBy", "updatedBy"]), scan("mkcampaigns", "bifold", ["createdBy", "updatedBy"]), scan("mkcampaigns", "techhub", ["createdBy", "updatedBy"])]);
     rows.forEach(r => known.add(r.rowKey));
     const listed = new Map(rows.map(r => [r.rowKey, r]));

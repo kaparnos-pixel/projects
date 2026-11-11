@@ -9,7 +9,7 @@
 
 const crypto = require("crypto");
 
-const SKIP_KEYS = new Set(["partitionKey", "rowKey", "etag", "timestamp", "odata.etag", "updatedAt", "updatedBy", "createdAt", "createdBy", "dataChunks", "acl", "files",
+const SKIP_KEYS = new Set(["partitionKey", "rowKey", "etag", "timestamp", "odata.etag", "updatedAt", "updatedBy", "createdAt", "createdBy", "dataChunks", "acl", "files", "contacts",
   "reminderSentAt", "linkExpires", "signedAt", "alertsSent", "lastAlertAt", "proposalStatus", "proposalAt", "proposalStale", "proposalSource", "sentAt", "stageAt", "closedAt", "directCost", "netPct", "co", "company"]);
 const LABELS = { contactName: "contact", poNo: "PO no.", poValue: "PO value", netProfit: "net profit", customerName: "customer", customerId: null, scheduledDate: "date",
   engineers: "engineer", trn: "TRN", amount: "amount", chequeNo: "cheque no.", clearanceDate: "clearance date", value: "value", status: "status", stage: "stage", title: "title", poRef: "PO ref", projectTitle: "project", completionDate: "completion date", preparedBy: "prepared by", docNo: "doc no." };
@@ -138,11 +138,18 @@ module.exports = function makeAudit(H) {
         if (method === "DELETE") return [A, "Deleted report", name || c, ""];
       }
     }
+    if (a === "suppliers") {
+      const A = "Suppliers & Vendors";
+      if (b === "import") return [A, "Imported suppliers", "", `${out.added || 0} added, ${out.updated || 0} updated, ${out.contactsAdded || 0} contacts added, ${(out.skipped || []).length + (out.invalid || []).length} skipped`];
+      if (method === "POST") return [A, "Added supplier", out.name, [out.kind, (out.contacts || []).length + " contact" + ((out.contacts || []).length === 1 ? "" : "s")].join(", ")];
+      if (method === "PUT") return [A, "Edited supplier", out.name || name, ch];
+      if (method === "DELETE") return [A, "Deleted supplier", name || b, ""];
+    }
     if (a === "access") {
       if (b === "users" && method === "PUT") return ["Team access", "Changed access", c, (out.sections || []).join(", ") || "No sections"];
       if (b === "users" && method === "DELETE") return ["Team access", "Removed access", c, ""];
     }
-    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", access: "Team access", alerts: "Alerts" };
+    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", access: "Team access", alerts: "Alerts" };
     if (method === "GET") return [AREA[a] || "Other", b ? "Opened a record" : "Opened the list", b || "", ""];
     return [AREA[a] || "Other", method + " /" + seg.join("/"), "", ""];
   }

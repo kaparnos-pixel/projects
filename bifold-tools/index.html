@@ -159,9 +159,10 @@ const ICON={
   activity:I('<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>'),
   completion:I('<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8.5 14.5l2.5 2.5 4.5-5"/>'),
   campaigns:I('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
+  suppliers:I('<path d="M3 9l1.5-5h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v8h14v-8M10 21v-5h4v5"/>'),
   access:I('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4M12 15v2"/>'),plus:I('<path d="M12 5v14M5 12h14"/>'),
 };
-const FN={pipeline:"sales",pnl:"sales",amc:"service",visits:"service",pdc:"finance",campaigns:"marketing",completion:"service",customers:"master",access:"admin",activity:"admin"};
+const FN={pipeline:"sales",pnl:"sales",amc:"service",visits:"service",pdc:"finance",campaigns:"marketing",completion:"service",customers:"master",suppliers:"master",access:"admin",activity:"admin"};
 const aed=n=>Math.round(n||0).toLocaleString("en-US");
 const short=n=>{n=+n||0;return n>=1e6?(n/1e6).toFixed(n>=1e7?1:2)+"M":n>=1e4?Math.round(n/1e3)+"K":aed(n)};
 const dubai=()=>new Date(Date.now()+4*3600e3);
@@ -207,6 +208,7 @@ function apps(m){
     ["pdc","/pdc/","Finance","PDC & Guarantees","Post-dated cheques, security deposits and advance payment guarantees.",["pdc"]],
     ["campaigns","/campaigns/","Marketing","Email Campaigns","Branded email campaigns, contact lists, Claude drafting and scheduled sending.",["campaigns"]],
     ["customers","/customers/","Master data","Customers","The single customer list every tool uses.",["customers"]],
+    ["suppliers","/suppliers/","Master data","Suppliers & Vendors","Who supplies what: brands, categories and every contact person at each supplier.",["suppliers","pdc"]],
     ["access","/access/","Administration","Team access","Choose which tools and sections each person can use.",["manager"]],
     ["activity","/activity/","Administration","Activity log","Who created, edited, uploaded, downloaded, emailed or deleted what, and when.",["manager"]],
   ].filter(x=>x[5].some(k=>k==="manager"?m.isManager:can(m,k)));
@@ -280,6 +282,7 @@ async function load(m){
     }).catch(()=>failK(k));
   }
   if(can(m,"customers")||m.isManager)api("customers").then(c=>st("customers",`${c.length} customer${c.length===1?"":"s"}`)).catch(()=>{});
+  if(m.co!=="all"&&(can(m,"suppliers")||can(m,"pdc")))api("suppliers").then(l=>{const c=l.reduce((a,x)=>a+x.contacts.length,0);st("suppliers",`${l.length} supplier${l.length===1?"":"s"} · ${c} contact${c===1?"":"s"}`)}).catch(()=>{});
   if(m.isManager)st("access","Managers only");
   if(!$("kpis").children.length)$("kpis").hidden=true;
 }

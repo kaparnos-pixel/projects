@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Suppliers &amp; Vendors · Bifold Tools</title>
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
+<link rel="stylesheet" href="suppliers.css">
+<script src="/assets/access.js" data-section="suppliers|pdc"></script>
+</head>
+<body>
+<div class="brandbar"><div class="in">
+  <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
+  <nav><a href="/">All tools</a><a href="/customers/">Customers</a><a href="/pdc/">PDC &amp; Guarantees</a><span id="who"></span><a href="/.auth/logout">Sign out</a></nav>
+</div></div>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1><span class="tag">Bifold Tools</span>Suppliers &amp; Vendors</h1>
+      <p class="sub">Who supplies what, and who to call there. Search a brand, product or person to find the right supplier and contact in seconds.</p>
+    </div>
+    <div class="acts">
+      <button type="button" id="expBtn">Export to Excel</button>
+      <button type="button" id="impBtn" data-edit>Import from Excel / CSV</button>
+      <button class="primary" type="button" id="addBtn" data-edit>+ New supplier</button>
+    </div>
+  </header>
+
+  <section class="kpis" aria-label="Totals">
+    <div class="kpi"><div class="k">Suppliers &amp; vendors</div><div class="v" id="kSup">–</div><div class="s" id="kSupS"></div></div>
+    <div class="kpi"><div class="k">Preferred</div><div class="v" id="kPref">–</div><div class="s" id="kPrefS"></div></div>
+    <div class="kpi"><div class="k">Contact persons</div><div class="v" id="kCon">–</div><div class="s" id="kConS"></div></div>
+    <div class="kpi"><div class="k">Brands covered</div><div class="v" id="kBr">–</div><div class="s" id="kBrS"></div></div>
+  </section>
+
+  <div class="tools">
+    <div class="seg" role="tablist" aria-label="View" id="viewSeg">
+      <button type="button" data-view="dir" aria-pressed="true">Directory</button>
+      <button type="button" data-view="what" aria-pressed="false">Who supplies what</button>
+      <button type="button" data-view="people" aria-pressed="false">All contacts</button>
+    </div>
+    <input id="q" type="search" placeholder="Search supplier, brand, product, person, phone or email" aria-label="Search">
+    <select id="fCat" aria-label="Category"><option value="">All categories</option></select>
+    <select id="fBrand" aria-label="Brand"><option value="">All brands</option></select>
+    <select id="fKind" aria-label="Type"><option value="">All types</option></select>
+    <select id="fSt" aria-label="Status"><option value="">Any status</option><option value="active">Active</option><option value="preferred">Preferred</option><option value="onhold">On hold</option><option value="blocked">Blocked</option></select>
+    <span class="cnt" id="cnt"></span>
+  </div>
+
+  <div id="vDir" class="panel listpanel"><div class="tblwrap">
+    <table class="list sup">
+      <thead><tr><th>Supplier</th><th>Supplies</th><th>Main contact</th><th>Reach them</th><th>Terms</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty">Loading suppliers…</div>
+  </div></div>
+
+  <div id="vWhat" hidden>
+    <div class="whatbar">
+      <div class="seg" role="group" aria-label="Group by" id="bySeg">
+        <button type="button" data-by="brands" aria-pressed="true">By brand</button>
+        <button type="button" data-by="categories" aria-pressed="false">By category</button>
+      </div>
+      <span class="hint" id="whatHint"></span>
+    </div>
+    <div class="what" id="what"></div>
+  </div>
+
+  <div id="vPeople" class="panel listpanel" hidden><div class="tblwrap">
+    <table class="list">
+      <thead><tr><th>Name</th><th>Role</th><th>Supplier</th><th>Mobile</th><th>Phone</th><th>Email</th><th>Handles</th></tr></thead>
+      <tbody id="prow"></tbody>
+    </table>
+    <div class="empty" id="pempty" hidden></div>
+  </div></div>
+</div>
+
+<!-- supplier card -->
+<dialog id="view" class="side">
+  <div class="vin">
+    <div class="vhd">
+      <div><div class="vk" id="vKind"></div><h3 id="vName"></h3><div id="vBadges"></div></div>
+      <button type="button" class="x" id="vX" aria-label="Close">×</button>
+    </div>
+    <div class="vbody" id="vBody"></div>
+    <div class="vft">
+      <button type="button" class="danger" id="vDel" hidden>Delete</button>
+      <span class="sp"></span>
+      <button type="button" id="vCopy">Copy contacts</button>
+      <button type="button" class="primary" id="vEdit" data-edit>Edit</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- add / edit -->
+<dialog id="dlg">
+  <form id="form" novalidate>
+    <div class="dhead"><h3 id="dTitle">New supplier</h3><button type="button" class="x" id="dX" aria-label="Close">×</button></div>
+    <div class="sec">Company</div>
+    <label><span class="lbl">Supplier / vendor name *</span><input id="f_name" required maxlength="150" autocomplete="off"></label>
+    <div class="fields three">
+      <label><span class="lbl">Type</span><select id="f_kind"></select></label>
+      <label><span class="lbl">Status</span><select id="f_status"><option value="active">Active</option><option value="preferred">Preferred</option><option value="onhold">On hold</option><option value="blocked">Blocked</option></select></label>
+      <label><span class="lbl">Rating</span><span class="stars" id="f_rating" role="radiogroup" aria-label="Rating"></span></label>
+    </div>
+
+    <div class="sec">What they supply</div>
+    <label><span class="lbl">Categories</span><div class="tagbox" id="t_categories"></div></label>
+    <label><span class="lbl">Brands they carry or represent</span><div class="tagbox" id="t_brands"></div></label>
+    <label><span class="lbl">Products and services (free text)</span><textarea id="f_supplies" rows="2" maxlength="1500" placeholder="e.g. Cisco Catalyst switches, Meraki licences, Dell PowerEdge servers, structured cabling labour"></textarea></label>
+
+    <div class="sec">Contacts <button type="button" class="mini" id="addCon">+ Add contact</button></div>
+    <div id="cons"></div>
+
+    <div class="sec">Company details</div>
+    <div class="fields">
+      <label><span class="lbl">Office phone</span><input id="f_phone" maxlength="50"></label>
+      <label><span class="lbl">General email</span><input id="f_email" type="email" maxlength="150"></label>
+    </div>
+    <div class="fields">
+      <label><span class="lbl">Website</span><input id="f_website" maxlength="200" placeholder="www.example.com"></label>
+      <label><span class="lbl">TRN</span><input id="f_trn" maxlength="30"></label>
+    </div>
+    <label><span class="lbl">Address</span><input id="f_address" maxlength="300"></label>
+    <div class="fields three">
+      <label><span class="lbl">Emirate / city</span><input id="f_emirate" maxlength="50" list="emList"></label>
+      <label><span class="lbl">Country</span><input id="f_country" maxlength="60" value="UAE"></label>
+      <label><span class="lbl">Trade licence no.</span><input id="f_licenceNo" maxlength="50"></label>
+    </div>
+
+    <div class="sec">Commercial terms</div>
+    <div class="fields three">
+      <label><span class="lbl">Payment terms</span><input id="f_paymentTerms" maxlength="80" list="ptList" placeholder="e.g. 30 days PDC"></label>
+      <label><span class="lbl">Credit days</span><input id="f_creditDays" type="number" min="0" max="3650" inputmode="numeric"></label>
+      <label><span class="lbl">Credit limit</span><span class="money"><select id="f_currency" aria-label="Currency"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option><option>SAR</option><option>INR</option></select><input id="f_creditLimit" type="number" min="0" step="0.01" inputmode="decimal"></span></label>
+    </div>
+    <label><span class="lbl">Notes</span><textarea id="f_notes" rows="3" maxlength="3000" placeholder="Lead times, warranty handling, RMA process, who to escalate to …"></textarea></label>
+    <p class="hint" id="meta" style="margin:0"></p>
+    <div class="err" id="err"></div>
+    <div class="foot"><button type="button" id="cancel">Cancel</button><button class="primary" type="submit" id="saveBtn">Save</button></div>
+  </form>
+</dialog>
+
+<!-- import -->
+<dialog id="imp">
+  <form method="dialog" id="impForm">
+    <h3>Import suppliers and contacts</h3>
+    <p class="hint" style="margin-top:0">One row per contact person. Rows with the same supplier name become one supplier with several contacts. Brands and categories can be listed in one cell separated by commas. <a href="#" id="tplLink">Download a template</a></p>
+    <label class="drop" id="impDrop"><input type="file" id="impFile" accept=".csv,.xlsx,.xls" hidden><b>Choose a file</b> or drop it here</label>
+    <div id="impBody" hidden>
+      <div class="fields" style="align-items:end"><label id="sheetWrap" hidden><span class="lbl">Sheet</span><select id="impSheet"></select></label><p class="hint" id="impName" style="margin:0"></p></div>
+      <div class="map" id="impMap"></div>
+      <label class="chk"><input type="checkbox" id="impUpd" checked> Add new contacts, brands and details to suppliers already in the list</label>
+      <div class="stats" id="impStats"></div>
+      <div class="prev"><table class="list"><thead id="impHead"></thead><tbody id="impRows"></tbody></table></div>
+    </div>
+    <div class="err" id="impErr"></div>
+    <div class="foot"><button type="button" id="impCancel">Cancel</button><button class="primary" type="submit" id="impGo" disabled>Import</button></div>
+  </form>
+</dialog>
+
+<datalist id="emList"><option>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option><option>Ajman</option><option>Umm Al Quwain</option><option>Ras Al Khaimah</option><option>Fujairah</option><option>Jebel Ali Free Zone</option><option>Dubai Silicon Oasis</option></datalist>
+<datalist id="ptList"><option>Cash on delivery</option><option>Advance payment</option><option>15 days</option><option>30 days</option><option>30 days PDC</option><option>45 days</option><option>60 days</option><option>90 days</option><option>50% advance, 50% on delivery</option></datalist>
+<datalist id="roleList"><option>Account Manager</option><option>Sales Manager</option><option>Sales Executive</option><option>Pre-sales Engineer</option><option>Technical Support</option><option>Accounts / Finance</option><option>Credit Control</option><option>Logistics</option><option>RMA / Warranty</option><option>Director</option><option>Owner</option></datalist>
+
+<script src="app.js"></script>
+</body>
+</html>

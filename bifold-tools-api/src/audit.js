@@ -54,6 +54,7 @@ module.exports = function makeAudit(H) {
         if (method === "PUT") return ["PnL Calculator", "Edited document details", name, `PnL ${b}${ch ? "; " + ch : ""}`];
         if (method === "DELETE") return ["PnL Calculator", "Deleted document", name, `PnL ${b}`];
       }
+      if (c === "status") return ["PnL Calculator", body.status === "closed" ? "Closed project" : "Reopened project", b, [name, body.status === "closed" && clean(body.note, 120)].filter(Boolean).join(", ")];
       if (c === "access") return ["PnL Calculator", "Changed who can see a PnL", b, Object.entries(body.access || body.acl || {}).map(([k, v]) => `${k}: ${v}`).join(", ") || "Shared with no one"];
       if (method === "POST") return ["PnL Calculator", "Created PnL", ref, [out.customerName, out.poNo, out.poValue ? "AED " + short(out.poValue) : ""].filter(Boolean).join(", ")];
       if (method === "PUT") return ["PnL Calculator", "Edited PnL", ref, ch || "Cost lines or allowances changed"];

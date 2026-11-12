@@ -278,7 +278,7 @@ async function load(m){
       const since=plus(-90);const r=ps.filter(p=>(p.updatedAt||"").slice(0,10)>=since&&p.poValue>0);
       const po=r.reduce((s,p)=>s+p.poValue,0),net=r.reduce((s,p)=>s+p.netProfit,0);
       setK(k,r.length?`${(net/po*100).toFixed(1)}<small style="margin-left:2px">%</small>`:"–",r.length?`Net AED <b>${short(net)}</b> on AED ${short(po)} of POs · ${r.length} PnL${r.length===1?"":"s"}`:"No PnLs in the last 90 days");
-      st("pnl",`${ps.length} saved PnL${ps.length===1?"":"s"}`);
+      {const o=ps.filter(p=>p.status!=="closed").length;st("pnl",`${o} open, ${ps.length-o} closed`);}
     }).catch(()=>failK(k));
   }
   if(can(m,"customers")||m.isManager)api("customers").then(c=>st("customers",`${c.length} customer${c.length===1?"":"s"}`)).catch(()=>{});

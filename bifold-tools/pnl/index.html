@@ -15,6 +15,15 @@ header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:spac
 .filters input{max-width:340px}
 .filters select{max-width:220px}
 .listpanel{padding:0;overflow:hidden}
+.ptabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow-x:auto}
+.ptabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:10px 14px;color:var(--muted);font-weight:700}
+.ptabs button:hover:not(:disabled){color:var(--accent);border-color:transparent;border-bottom-color:var(--line)}
+.ptabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--red)}
+.ptabs .n{display:inline-block;min-width:22px;padding:0 7px;margin-left:6px;border-radius:99px;background:var(--sunk);color:var(--muted);font-size:12px;line-height:20px;text-align:center}
+.ptabs button[aria-selected="true"] .n{background:var(--accent-soft);color:var(--accent)}
+.chip.closed{background:var(--sunk);color:var(--fg)}
+.closed-note{background:var(--sunk);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:10px 14px;margin-bottom:14px}
+.closed-note b{font-weight:700}
 td .t{font-weight:700}
 td .s{font-size:12px;color:var(--muted)}
 /* editor */
@@ -113,6 +122,10 @@ aside{position:sticky;top:16px}
       </div>
       <div class="btns"><button class="primary" type="button" id="newBtn">+ New PnL</button></div>
     </header>
+    <div class="ptabs" role="tablist" aria-label="Project status">
+      <button type="button" role="tab" id="tabOpen" data-tab="open" aria-selected="true">Open projects<span class="n" id="nOpen">0</span></button>
+      <button type="button" role="tab" id="tabClosed" data-tab="closed" aria-selected="false">Closed projects<span class="n" id="nClosed">0</span></button>
+    </div>
     <div class="filters">
       <input id="q" type="search" placeholder="Search customer, PO no. or doc no." aria-label="Search">
       <select id="scope" aria-label="Show">
@@ -124,7 +137,7 @@ aside{position:sticky;top:16px}
     <div class="panel listpanel">
       <div class="tblwrap">
         <table class="list">
-          <thead><tr><th>Doc no.</th><th>Customer / PO</th><th>Company</th><th class="r">PO value</th><th class="r">Net profit</th><th class="r">Margin</th><th>Owner</th><th>Your access</th><th>Updated</th></tr></thead>
+          <thead><tr><th>Doc no.</th><th>Customer / PO</th><th>Company</th><th class="r">PO value</th><th class="r">Net profit</th><th class="r">Margin</th><th>Owner</th><th>Your access</th><th id="lastCol">Updated</th></tr></thead>
           <tbody id="docRows"></tbody>
         </table>
       </div>
@@ -139,10 +152,13 @@ aside{position:sticky;top:16px}
         <a href="#" class="btn" id="backBtn">← All PnLs</a>
         <span class="docid" id="docId">New PnL</span>
         <span class="chip" id="roleChip" hidden></span>
+        <span class="chip closed" id="closedChip" hidden>Closed</span>
         <span class="status" id="docStatus"></span>
       </div>
       <div class="btns">
         <button type="button" class="primary" id="saveBtn">Save</button>
+        <button type="button" id="closeBtn" hidden>Close project</button>
+        <button type="button" id="reopenBtn" hidden>Reopen project</button>
         <button type="button" id="shareBtn" hidden>Share</button>
         <div class="menu">
           <button type="button" id="dlBtn" aria-haspopup="true" aria-expanded="false">Download ▾</button>
@@ -155,6 +171,7 @@ aside{position:sticky;top:16px}
         <button type="button" class="danger" id="delBtn" hidden>Delete</button>
       </div>
     </div>
+    <div class="closed-note" id="closedNote" hidden></div>
     <div class="readonly-note" id="roNote" hidden>You have view access. Ask the owner or a manager if you need to make changes.</div>
 
     <div class="grid">
@@ -303,6 +320,19 @@ aside{position:sticky;top:16px}
   </form>
 </dialog>
 
+<dialog id="closeDlg">
+  <form id="closeForm" method="dialog">
+    <h3>Close this project?</h3>
+    <p style="margin:0">Close it once every invoice against the customer PO has been raised. The PnL moves to Closed projects and its figures and documents are locked. The owner or a manager can reopen it.</p>
+    <div class="fields">
+      <label><span class="lbl">Closing date</span><input id="clDate" type="date"></label>
+      <label><span class="lbl">Note (optional)</span><input id="clNote" maxlength="300" placeholder="e.g. Final invoice INV-2026-118 raised"></label>
+    </div>
+    <div class="err" id="clErr"></div>
+    <div class="foot"><button type="button" id="clCancel">Cancel</button><button class="primary" type="submit" id="clYes">Close project</button></div>
+  </form>
+</dialog>
+
 <dialog id="confirmDlg">
   <form method="dialog">
     <h3 id="cfTitle"></h3>
@@ -362,7 +392,8 @@ function compute(s){
 function route(){
   const h=decodeURIComponent(location.hash.slice(1));
   $("boot").hidden=true;
-  if(!h||h==="list") return showList();
+  if(!h||h==="list"||h==="open") return showList("open");
+  if(h==="closed") return showList("closed");
   if(h==="new") return openNew();
   return openDoc(h);
 }
@@ -374,14 +405,22 @@ window.addEventListener("hashchange",async()=>{
 window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue=""}});
 
 /* ---------- list ---------- */
-async function showList(){
-  $("editView").hidden=true;$("listView").hidden=false;document.title="Instant PnL Calculator";
+let TAB="open";
+async function showList(tab){
+  TAB=tab||"open";
+  $("editView").hidden=true;$("listView").hidden=false;document.title=(TAB==="closed"?"Closed projects":"Open projects")+" · Instant PnL Calculator";
   $("docRows").innerHTML="";$("listEmpty").hidden=false;$("listEmpty").textContent="Loading saved PnLs…";
   try{DOCS=await api("GET","pnl");renderList()}catch(e){$("listEmpty").textContent=e.message}
 }
 function renderList(){
   const q=$("q").value.trim().toLowerCase(), sc=$("scope").value;
-  const rows=DOCS.filter(d=>(sc==="all"||(sc==="mine"?d.role==="owner":d.role==="view"||d.role==="edit"))&&
+  const closedTab=TAB==="closed";
+  const inScope=d=>(sc==="all"||(sc==="mine"?d.role==="owner":d.role==="view"||d.role==="edit"));
+  $("nOpen").textContent=DOCS.filter(d=>d.status!=="closed"&&inScope(d)).length;
+  $("nClosed").textContent=DOCS.filter(d=>d.status==="closed"&&inScope(d)).length;
+  $("tabOpen").setAttribute("aria-selected",String(!closedTab));$("tabClosed").setAttribute("aria-selected",String(closedTab));
+  $("lastCol").textContent=closedTab?"Closed":"Updated";
+  const rows=DOCS.filter(d=>(d.status==="closed")===closedTab&&inScope(d)&&
     (!q||[d.id,d.customerName,d.poNo,d.title,d.owner].join(" ").toLowerCase().includes(q)));
   $("docRows").innerHTML=rows.map(d=>`<tr data-id="${esc(d.id)}" tabindex="0">
     <td class="mono">${esc(d.id)}</td>
@@ -392,12 +431,18 @@ function renderList(){
     <td class="r mono ${d.netProfit<0?"neg":""}">${d.poValue?pct(d.netPct):"-"}</td>
     <td>${esc(shortName(d.owner))}</td>
     <td><span class="chip ${d.role}">${d.role==="manager"?"Manager":d.role==="owner"?"Owner":d.role==="edit"?"Can edit":"Can view"}</span></td>
-    <td class="s">${esc(when(d.updatedAt))}</td></tr>`).join("");
+    <td class="s">${closedTab?`${esc(fday(d.closedAt))}<div>${esc(shortName(d.closedBy))}</div>`:esc(when(d.updatedAt))}</td></tr>`).join("");
   $("docRows").querySelectorAll("tr").forEach(tr=>{const go=()=>location.hash=tr.dataset.id;tr.onclick=go;tr.onkeydown=e=>{if(e.key==="Enter")go()}});
   $("listEmpty").hidden=rows.length>0;
-  $("listEmpty").innerHTML=DOCS.length?"No PnLs match your search.":"No saved PnLs yet. Click <b>+ New PnL</b> to create your first one.";
+  const inTab=DOCS.filter(d=>(d.status==="closed")===closedTab).length;
+  $("listEmpty").innerHTML=!DOCS.length?"No saved PnLs yet. Click <b>+ New PnL</b> to create your first one."
+    :inTab?"No PnLs match your search."
+    :closedTab?"No closed projects yet. Open a PnL and click <b>Close project</b> once every invoice against its PO has been raised."
+    :"No open projects. New PnLs start here.";
 }
 $("q").oninput=renderList;$("scope").onchange=renderList;
+$("tabOpen").onclick=()=>{if(location.hash!=="#open"&&location.hash!=="#list"&&location.hash!=="")location.hash="open";else{TAB="open";renderList()}};
+$("tabClosed").onclick=()=>{location.hash="closed"};
 $("newBtn").onclick=()=>location.hash="new";
 
 /* ---------- editor ---------- */
@@ -420,7 +465,12 @@ function renderDocMeta(){
   $("docId").textContent=DOC?DOC.id:"New PnL (not saved yet)";
   $("roleChip").hidden=!DOC;
   if(DOC){$("roleChip").className="chip "+role;$("roleChip").textContent=role==="manager"?"Manager access":role==="owner"?"Owner":role==="edit"?"Can edit":"View only"}
-  $("editFs").disabled=!editable;$("roNote").hidden=editable;
+  const closed=!!(DOC&&DOC.status==="closed");
+  $("closedChip").hidden=!closed;
+  $("closeBtn").hidden=!(DOC&&DOC.canClose);$("reopenBtn").hidden=!(DOC&&DOC.canReopen);
+  $("closedNote").hidden=!closed;
+  if(closed)$("closedNote").innerHTML=`<b>Closed project.</b> Closed on ${esc(fday(DOC.closedAt))} by ${esc(DOC.closedBy)}.${DOC.closeNote?" "+esc(DOC.closeNote)+".":""} ${DOC.canReopen?"Reopen it to make changes.":"Ask the owner or a manager if it needs to be reopened."}`.replace(/\.\./g,".");
+  $("editFs").disabled=!editable;$("roNote").hidden=editable||closed;
   $("saveBtn").hidden=!editable;$("shareBtn").hidden=!(DOC&&DOC.canShare);$("delBtn").hidden=!(DOC&&DOC.canShare);
   setStatus();renderDocs();
 }
@@ -515,9 +565,30 @@ document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLower
 $("delBtn").onclick=async()=>{
   if(!DOC)return;
   if(!(await confirmBox("Delete this PnL?",`${DOC.id} will be removed for everyone it's shared with. This can't be undone.`,"Delete")))return;
-  try{await api("DELETE","pnl/"+encodeURIComponent(DOC.id));dirty=false;toast("Deleted "+DOC.id);location.hash="list"}catch(e){toast(e.message,true)}
+  try{await api("DELETE","pnl/"+encodeURIComponent(DOC.id));dirty=false;toast("Deleted "+DOC.id);location.hash=DOC.status==="closed"?"closed":"open"}catch(e){toast(e.message,true)}
 };
-$("backBtn").onclick=e=>{e.preventDefault();location.hash="list"};
+$("backBtn").onclick=e=>{e.preventDefault();location.hash=DOC&&DOC.status==="closed"?"closed":"open"};
+
+/* ---------- open / closed ---------- */
+function syncListRow(){const i=DOCS.findIndex(x=>DOC&&x.id===DOC.id);if(i>=0)Object.assign(DOCS[i],{status:DOC.status,closedAt:DOC.closedAt,closedBy:DOC.closedBy,closeNote:DOC.closeNote})}
+$("closeBtn").onclick=()=>{
+  if(dirty){toast("Save your changes before closing the project.",true);return}
+  $("clErr").textContent="";$("clNote").value="";
+  $("clDate").value=new Date(Date.now()+4*3600e3).toISOString().slice(0,10);
+  $("closeDlg").showModal();$("clNote").focus();
+};
+$("clCancel").onclick=()=>$("closeDlg").close();
+$("closeForm").onsubmit=async e=>{
+  e.preventDefault();$("clErr").textContent="";$("clYes").disabled=true;
+  try{
+    DOC=await api("PUT","pnl/"+encodeURIComponent(DOC.id)+"/status",{status:"closed",date:$("clDate").value,note:$("clNote").value});
+    syncListRow();$("closeDlg").close();renderDocMeta();toast("Project closed. It's now under Closed projects.");
+  }catch(err){$("clErr").textContent=err.message}finally{$("clYes").disabled=false}
+};
+$("reopenBtn").onclick=async()=>{
+  if(!(await confirmBox("Reopen this project?","It moves back to Open projects and can be edited again.","Reopen")))return;
+  try{DOC=await api("PUT","pnl/"+encodeURIComponent(DOC.id)+"/status",{status:"open"});syncListRow();renderDocMeta();toast("Project reopened")}catch(err){toast(err.message,true)}
+};
 
 /* ---------- documents: customer PO and supplier invoices ---------- */
 const FILE_MAX=10*1048576;

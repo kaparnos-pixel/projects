@@ -188,7 +188,7 @@ async function deleteCustomer(user, id) {
 
 // ---------- PnL documents ----------
 const PNL = "pnl", PPK = "pnl";
-const SUMMARY_COLS = ["RowKey", "co", "title", "company", "customerId", "customerName", "poNo", "poValue", "directCost", "netProfit", "netPct", "owner", "acl", "files", "createdAt", "updatedAt", "updatedBy"];
+const SUMMARY_COLS = ["RowKey", "co", "title", "company", "customerId", "customerName", "poNo", "poValue", "directCost", "netProfit", "netPct", "owner", "acl", "files", "status", "closedAt", "closedBy", "closeNote", "createdAt", "updatedAt", "updatedBy"];
 
 // Same formula as the page, so list figures match the document.
 function compute(d) {
@@ -209,6 +209,8 @@ function roleOf(e, user) {
 }
 const canEdit = r => r === "owner" || r === "manager" || r === "edit";
 const canShare = r => r === "owner" || r === "manager";
+const isClosed = e => e.status === "closed";
+const CLOSED_MSG = "This project is closed. Reopen it to make changes.";
 
 function summaryOut(e, role) {
   return {
@@ -216,12 +218,14 @@ function summaryOut(e, role) {
     poNo: e.poNo || "", poValue: num(e.poValue), directCost: num(e.directCost), netProfit: num(e.netProfit), netPct: num(e.netPct),
     docs: (() => { const f = pnlFiles(e); return { po: f.filter(x => x.kind === "po").length, invoices: f.filter(x => x.kind === "invoice").length, invoiced: f.reduce((a, x) => a + (x.kind === "invoice" ? num(x.amount) : 0), 0) }; })(),
     owner: e.owner, createdAt: e.createdAt, updatedAt: e.updatedAt, updatedBy: e.updatedBy, role,
+    status: isClosed(e) ? "closed" : "open", closedAt: e.closedAt || "", closedBy: e.closedBy || "", closeNote: e.closeNote || "",
   };
 }
 function fullOut(e, role) {
   return {
     ...summaryOut(e, role), data: unpackJson(e), files: pnlFiles(e), etag: e.etag,
-    canEdit: canEdit(role), canShare: canShare(role), access: canShare(role) ? aclOf(e) : undefined,
+    canEdit: canEdit(role) && !isClosed(e), canShare: canShare(role), access: canShare(role) ? aclOf(e) : undefined,
+    canClose: canEdit(role) && !isClosed(e), canReopen: canShare(role) && isClosed(e),
   };
 }
 function docFields(b, co) {
@@ -267,8 +271,10 @@ async function createPnl(user, b) {
 async function updatePnl(user, id, b) {
   const { e, role } = await loadDoc(user, id);
   if (!canEdit(role)) fail(403, "You can view this PnL but not change it. Ask its owner or a manager for edit rights.");
+  if (isClosed(e)) fail(409, CLOSED_MSG);
   const next = {
     partitionKey: PPK, rowKey: id, co: rowCo(e), ...docFields(b, writeCo(user)), owner: e.owner, acl: e.acl, files: e.files || "[]", createdAt: e.createdAt,
+    status: e.status || "open", closedAt: e.closedAt || "", closedBy: e.closedBy || "", closeNote: e.closeNote || "",
     updatedAt: new Date().toISOString(), updatedBy: user.email,
   };
   const t = await table(PNL);
@@ -279,6 +285,7 @@ async function updatePnl(user, id, b) {
     if (err.statusCode !== 412) throw err;
     // Attaching documents changes the row too. If nobody saved the figures since this person opened them, save anyway.
     const cur = await getOrNull(t, PPK, id);
+    if (cur && isClosed(cur)) fail(409, CLOSED_MSG);
     if (!cur || !b.base || cur.updatedAt !== b.base) fail(409, "Someone else saved this PnL after you opened it. Reload it to see their changes, then make yours again.");
     try { await t.updateEntity({ ...next, files: cur.files || "[]" }, "Replace", { etag: cur.etag }); }
     catch (err2) { if (err2.statusCode === 412) fail(409, "Someone else changed this PnL at the same moment. Try saving again."); throw err2; }
@@ -293,6 +300,27 @@ async function deletePnl(user, id) {
   await (await table(PNL)).deleteEntity(PPK, id);
   const c = await pnlBlobs();
   await Promise.all(pnlFiles(e).map(f => c.deleteBlob(f.id).catch(() => {})));
+}
+// Open = still being delivered or invoiced to the customer. Closed = finished; figures and documents are locked.
+async function setPnlStatus(user, id, b) {
+  const { e, role } = await loadDoc(user, id);
+  const want = b.status === "closed" ? "closed" : b.status === "open" ? "open" : fail(400, "Choose open or closed.");
+  if (user.aud) { user.aud.name = [e.customerName, e.poNo].filter(Boolean).join(", "); user.aud.status = want; }
+  if (want === "closed") {
+    if (!canEdit(role)) fail(403, "You need edit rights on this PnL to close the project.");
+    if (isClosed(e)) fail(409, "This project is already closed.");
+  } else {
+    if (!canShare(role)) fail(403, "Only the owner or a manager can reopen a closed project.");
+    if (!isClosed(e)) fail(409, "This project is already open.");
+  }
+  writeCo(user);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(clean(b.date, 10)) ? clean(b.date, 10) : new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+  const patch = want === "closed"
+    ? { status: "closed", closedAt: date, closedBy: user.email, closeNote: clean(b.note, 300) }
+    : { status: "open", closedAt: "", closedBy: "", closeNote: "" };
+  try { await (await table(PNL)).updateEntity({ partitionKey: PPK, rowKey: id, ...patch }, "Merge", { etag: e.etag }); }
+  catch (err) { if (err.statusCode === 412) fail(409, "Someone changed this PnL at the same moment. Reload it and try again."); throw err; }
+  return getPnl(user, id);
 }
 async function setAccess(user, id, b) {
   const { e, role } = await loadDoc(user, id);
@@ -644,6 +672,7 @@ async function changeFiles(id, fn) {
 async function addPnlFile(user, id, b) {
   const { e, role } = await loadDoc(user, id);
   if (!canEdit(role)) fail(403, "You can view this PnL but not add documents to it.");
+  if (isClosed(e)) fail(409, CLOSED_MSG);
   const co = writeCo(user);
   if (pnlFiles(e).length >= 60) fail(400, "A PnL can hold at most 60 documents.");
   const kind = FILE_KINDS.includes(b.kind) ? b.kind : "other";
@@ -657,8 +686,9 @@ async function addPnlFile(user, id, b) {
   return { file: f, ...(await changeFiles(id, l => l.concat(f))) };
 }
 async function editPnlFile(user, id, fid, b) {
-  const { role } = await loadDoc(user, id);
+  const { e, role } = await loadDoc(user, id);
   if (!canEdit(role)) fail(403, "You can view this PnL but not change its documents.");
+  if (isClosed(e)) fail(409, CLOSED_MSG);
   writeCo(user);
   let found = false;
   const out = await changeFiles(id, l => l.map(f => { if (f.id !== fid) return f; found = true; const n = { ...f, ...fileMeta(b), kind: FILE_KINDS.includes(b.kind) ? b.kind : f.kind }; if (user.aud) { user.aud.name = f.name; user.aud.changes = audit().diff(f, n); } return n; }));
@@ -666,8 +696,9 @@ async function editPnlFile(user, id, fid, b) {
   return out;
 }
 async function removePnlFile(user, id, fid) {
-  const { role } = await loadDoc(user, id);
+  const { e, role } = await loadDoc(user, id);
   if (!canEdit(role)) fail(403, "You can view this PnL but not remove its documents.");
+  if (isClosed(e)) fail(409, CLOSED_MSG);
   writeCo(user);
   const out = await changeFiles(id, l => l.filter(f => { if (f.id === fid && user.aud) user.aud.name = f.name; return f.id !== fid; }));
   await (await pnlBlobs()).deleteBlob(fid).catch(() => {});
@@ -709,6 +740,7 @@ async function route(method, seg, user, body) {
     if (!id && method === "GET") return listPnl(user);
     if (!id && method === "POST") return createPnl(user, body);
     if (id && sub === "access" && method === "PUT") return setAccess(user, id, body);
+    if (id && sub === "status" && method === "PUT") return setPnlStatus(user, id, body);
     if (id && sub === "files") {
       const fid = seg[3];
       if (!fid && method === "POST") return addPnlFile(user, id, body);

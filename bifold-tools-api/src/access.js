@@ -18,6 +18,7 @@ const SECTIONS = [
   { key: "completion", name: "Project completion reports", hint: "Completion reports with BoQ, serial numbers, site pictures, warranty and customer sign-off" },
   { key: "books", name: "Books (accounting & VAT)", hint: "Invoices, bills, payments, banking, journals, reports and the VAT return" },
   { key: "quotes", name: "Quotations", hint: "Create and send quotations only (no access to the accounts)" },
+  { key: "hr", name: "HR & Payroll", hint: "Employees, salaries, leave, payroll runs, WPS file, payslips and gratuity (sensitive)" },
   { key: "campaigns", name: "Email Campaigns", hint: "Design, schedule and send marketing emails; import and manage contacts" },
 ];
 const KEYS = SECTIONS.map(s => s.key);
@@ -68,6 +69,7 @@ module.exports = function makeAccess(H) {
     if (a === "mk") return "campaigns";
     if (a === "pcr") return "completion";
     if (a === "suppliers") return method === "GET" ? ["suppliers", "pdc", "books"] : "suppliers";
+    if (a === "hr") return "hr";
     if (a === "books") return ["books", "quotes"]; // books.js narrows quotation-only users to quotations
     if (a === "amc") {
       if (b === "bootstrap" || b === "files") return ["amc", "visits"];

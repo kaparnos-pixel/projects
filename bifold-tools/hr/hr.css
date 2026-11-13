@@ -1,0 +1,31 @@
+/* HR & Payroll: builds on bifold.css, shell.css and the Books styles. */
+.pay{width:100%;border-collapse:collapse;min-width:1180px;font-size:13px}
+.pay th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:right;padding:7px 6px;border-bottom:1px solid var(--line);background:var(--sunk);white-space:nowrap}
+.pay th:first-child,.pay td:first-child{text-align:left}
+.pay td{padding:6px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap;vertical-align:middle}
+.pay td:first-child{font-family:inherit;white-space:normal;min-width:180px}
+.pay td .s{display:block;font-size:11px;color:var(--muted);font-family:inherit}
+.pay td input{width:84px;padding:5px 6px;font-size:13px;text-align:right}
+.pay td input.ud{width:56px}
+.pay td input.nt{width:150px;text-align:left}
+.pay tfoot td{font-weight:700;background:var(--sunk);border-bottom:0}
+.pay td.net{font-weight:700}
+.pay td .lk{display:inline-flex;gap:4px}
+.pay td .lk button{padding:3px 8px;font-size:11px}
+.pay tr.bad td{background:var(--bad-soft)}
+.steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:5px 11px;border-radius:99px;background:var(--sunk);color:var(--muted);border:1px solid var(--line)}
+.steps span.done{background:var(--good-soft);color:var(--good);border-color:transparent}
+.steps span.now{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.prof{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media (max-width:1060px){.prof{grid-template-columns:1fr}}
+.dl2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 18px;font-size:13px}
+.dl2 span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.dl2 b{font-weight:600;word-break:break-word}
+.exp{font-size:12px;font-weight:700;border-radius:99px;padding:2px 9px;white-space:nowrap}
+.exp.x{background:var(--bad-soft);color:var(--bad)}.exp.s{background:var(--warn-soft);color:var(--warn)}.exp.ok{background:var(--good-soft);color:var(--good)}.exp.na{background:var(--sunk);color:var(--muted)}
+.sifbox{font-family:var(--f-num);font-size:12px;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:10px 12px;white-space:pre;overflow-x:auto;max-height:240px}
+.av{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-weight:800;font-size:12px;margin-right:10px;flex:0 0 32px}
+.who{display:flex;align-items:center}
+.lk{display:inline-flex;gap:6px}.lk button{padding:4px 10px;font-size:12px}
+.mi>span:first-child{display:grid;min-width:0}

@@ -190,11 +190,23 @@ module.exports = function makeAudit(H) {
         if (method === "GET") return [A, "Opened " + lbl, out.number || c, ""];
       }
     }
+    if (a === "hr") {
+      const A = "HR & Payroll";
+      if (b === "settings") return [A, "Changed payroll settings", "", ch];
+      if (b === "employees") return [A, method === "POST" ? "Added employee" : method === "DELETE" ? "Deleted employee" : "Edited employee", name || out.name, ch];
+      if (b === "leave") return [A, method === "DELETE" ? "Deleted leave" : method === "POST" ? "Recorded leave" : "Edited leave", name, ch];
+      if (b === "runs") {
+        if (d === "status") return [A, { approve: "Approved payroll", reopen: "Reopened payroll", sif: "Created WPS salary file", post: "Posted payroll to Books", paid: "Marked payroll paid" }[body.action] || "Changed payroll", name || c, body.action === "paid" ? "paid on " + (out.payDate || "") : ""];
+        if (method === "POST") return [A, "Created payroll run", name || out.month, out.count ? `${out.count} employees, AED ${short(out.total)}` : ""];
+        if (method === "PUT") return [A, "Edited payroll", name || c, out.total ? "net AED " + short(out.total) : ""];
+        if (method === "DELETE") return [A, "Deleted draft payroll", name || c, ""];
+      }
+    }
     if (a === "access") {
       if (b === "users" && method === "PUT") return ["Team access", "Changed access", c, (out.sections || []).join(", ") || "No sections"];
       if (b === "users" && method === "DELETE") return ["Team access", "Removed access", c, ""];
     }
-    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", books: "Books", access: "Team access", alerts: "Alerts" };
+    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", books: "Books", hr: "HR & Payroll", access: "Team access", alerts: "Alerts" };
     if (method === "GET") return [AREA[a] || "Other", b ? "Opened a record" : "Opened the list", b || "", ""];
     return [AREA[a] || "Other", method + " /" + seg.join("/"), "", ""];
   }

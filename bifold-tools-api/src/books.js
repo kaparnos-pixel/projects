@@ -1098,5 +1098,7 @@ module.exports = function makeBooks(H) {
     }
     fail(404, "Unknown request.");
   }
-  return { route, alerts, TYPES, invoicesForAmc };
+  // Company letterhead details for other modules' documents (HR payslips).
+  async function orgProfile(co) { const s = await loadSettings(co); return { legalName: s.legalName, tradeName: s.tradeName, address: s.address, emirate: s.emirate, phone: s.phone, email: s.email, website: s.website, licenceNo: s.licenceNo, trn: s.vatRegistered ? s.trn : "" }; }
+  return { route, alerts, TYPES, invoicesForAmc, orgProfile };
 };

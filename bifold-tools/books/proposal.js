@@ -105,12 +105,12 @@ const BKPROP = (function () {
     const box = document.getElementById("pDia"); if (!box) return;
     const dg = P.diagram, r = dg && DIA() ? DIA().svg(dg, colours()) : null, has = !!r;
     box.innerHTML = `<div class="propdhd"><b>${esc(has ? dg.title || "Solution figure" : "Solution figure")}</b><span class="hint" style="margin:0">${has ? esc(dg.caption || "") : "Claude draws the logical topology from the BoQ, and the site layout when a site plan is given."}</span></div>
-      ${r ? `<div class="propsvg">${r.svg}</div>` : ""}
+      ${r ? `<div class="propsvg"><img alt="Solution figure" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(r.svg)}" style="display:block;width:100%;max-width:${r.w}px;margin:0 auto"></div>` : ""}
       <div class="propbtns"><input id="pDiaInst" placeholder="${has ? "What to change, e.g. move AP03 to the reception counters" : "Anything Claude should show (optional)"}" maxlength="500"><button type="button" id="pDiaGo"${B().D.ai ? "" : " disabled"}>${has ? "Redraw" : "Draw figure"}</button>${has ? `<button type="button" class="danger" id="pDiaRm">Remove</button>` : ""}</div>`;
-    document.getElementById("pDiaGo").onclick = async e => { const b = e.target; b.disabled = true; b.textContent = "Drawing…"; try { const dgm = await ai("diagram", { instructions: document.getElementById("pDiaInst").value, diagram: P.diagram, ...(SITEPLAN ? { file: SITEPLAN } : {}) }); P.diagram = cleanDiagram(dgm); drawDiagram(); } catch (er) { B().toast(er.message, 1); b.disabled = false; b.textContent = has ? "Redraw" : "Draw figure"; } };
+    document.getElementById("pDiaGo").onclick = async e => { const b = e.target; b.disabled = true; b.textContent = "Drawing…"; try { P.diagram = await drawFigure({ instructions: document.getElementById("pDiaInst").value }); drawDiagram(); } catch (er) { B().toast(er.message, 1); b.disabled = false; b.textContent = has ? "Redraw" : "Draw figure"; } };
     const rm = document.getElementById("pDiaRm"); if (rm) rm.onclick = () => { P.diagram = null; drawDiagram(); };
   }
-  const cleanDiagram = d => { const n = DIA() && DIA().normalise(d); return n && n.topology ? { title: nd(n.title || ""), caption: nd(n.caption || ""), topology: { tiers: (n.topology.tiers || []).slice(0, 9).map(t => (t || []).slice(0, 3)), links: (n.topology.links || []).slice(0, 40) }, networks: (n.networks || []).slice(0, 5), site: n.site || null } : null; };
+  const cleanDiagram = d => { if (d && typeof d.svg === "string") return { title: nd(d.title || ""), caption: nd(d.caption || ""), svg: d.svg }; const n = DIA() && DIA().normalise(d); return n && n.topology ? { title: nd(n.title || ""), caption: nd(n.caption || ""), topology: { tiers: (n.topology.tiers || []).slice(0, 9).map(t => (t || []).slice(0, 3)), links: (n.topology.links || []).slice(0, 40) }, networks: (n.networks || []).slice(0, 5), site: n.site || null } : null; };
   const colours = () => isTH() ? { primary: "#003C50", accent: "#28A08C", accent2: "#2A9D8F" } : { primary: "#1E5A8C", accent: "#D81F2A", accent2: "#2A9D8F" };
 
   // Everything Claude writes, in parallel: summary and requirements, per-line wording (in parts of 20 lines),
@@ -123,7 +123,7 @@ const BKPROP = (function () {
     btns.forEach(b => { if (b) b.disabled = true; });
     st.className = "propstat busy"; st.textContent = `Claude is writing the proposal for ${lines.length} lines: summary, requirements, solution, scope wording, specifications, terms and the figure. About 30 to 45 seconds.`;
     const chunks = []; for (let i = 0; i < lines.length; i += 20) chunks.push(lines.slice(i, i + 20).map((l, j) => ({ ...l, n: i + j + 1 })));
-    const jobs = [ai("story"), ai("specs"), ai("commercial"), ai("diagram", SITEPLAN ? { file: SITEPLAN } : {}), ...chunks.map(c => ai("scope", { lines: c.map(l => ({ n: l.n, section: l.section || "", sub: !!l.sub, name: l.name, description: l.description, model: l.model || "", qty: num(l.qty || 1), unit: l.unit || "" })) }))];
+    const jobs = [ai("story"), ai("specs"), ai("commercial"), drawFigure({}), ...chunks.map(c => ai("scope", { lines: c.map(l => ({ n: l.n, section: l.section || "", sub: !!l.sub, name: l.name, description: l.description, model: l.model || "", qty: num(l.qty || 1), unit: l.unit || "" })) }))];
     const res = await Promise.allSettled(jobs);
     const val = i => res[i].status === "fulfilled" ? res[i].value : null;
     const [s, sp, c, dg] = [val(0), val(1), val(2), val(3)];
@@ -145,6 +145,13 @@ const BKPROP = (function () {
     st.className = "propstat " + (failed.length ? "bad" : "ok");
     st.textContent = failed.length ? `${res.length - failed.length} of ${res.length} parts drafted. ${failed[0].reason.message} Click Redraft to try the rest, or write them yourself.` : "Proposal drafted. Open any section below to review or edit it, preview, then save.";
     if (failed.length) B().toast(failed[0].reason.message, 1);
+  }
+
+  // Figure 1: Claude draws the SVG itself (as in chat). If that fails or times out, the simpler box layout is drawn instead.
+  async function drawFigure(extra) {
+    const cur = P.diagram && P.diagram.svg ? { svg: P.diagram.svg } : {};
+    try { const f = await ai("figure", { ...(extra.instructions ? cur : {}), ...extra, ...(SITEPLAN ? { file: SITEPLAN } : {}) }); return cleanDiagram(f); }
+    catch (e) { if (e.status === 403 || e.status === 501) throw e; const d = await ai("diagram", { instructions: extra.instructions || "", ...(SITEPLAN ? { file: SITEPLAN } : {}) }); return cleanDiagram(d); }
   }
 
   // ctx: { d, lines (live array), draw(), header(), vat }

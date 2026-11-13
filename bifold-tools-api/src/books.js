@@ -122,8 +122,10 @@ module.exports = function makeBooks(H) {
       if (v && typeof v === "object") { const o = {}; Object.keys(v).slice(0, 60).forEach(k => { const x = walk(v[k], depth + 1); if (x !== undefined) o[clean(k, 40)] = x; }); return o; }
       return undefined;
     };
+    const svg = p && p.diagram && typeof p.diagram.svg === "string" ? AI.cleanSvg(p.diagram.svg) : null;
     const out = walk(p && typeof p === "object" ? p : {}, 0) || {};
-    if (JSON.stringify(out).length > 120000) fail(413, "The proposal text is too long to save. Shorten some sections.");
+    if (out.diagram) { delete out.diagram.svg; if (svg) out.diagram.svg = svg; }
+    if (JSON.stringify(out).length > 180000) fail(413, "The proposal text is too long to save. Shorten some sections.");
     return out;
   }
 

@@ -27,6 +27,7 @@ const PROPDIAG = (function () {
   // Old { nodes, edges } drafts become tiers.
   function normalise(d) {
     if (!d) return null;
+    if (d.svg) return d;
     if (d.topology && Array.isArray(d.topology.tiers)) return d;
     if (!Array.isArray(d.nodes)) return null;
     const by = new Map(); d.nodes.forEach(n => { const t = Number(n.tier) || 0; if (!by.has(t)) by.set(t, []); by.get(t).push({ id: n.id, label: n.label, sub: n.sub, kind: n.kind === "wifi" ? "switch" : n.kind }); });
@@ -124,6 +125,12 @@ const PROPDIAG = (function () {
   }
 
   function svg(raw, c) {
+    // A drawing Claude made itself (cleaned on the server): use it as it is.
+    if (raw && typeof raw.svg === "string" && raw.svg.indexOf("<svg") === 0) {
+      const vb = (raw.svg.match(/viewBox="\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)"/) || []);
+      const w = +vb[1] || 1000, h = +vb[2] || 600;
+      return { svg: raw.svg, w, h };
+    }
     const d = normalise(raw); if (!d || !d.topology || !(d.topology.tiers || []).some(t => t && t.length)) return null;
     c = Object.assign({ primary: "#003C50", accent: "#28A08C" }, c || {});
     const hasSite = d.site && (d.site.areas || []).length + (d.site.devices || []).length > 0;

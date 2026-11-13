@@ -280,10 +280,10 @@ function listView(type) {
     journal: [["Date", d => fd(d.date)], ["Journal", d => `<span class="t">${esc(d.number)}</span>`], ["Accounts", d => esc([...new Set(d.gl.map(g => (ACC.get(g[0]) || {}).name))].slice(0, 3).join(", "))], ["Status", d => st(d.view)], ["Amount", d => aed(d.total), "r mono"]],
     transfer: [["Date", d => fd(d.date)], ["Transfer", d => `<span class="t">${esc(d.number)}</span>`], ["From", d => esc(acctName(d.account))], ["To", d => esc(acctName((d.gl.find(g => g[1] > 0) || [])[0]))], ["Status", d => st(d.view)], ["Amount", d => aed(d.amount), "r mono"]],
   }[type];
-  cols[1] = [cols[1][0], (f => d => f(d) + clipCount(d) + (d.dealId ? ` <span class="clip" title="In the Sales Pipeline">● pipeline</span>` : "") + (d.amcId ? ` <span class="clip" title="Tracked in the AMC Tracker">● AMC ${esc(d.amcRef || "")}</span>` : ""))(cols[1][1]), cols[1][2]];
+  cols[1] = [cols[1][0], (f => d => f(d) + clipCount(d) + (d.dealId ? ` <span class="clip" title="In the Sales Pipeline">● pipeline</span>` : "") + (d.amcId ? ` <span class="clip" title="Tracked in the AMC Tracker">● AMC ${esc(d.amcRef || "")}</span>` : "") + (d.format === "proposal" ? ` <span class="clip prp" title="Sent as a full proposal">● proposal</span>` : ""))(cols[1][1]), cols[1][2]];
   const views = VIEWS[type] || [["", "All"], ["posted", "Posted"], ["void", "Void"]];
   page(PLURAL[type], SALES.has(type) ? "Sales" : type === "journal" || type === "transfer" ? "Accountant" : "Purchases",
-    `<button id="xl">Export to Excel</button>${canW(type) ? `<button class="primary" id="newBtn">+ New ${NAME[type].toLowerCase()}</button>` : `<span class="st draft">View only</span>`}`,
+    `<button id="xl">Export to Excel</button>${canW(type) ? `${type === "quote" ? `<button id="newProp">+ New proposal</button>` : ""}<button class="primary" id="newBtn">+ New ${NAME[type].toLowerCase()}</button>` : `<span class="st draft">View only</span>`}`,
     `<div class="tools"><div class="seg" id="vseg">${views.map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${k === view}">${l}</button>`).join("")}</div>
       <input type="search" id="q" placeholder="Search number, name, reference" value="${esc(p.q || "")}"><input type="date" id="from" value="${esc(p.from || "")}" aria-label="From"><input type="date" id="to" value="${esc(p.to || "")}" aria-label="To"><span class="cnt" id="cnt"></span></div>
     <div class="panel listpanel"><div class="tblwrap"><table class="list"><thead><tr>${cols.map(c => `<th class="${c[2] || ""}">${c[0]}</th>`).join("")}</tr></thead><tbody id="rows"></tbody><tfoot id="foot"></tfoot></table><div class="empty" id="empty" hidden></div></div></div>`, ROUTE_OF[type]);
@@ -303,6 +303,7 @@ function listView(type) {
   ["q", "from", "to"].forEach(id => $(id).oninput = draw);
   $("vseg").querySelectorAll("button").forEach(b => b.onclick = () => { const pp = new URLSearchParams(params()); if (b.dataset.v) pp.set("view", b.dataset.v); else pp.delete("view"); go(`#/${ROUTE_OF[type]}${pp.toString() ? "?" + pp : ""}`); });
   if ($("newBtn")) $("newBtn").onclick = () => go("#/new/" + type);
+  if ($("newProp")) $("newProp").onclick = () => go("#/new/quote?format=proposal");
   draw();
 }
 
@@ -533,7 +534,8 @@ async function docView(id) {
   if (canEdit) A.push(["Edit", "edit"]);
   A.push(["Upload files", "upload"]);
   if (tp === "invoice" && d.amcId && P.amc) A.push(["Unlink from AMC", "amcunlink"]);
-  if (["quote", "invoice", "creditnote", "po", "receipt"].includes(tp)) A.push(["Preview PDF", "preview"], ["Download PDF", "pdf"]);
+  if (tp === "quote" && d.format === "proposal") A.push(["Preview proposal", "propview", true], ["Download proposal (Word)", "propdl"]);
+  if (["quote", "invoice", "creditnote", "po", "receipt"].includes(tp)) A.push([tp === "quote" && d.format === "proposal" ? "Preview quotation PDF" : "Preview PDF", "preview"], [tp === "quote" && d.format === "proposal" ? "Download quotation PDF" : "Download PDF", "pdf"]);
   if (["quote", "invoice", "creditnote", "po"].includes(tp) && d.status !== "draft" || (tp === "quote" || tp === "po")) A.push(["Email", "email"]);
   if (tp === "quote" && ["draft", "sent"].includes(d.status)) A.push(["Mark accepted", "accept"], ["Mark declined", "decline"]);
   if (["quote", "invoice", "po"].includes(tp) && !d.sentAt && d.status !== "draft" && d.status !== "void") A.push(["Mark as sent", "sent"]);
@@ -545,7 +547,7 @@ async function docView(id) {
   if (d.status === "draft" || ((tp === "quote" || tp === "po") && d.status !== "converted")) A.push(["Delete", "del", false, true]);
   // What each action needs: change rights on this document, or on the document it creates.
   const NEEDS = { pay: tp === "invoice" ? "receipt" : "payment", convert: tp === "quote" ? "invoice" : "bill", credit: tp === "invoice" ? "creditnote" : "vendorcredit" };
-  const READ_OK = new Set(["preview", "pdf", "amcopen", "pipe"]);
+  const READ_OK = new Set(["preview", "pdf", "amcopen", "pipe", "propview", "propdl"]);
   for (let i = A.length - 1; i >= 0; i--) { const k = A[i][1]; const ok = READ_OK.has(k) || (NEEDS[k] ? W && canW(NEEDS[k]) : W); if (!ok) A.splice(i, 1); }
   const lines = d.lines || [];
   const B = BK.brand();
@@ -624,6 +626,8 @@ async function docView(id) {
     note: () => "stay",
     dup: () => { const x = { type: tp, contactId: d.contactId, lines: d.lines, notes: d.notes, terms: d.terms, ref: "", emirate: d.emirate, account: d.account, payee: d.contactName }; sessionStorage.setItem("bk-draft", JSON.stringify(x)); go(`#/new/${tp}?draft=1`); return "nav"; },
     preview: () => { window.BXPdf.preview(build, pdfName); return "stay"; },
+    propview: () => { BKPROP.preview(d); return "stay"; },
+    propdl: async () => { await BKPROP.download(d); return "stay"; },
     pdf: async () => { saveBlob(await build(), pdfName); return "stay"; },
     email: async () => { saveBlob(await build(), pdfName); const to = d.contactEmail || ""; const subj = `${docTitle(d)} ${d.number || ""} from ${D.settings.legalName}`; const bodyTxt = `Dear ${d.attention || d.contactName},\n\nPlease find attached ${docTitle(d).toLowerCase()} ${d.number || ""} for AED ${aed(d.total || d.amount)}${tp === "invoice" ? `, due on ${fd(d.dueDate)}` : tp === "quote" ? `, valid until ${fd(d.dueDate)}` : ""}.\n\nThe PDF has been downloaded; please attach it to this email.\n\nKind regards,\n${D.settings.legalName}`; location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(bodyTxt)}`; if (!d.sentAt && d.status !== "draft") await api("POST", `docs/${id}/sent`, {}); toast("PDF downloaded. Attach it to the email that just opened."); },
     sent: () => api("POST", `docs/${id}/sent`, {}),
@@ -694,6 +698,7 @@ function lineEditor(d) {
   const s = D.settings, vat = vatOn();
   const kind = side === "sales" ? "customer" : "vendor";
   const [title, tag] = headerFor(d, isNew);
+  const fmt0 = t === "quote" ? (d.format || params().format || "quote") : "";
   const vatOpts = Object.entries(D.vat).filter(([, v]) => side === "sales" ? v.sales : v.purch);
   const defAcct = side === "sales" ? "4000" : t === "expense" ? "6950" : "5000";
   const lines = (d.lines && d.lines.length ? d.lines : [{ qty: 1, vat: "SR", account: defAcct }]).map(l => ({ ...l }));
@@ -713,7 +718,8 @@ function lineEditor(d) {
     : t === "quote" || t === "po" ? `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="sent">Save as sent</button>`
     : draftable && (isNew || d.status === "draft") ? `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="posted">${t === "bill" ? "Save and post" : "Save and issue"}</button>` : `<button type="button" class="primary" data-s="posted">Save</button>`);
   page(title, tag, `<a class="btn" href="${d.id ? "#/doc/" + d.id : "#/" + ROUTE_OF[t]}">Cancel</a>`,
-    `<form class="ed" id="ed" novalidate>
+    `<form class="ed${t === "quote" && fmt0 === "proposal" ? " prop" : ""}" id="ed" novalidate>
+      ${t === "quote" ? `<div class="fmtbar"><span class="lbl" style="margin:0">Send as</span><div class="seg" id="fmtSeg"><button type="button" data-f="quote" aria-pressed="${fmt0 !== "proposal"}">Quotation</button><button type="button" data-f="proposal" aria-pressed="${fmt0 === "proposal"}">Proposal</button></div><span class="hint" style="margin:0" id="fmtHint">${fmt0 === "proposal" ? "A detailed proposal: summary, requirements, solution diagram, product descriptions, timeline, terms." : "A one-page quotation PDF with the lines and terms."}</span></div>` : ""}
       <section class="panel"><div class="row wide">
         <label><span class="lbl">${t === "expense" ? "Supplier (optional)" : side === "sales" ? "Customer *" : "Supplier *"}</span>${contactPicker(kind, d.contactId, t === "expense")}</label>
         <label><span class="lbl">${t === "invoice" ? "Invoice date" : t === "quote" ? "Quotation date" : "Date"}</span><input type="date" id="date" value="${esc(d.date || today())}" required></label>
@@ -724,10 +730,11 @@ function lineEditor(d) {
       ${vat && side === "purch" ? `<div class="hint">Buying phones, computers, tablets or parts to resell? Use <b>Domestic reverse charge</b>: the supplier shouldn't charge VAT, and you give them your written declaration.</div>` : ""}
       <div class="hint" id="cinfo"></div></section>
       <section class="panel" style="padding:0;overflow:hidden"><div class="tblwrap"><table class="lines"><thead><tr><th class="h">#</th><th>Item / description</th><th class="n">Qty</th><th class="p">Rate</th><th class="d">Disc %</th>${vat ? `<th class="v">VAT</th>` : ""}<th class="a">Account</th><th class="amt">Amount</th><th class="rm"></th></tr></thead><tbody id="lines"></tbody></table></div>
-        <div style="padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="addLine">+ Add line</button>${D.perms.items ? `<a class="btn" href="#/items" target="_blank">Manage items</a>` : ""}</div>
+        <div style="padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="addLine">+ Add line</button>${t === "quote" ? `<button type="button" id="impBoq">Import customer BoQ</button>` : ""}${D.perms.items ? `<a class="btn" href="#/items" target="_blank">Manage items</a>` : ""}</div>
         <div style="padding:0 16px 14px"><div class="totals" id="totals"></div></div></section>
       <section class="panel"><div class="row"><label><span class="lbl">Notes${side === "sales" ? " (shown on the document)" : ""}</span><textarea id="notes" rows="3" maxlength="3000">${esc(d.notes || "")}</textarea></label>
         ${["quote", "invoice", "po"].includes(t) ? `<label><span class="lbl">Terms and conditions</span><textarea id="terms" rows="3" maxlength="4000">${esc(d.terms != null && !d._fresh ? d.terms : d.terms || (t === "quote" ? s.quoteTerms : t === "po" ? s.poTerms : s.invoiceTerms))}</textarea></label>` : ""}</div></section>
+      ${t === "quote" ? BKPROP.panel(d) : ""}
       ${editorFiles(d)}
       <div class="err" id="err"></div>
       <div class="edfoot">${saveBtns}</div>
@@ -736,7 +743,7 @@ function lineEditor(d) {
   const body = $("lines");
   const acctSel = (sel) => acctOptions(isLineAcct(side), sel);
   const rowHTML = (l, i) => `<tr data-i="${i}"><td class="h">${i + 1}</td>
-    <td><input list="dlItems" data-k="name" value="${esc(l.name || "")}" placeholder="Type an item or a description" maxlength="300"><textarea data-k="description" rows="1" maxlength="2000" placeholder="Details (optional)">${esc(l.description || "")}</textarea></td>
+    <td><input list="dlItems" data-k="name" value="${esc(l.name || "")}" placeholder="Type an item or a description" maxlength="300"><textarea data-k="description" rows="1" maxlength="2000" placeholder="Details (optional)">${esc(l.description || "")}</textarea>${t === "quote" ? `<div class="px"><input data-k="model" maxlength="120" placeholder="Brand / model" value="${esc(l.model || "")}"><input data-k="section" maxlength="120" placeholder="BoQ section" value="${esc(l.section || "")}"><label class="blk"><input type="checkbox" data-k="sub"${l.sub ? " checked" : ""}> Accessory of the line above</label></div>` : ""}</td>
     <td class="n"><input class="num" data-k="qty" inputmode="decimal" value="${l.qty ?? 1}"><input data-k="unit" placeholder="unit" maxlength="20" value="${esc(l.unit || "")}" style="margin-top:4px;font-size:11px"></td>
     <td class="p"><input class="num" data-k="rate" inputmode="decimal" value="${l.rate ?? ""}"></td>
     <td class="d"><input class="num" data-k="discPct" inputmode="decimal" value="${l.discPct || ""}"></td>
@@ -766,12 +773,20 @@ function lineEditor(d) {
   };
   wireContact(kind, showInfo); showInfo();
   draw();
+  if (t === "quote") {
+    const setFmt = f => { $("ed").classList.toggle("prop", f === "proposal"); $("fmtSeg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.f === f));
+      $("fmtHint").textContent = f === "proposal" ? "A detailed proposal: summary, requirements, solution diagram, product descriptions, timeline, terms." : "A one-page quotation PDF with the lines and terms."; };
+    $("fmtSeg").querySelectorAll("button").forEach(x => x.onclick = () => setFmt(x.dataset.f));
+    BKPROP.wire({ d, lines, draw, header: () => { const c = CUS.get($("contact").value) || {}; return { customer: c.name || "", attention: $("attention") ? $("attention").value : "", title: $("title") ? $("title").value : "", validDays: Math.max(1, daysBetween($("date").value, $("dueDate").value)) }; } });
+    $("impBoq").onclick = async () => { const r = await BKPROP.importBoq(); if (!r) return; if (r.replace) lines.splice(0, lines.length); lines.push(...r.lines.map(l => ({ ...l, vat: vat ? "SR" : "OS" }))); draw(); toast(`${r.lines.length} line${r.lines.length === 1 ? "" : "s"} imported. Check the prices before saving.`); };
+  }
   $("app").querySelectorAll("[data-s]").forEach(b => b.onclick = async () => {
     $("err").textContent = "";
     const v = id => $(id) ? $(id).value : undefined;
     const payload = { type: t, contactId: v("contact"), date: v("date"), dueDate: v("dueDate"), supplyDate: v("supplyDate"), ref: v("ref"), title: v("title"), deliverTo: v("deliverTo"), attention: v("attention"),
       salesperson: v("salesperson"), emirate: v("emirate"), drDeclaration: $("drDeclaration") ? $("drDeclaration").checked : false, payeeTrn: v("payeeTrn"), invoiceId: v("invoiceId") ?? d.invoiceId, billId: d.billId, reason: v("reason"), account: v("account"), payee: v("payee"), notes: v("notes"), terms: v("terms"),
-      lines: lines.map(l => ({ ...l, vat: vat ? (l.vat || "SR") : "OS" })), status: b.dataset.s, etag: d.etag, fromId: d.fromId, placeOfSupply: d.placeOfSupply, poRef: d.poRef };
+      lines: lines.map(l => ({ ...l, vat: vat ? (l.vat || "SR") : "OS" })), status: b.dataset.s,
+      ...(t === "quote" ? { format: $("ed").classList.contains("prop") ? "proposal" : "quote", proposal: $("ed").classList.contains("prop") ? BKPROP.value() : d.proposal } : {}), etag: d.etag, fromId: d.fromId, placeOfSupply: d.placeOfSupply, poRef: d.poRef };
     const vend = VEN.get(payload.contactId); if (t === "bill" && vend && !payload.dueDate) payload.creditDays = vend.creditDays;
     if (b.dataset.s === "posted" && t === "invoice" && payload.supplyDate && daysBetween(payload.supplyDate, payload.date) > 14 && !await ask("Issued more than 14 days after the supply", `The date of supply is ${fd(payload.supplyDate)}. A tax invoice must be issued within 14 days of the date of supply (Art. 67 of the VAT Decree-Law), and the VAT is due for the period of the supply date. Issue it anyway?`, { okText: "Continue" })) return;
     if (b.dataset.s === "posted" && ["invoice", "creditnote"].includes(t) && !await ask(`Issue this ${docTitle({ type: t }).toLowerCase()}?`, "It gets the next number in the sequence and can't be changed afterwards.", { okText: "Issue" })) return;

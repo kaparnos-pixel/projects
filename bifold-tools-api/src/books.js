@@ -27,6 +27,7 @@
 
 const crypto = require("crypto");
 const { BlobServiceClient } = require("@azure/storage-blob");
+const AI = require("./books-ai");
 
 const EMIRATES = ["Abu Dhabi", "Dubai", "Sharjah", "Ajman", "Umm Al Quwain", "Ras Al Khaimah", "Fujairah"];
 const BOX1 = { "Abu Dhabi": "1a", "Dubai": "1b", "Sharjah": "1c", "Ajman": "1d", "Umm Al Quwain": "1e", "Ras Al Khaimah": "1f", "Fujairah": "1g" };
@@ -109,6 +110,22 @@ module.exports = function makeBooks(H) {
   const j = (s, d) => { try { const v = JSON.parse(s || ""); return v == null ? d : v; } catch { return d; } };
   const today = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
   const addDays = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+
+  // Proposal content (written sections, timeline, diagram): plain text and small tables only, size-capped.
+  function proposalIn(p) {
+    const walk = (v, depth) => {
+      if (depth > 6) return undefined;
+      if (typeof v === "string") return clean(v, 4000).replace(/\s*[\u2014\u2013]\s*/g, ", ");
+      if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+      if (typeof v === "boolean") return v;
+      if (Array.isArray(v)) return v.slice(0, 80).map(x => walk(x, depth + 1)).filter(x => x !== undefined);
+      if (v && typeof v === "object") { const o = {}; Object.keys(v).slice(0, 60).forEach(k => { const x = walk(v[k], depth + 1); if (x !== undefined) o[clean(k, 40)] = x; }); return o; }
+      return undefined;
+    };
+    const out = walk(p && typeof p === "object" ? p : {}, 0) || {};
+    if (JSON.stringify(out).length > 120000) fail(413, "The proposal text is too long to save. Shorten some sections.");
+    return out;
+  }
 
   // ---------- who may do what ----------
   const coOf = user => { if (user.co === "all") fail(400, "Books work one company at a time. Switch to Bifold or Tech Hub in the top bar."); return user.co; };
@@ -374,13 +391,13 @@ module.exports = function makeBooks(H) {
   // ---------- documents ----------
   const dPK = co => "doc-" + co;
   const HEAD = ["RowKey", "type", "number", "status", "date", "dueDate", "contactId", "contactName", "contactTrn", "ref", "subtotal", "vatAmt", "total", "amount", "account",
-    "emirate", "allocs", "gl", "tax", "fromId", "toId", "sentAt", "voidReason", "createdBy", "createdAt", "updatedBy", "updatedAt", "title", "invoiceRef", "files", "internalNote", "internalBy", "internalAt", "dealId", "amcId", "amcRef"];
+    "emirate", "allocs", "gl", "tax", "fromId", "toId", "sentAt", "voidReason", "createdBy", "createdAt", "updatedBy", "updatedAt", "title", "invoiceRef", "files", "internalNote", "internalBy", "internalAt", "dealId", "amcId", "amcRef", "format"];
   function headOut(e) {
     return {
       id: e.rowKey || e.RowKey, type: e.type, number: e.number || "", status: e.status, date: e.date, dueDate: e.dueDate || "", contactId: e.contactId || "", contactName: e.contactName || "",
       contactTrn: e.contactTrn || "", ref: e.ref || "", subtotal: num(e.subtotal), vatAmt: num(e.vatAmt), total: num(e.total), amount: num(e.amount), account: e.account || "",
       emirate: e.emirate || "", allocs: j(e.allocs, []), gl: j(e.gl, []), tax: j(e.tax, []), fromId: e.fromId || "", toId: e.toId || "", sentAt: e.sentAt || "",
-      voidReason: e.voidReason || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, title: e.title || "", invoiceRef: e.invoiceRef || "", fileCount: docFiles(e).length, internalNote: e.internalNote || "", internalBy: e.internalBy || "", internalAt: e.internalAt || "", dealId: e.dealId || "", amcId: e.amcId || "", amcRef: e.amcRef || "",
+      voidReason: e.voidReason || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, title: e.title || "", invoiceRef: e.invoiceRef || "", fileCount: docFiles(e).length, internalNote: e.internalNote || "", internalBy: e.internalBy || "", internalAt: e.internalAt || "", dealId: e.dealId || "", amcId: e.amcId || "", amcRef: e.amcRef || "", format: e.format || "quote",
     };
   }
   async function allDocs(co) { return (await all(await table(T), dPK(co), HEAD)).map(headOut); }
@@ -423,6 +440,9 @@ module.exports = function makeBooks(H) {
         itemId: clean(l.itemId, 60), name: clean(l.name, 300), description: clean(l.description, 2000), qty: r2(num(l.qty === "" || l.qty == null ? 1 : l.qty) * 1000) / 1000 || 0,
         unit: clean(l.unit, 20), rate: Math.round(num(l.rate) * 10000) / 10000, discPct: Math.min(100, Math.max(0, r2(num(l.discPct)))), vat: String(l.vat || "SR"), account: clean(l.account, 10), blocked: !!l.blocked,
       };
+      // Proposal details: brand / model, BoQ section heading and accessory rows (shown indented under their item).
+      const model = clean(l.model, 120), section = clean(l.section, 120);
+      if (model) o.model = model; if (section) o.section = section; if (l.sub) o.sub = true;
       if (!o.name) fail(400, `Line ${i + 1} needs an item or description.`);
       if (!(o.qty > 0)) fail(400, `Line ${i + 1}: enter a quantity greater than zero.`);
       if (o.rate < 0) fail(400, `Line ${i + 1}: the rate can't be negative. Use a credit note for refunds.`);
@@ -532,6 +552,8 @@ module.exports = function makeBooks(H) {
       if (!isDate(f.dueDate)) fail(400, type === "quote" ? "The valid-until date is not valid." : "The expected delivery date is not valid.");
       body.deliverTo = clean(b.deliverTo, 300); body.salesperson = clean(b.salesperson, 100);
     }
+    // A quotation can be sent as a full proposal: the same lines and totals with the proposal's written sections.
+    if (type === "quote") { f.format = b.format === "proposal" ? "proposal" : "quote"; body.proposal = f.format === "proposal" ? proposalIn(b.proposal) : null; }
     if (type === "invoice" || type === "bill") {
       const days = type === "bill" ? (num(b.creditDays) || 30) : s.dueDays;
       f.dueDate = clean(b.dueDate, 10) || addDays(date, days);
@@ -1037,7 +1059,7 @@ module.exports = function makeBooks(H) {
     const s = { ...settings }; delete s.counters;
     return {
       company: { key: co, name: CO[co].name }, settings: s, accounts: accts, items, docs: list, customers, vendors, vver,
-      perms: { ...P, acct, pipeline: canPipeline(user), amc: canAmc(user) }, vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
+      perms: { ...P, acct, pipeline: canPipeline(user), amc: canAmc(user) }, ai: AI.ready(), vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
       acctTypes: ACCT_TYPES, sys: SYS, fileKinds: FILE_KINDS, emirates: EMIRATES, today: today(), me: user.email,
     };
   }
@@ -1097,6 +1119,7 @@ module.exports = function makeBooks(H) {
       if (id && method === "PUT") return saveItem(user, id, body);
       if (id && method === "DELETE") return deleteItem(user, id);
     }
+    if (a === "ai" && method === "POST") { coOf(user); if (!permsOf(user).quotes) fail(403, "Proposals need Quotations or Sales access in Books."); if (user.aud) user.aud.name = `Proposal drafting (${clean(body.part, 20)})`; return AI.run({ ...body, company: user.co }, fail, clean); }
     if (a === "pnl-sources" && !id && method === "GET") return pnlSources(user, "sales");
     if (a === "pnl-bills" && !id && method === "GET") return pnlSources(user, "bill");
     if (a === "pnl-sources" && id && method === "GET") return pnlSource(user, id);

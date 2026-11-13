@@ -159,7 +159,8 @@ dialog .sec{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:u
 .check i{font-style:normal;font-weight:800;width:18px;flex:0 0 18px}
 .check .ok i{color:var(--good)} .check .no i{color:var(--bad)} .check .wa i{color:var(--warn)}
 .empty strong{display:block;color:var(--fg);font-size:15px;margin-bottom:4px}
-@media print{.bx-side,.bx-top,.side table.list{min-width:0}
+@media print{.bx-side,.bx-top,header.top .acts,.periodbar,.tools{display:none!important}body.bx{padding:0}.rep{border:0;box-shadow:none}}
+.side table.list{min-width:0}
 .side .tblwrap{overflow-x:visible}
 .clip{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;color:var(--muted);margin-left:4px}
 .drop{border:1.5px dashed var(--line);border-radius:8px;padding:10px 12px;margin:10px 14px;font-size:12px;color:var(--muted);text-align:center}
@@ -173,3 +174,35 @@ dialog .sec{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:u
 .att .aa .btn{padding:3px 8px;font-size:11px}
 .chipf{display:inline-flex;align-items:center;gap:4px;background:var(--sunk);border:1px solid var(--line);border-radius:99px;padding:2px 4px 2px 9px;margin:4px 4px 0 0;font-size:12px;color:var(--fg)}
 .chipf .x{font-size:14px;padding:0 4px}
+/* proposals */
+.fmtbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ed:not(.prop) #propBox,.ed:not(.prop) .px{display:none}
+.px{display:grid;grid-template-columns:1fr 1fr auto;gap:4px;margin-top:4px}
+.px input{font-size:12px;padding:5px 7px}
+.px .blk{margin:0}
+.prop #propBox{border-color:var(--accent)}
+.prophd{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.prophd b{display:block;font-size:15px;margin-bottom:2px}
+.propai{display:grid;gap:8px;background:var(--accent-soft);border-radius:10px;padding:12px}
+.propbtns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.propbtns input{flex:1 1 260px}
+.propdia{border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:10px}
+.propdhd b{display:block}
+.propsvg{overflow-x:auto;background:#fff;border-radius:8px;border:1px solid var(--line)}
+.propsvg svg{display:block;max-width:100%;height:auto;margin:0 auto}
+details.propsec{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+details.propsec>summary{cursor:pointer;padding:10px 14px;font-weight:700;font-size:13px;list-style:none}
+details.propsec>summary::before{content:"\25B8";display:inline-block;margin-right:8px;color:var(--muted);transition:transform .15s}
+details.propsec[open]>summary::before{transform:rotate(90deg)}
+.propf{display:grid;gap:10px;padding:0 14px 14px}
+.propf textarea{font-size:13px;line-height:1.45}
+.clip.prp{color:var(--accent)}
+dialog.propv{border:0;padding:0;width:min(1000px,calc(100vw - 24px));height:calc(100vh - 24px);max-width:none;max-height:none;border-radius:14px;overflow:hidden;background:var(--surface)}
+dialog.propv[open]{display:flex;flex-direction:column}
+.propv .hd{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.propv .hd b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.propv .hd .dl{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.propv .bd{flex:1;overflow:auto;background:#525659;position:relative}
+.propv .msg{color:#fff;text-align:center;padding:40px 20px}
+.propv #pvBox .docx-wrapper{background:#525659;padding:16px;display:flex;flex-direction:column;align-items:center}
+.propv #pvBox .docx-wrapper>section.docx{box-shadow:0 2px 10px rgba(0,0,0,.35);margin-bottom:16px}

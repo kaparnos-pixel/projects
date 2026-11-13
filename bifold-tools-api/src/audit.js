@@ -155,7 +155,7 @@ module.exports = function makeAudit(H) {
     }
     if (a === "books") {
       const A = "Books";
-      const LBL = { quote: "quotation", invoice: "tax invoice", creditnote: "tax credit note", receipt: "payment received", po: "purchase order", bill: "bill", vendorcredit: "vendor credit", payment: "payment made", expense: "expense", journal: "manual journal", transfer: "transfer" };
+      const LBL = { proposal: "proposal", quote: "quotation", invoice: "tax invoice", creditnote: "tax credit note", receipt: "payment received", po: "purchase order", bill: "bill", vendorcredit: "vendor credit", payment: "payment made", expense: "expense", journal: "manual journal", transfer: "transfer" };
       const money = v => v ? "AED " + short(v) : "";
       if (b === "settings") return [A, aud.lock ? "Changed settings and lock date" : "Changed company and VAT settings", "", [aud.lock && "lock date: " + aud.lock, ch].filter(Boolean).join("; ")];
       if (b === "ct") return [A, "Saved corporate tax inputs", name, [body.sbr ? "Small Business Relief elected" : "", body.lossBf ? "losses b/f AED " + short(body.lossBf) : "", (body.adj || []).length ? (body.adj || []).length + " adjustments" : ""].filter(Boolean).join(", ")];
@@ -167,6 +167,7 @@ module.exports = function makeAudit(H) {
       if (b === "vendors" && d === "verify") return [A, "Recorded supplier VAT verification", name, ch];
       if (b === "vendors") return [A, "Added supplier", out.name, ""];
       if (b === "customers") return [A, "Added customer", out.name, ""];
+      if (b === "ai") { const P = { boqmap: "Read a customer BoQ spreadsheet with Claude", boqread: "Read a customer BoQ with Claude", story: "Drafted proposal text with Claude", commercial: "Drafted proposal terms with Claude", diagram: "Drew a solution diagram with Claude" }; return [A, P[body.part] || "Drafted with Claude", clean(body.customer, 150) || "", clean(body.title, 150) || (body.file ? clean(body.file.name, 150) : "")]; }
       if (b === "docs" && d === "files") {
         const where = (aud.changes || [])[0] || "";
         if (method === "POST") return [A, "Uploaded file", out.file ? out.file.name : clean(body.name, 200), [where, out.file ? Math.max(1, Math.round(out.file.size / 1024)) + " KB" : ""].filter(Boolean).join(", ")];
@@ -175,7 +176,7 @@ module.exports = function makeAudit(H) {
         if (method === "DELETE") return [A, "Deleted file", name, where];
       }
       if (b === "docs") {
-        const lbl = LBL[out.type || body.type] || "document";
+        const lbl = LBL[(out.type || body.type) === "quote" && (out.format || body.format) === "proposal" ? "proposal" : out.type || body.type] || "document";
         const who = [out.contactName, money(out.total || out.amount)].filter(Boolean).join(", ");
         if (d === "void") return [A, out.type === "quote" || out.type === "po" ? "Cancelled " + lbl : "Voided " + lbl, name || out.number || c, clean(body.reason, 200)];
         if (d === "apply") return [A, "Applied " + lbl, name || out.number, ch];

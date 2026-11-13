@@ -160,9 +160,6 @@
   const NAV = [
     { group: null, items: [{ href: "/", label: "Home", icon: "home", need: [] }] },
     { group: "Sales", items: [{ href: "/pipeline/", label: "Sales Pipeline", icon: "pipeline", need: ["pipeline"] }, { href: "/pnl/", label: "PnL Calculator", icon: "pnl", need: ["pnl"] }] },
-    { group: "Service", items: [{ href: "/amc/", label: "AMC Tracker", icon: "amc", need: ["amc", "visits"], subs: [["#overview", "Overview", []], ["#amcs", "Contracts & proposals", ["amc"]], ["#visits", "Maintenance visits", ["amc", "visits"]]] },
-      { href: "/completion/", label: "Completion Reports", icon: "completion", need: ["completion"] }] },
-    { group: "Marketing", items: [{ href: "/campaigns/", label: "Email Campaigns", icon: "campaigns", need: ["campaigns"], subs: [["#campaigns", "Campaigns", ["campaigns"]], ["#contacts", "Contacts & lists", ["campaigns"]], ["#media", "Image library", ["campaigns"]]] }] },
     { group: "Finance", items: [{ href: "/books/", label: "Books & VAT", icon: "books", need: ["books", "quotes"], subs: [["#/dashboard", "Dashboard", ["books"]],
         [null, "Sales", ["books", "quotes"]], ["#/customers", "Customers", ["books"]], ["#/quotes", "Quotations", ["books", "quotes"]], ["#/invoices", "Invoices", ["books"]], ["#/receipts", "Payments received", ["books"]], ["#/creditnotes", "Credit notes", ["books"]],
         [null, "Purchases", ["books"]], ["#/vendors", "Suppliers", ["books"]], ["#/pos", "Purchase orders", ["books"]], ["#/bills", "Bills", ["books"]], ["#/payments", "Payments made", ["books"]], ["#/expenses", "Expenses", ["books"]], ["#/vendorcredits", "Vendor credits", ["books"]],
@@ -170,6 +167,9 @@
         [null, "Tax and reports", ["books"]], ["#/vat", "VAT return", ["books"]], ["#/report/ct", "Corporate tax", ["books"]], ["#/reports", "All reports", ["books"]],
         [null, "Setup", ["books"]], ["#/settings", "Settings", ["books"]]] },
       { href: "/pdc/", label: "PDC & Guarantees", icon: "pdc", need: ["pdc"] }] },
+    { group: "Service", items: [{ href: "/amc/", label: "AMC Tracker", icon: "amc", need: ["amc", "visits"], subs: [["#overview", "Overview", []], ["#amcs", "Contracts & proposals", ["amc"]], ["#visits", "Maintenance visits", ["amc", "visits"]]] },
+      { href: "/completion/", label: "Completion Reports", icon: "completion", need: ["completion"] }] },
+    { group: "Marketing", items: [{ href: "/campaigns/", label: "Email Campaigns", icon: "campaigns", need: ["campaigns"], subs: [["#campaigns", "Campaigns", ["campaigns"]], ["#contacts", "Contacts & lists", ["campaigns"]], ["#media", "Image library", ["campaigns"]]] }] },
     { group: "Master data", items: [{ href: "/customers/", label: "Customers", icon: "customers", need: ["customers"] }, { href: "/suppliers/", label: "Suppliers & Vendors", icon: "suppliers", need: ["suppliers", "pdc"], subs: [["#dir", "Directory", []], ["#what", "Who supplies what", []], ["#people", "All contacts", []]] }] },
     { group: "Administration", items: [{ href: "/access/", label: "Team access", icon: "access", need: ["manager"] }, { href: "/activity/", label: "Activity log", icon: "log", need: ["manager"] }] },
   ];

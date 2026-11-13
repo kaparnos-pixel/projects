@@ -81,6 +81,24 @@ BOTTOM OR SIDE STRIP: "NETWORKS" (2 to 4 short lines, only if relevant) and "LEG
 TEXT: never let text overflow its box: allow about 6.8px per character at 12px and size cards to fit, or wrap with <tspan>. No text smaller than 9px. Title text in panels: 12px bold uppercase in ${co === "bifold" ? "#1E5A8C" : "#003C50"}.
 RULES: only svg, g, defs, symbol, use (href="#id" only), rect, circle, ellipse, line, polyline, polygon, path, text, tspan, marker, linearGradient, stop, clipPath. No <image>, <script>, <style>, <foreignObject>, external links or web fonts. Define repeated icons once as <symbol> and reuse them with <use>. Keep the whole SVG under 10000 characters (use <symbol> and <use>, short ids, integer coordinates and no unnecessary attributes) so it can be drawn quickly. Use only equipment from the BoQ; the internet, existing client network or client-supplied items may be shown and marked as such. No em or en dash characters anywhere.`;
 
+const FIGURE_BIFOLD = site => `Draw ONE consulting-grade solution architecture drawing for this proposal as a standalone SVG, in the BIFOLD house style below. It is printed on its own landscape A4 page.
+
+CANVAS: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 H" width="1400" height="H"> with H between 760 and 900, white background, font-family="Arial, Helvetica, sans-serif" on the root.
+TITLE BANNER (top, full width, height 80): navy #1E5A8C with a 5px red #D81F2A rule under it. At the left leave EXACTLY <rect id="logo" x="24" y="14" width="190" height="52" rx="6" fill="#FFFFFF"/> empty (the company logo is placed there later). Next to it, white bold 22px "<Customer> | <Solution name>" and under it 12px light text describing the platform. At the right, white bold 12px document reference and 11px month and year.
+BODY: 2 to 4 panels (rx 8, white body, 1.5px navy #1E5A8C border, a 34px navy header bar with a white bold 13px title on the left and a small light descriptor on the right), arranged by where things are (e.g. remote sites on the left, HQ or central system on the right, ${site ? "a site layout traced from the attached plan as one panel, " : ""}an INTERNET / VPN cloud between them when the solution crosses the internet). Inside panels: device drawings made from simple shapes (racks and servers as dark navy rounded rectangles with port dots, routers and SD-WAN boxes in their brand colour such as yellow #F2C200 for Peplink, cameras as small white camera shapes, screens as dark rectangles, the cloud as a white cloud with a navy outline), each with a bold 11px label and a 9.5px grey line of model or role underneath. Repeated sites drawn as a stacked card with "Typical ... site (x40)". Items supplied by Bifold are solid; items in the customer's scope sit in light grey hatched boxes (define a diagonal-line <pattern>) with a small dark rounded pill "CUSTOMER SCOPE". Encrypted tunnels as red #D81F2A dashed curves with small red pills (e.g. "VPN x40"); LAN as navy lines; labels on white pills.
+KEY NUMBERS STRIP (near the bottom, full width, navy #1E5A8C, rx 8, height about 80): 4 to 5 columns separated by thin light lines, each with a large white bold 26px number (counts from the BoQ or notes, e.g. cameras, sites, routers, servers) and an 10px light caption.
+LEGEND ROW under it (line and box styles actually used, including "Customer scope (by <customer short name>)"), then 2 grey 9.5px footnote lines on the left and "BIFOLD TECHNOLOGIES LLC | www.bifoldtech.com" in navy bold 10px on the right.
+TEXT: never let text overflow its box (about 6.8px per character at 12px); nothing smaller than 9px.
+RULES: only svg, g, defs, symbol, use (href="#id" only), pattern, rect, circle, ellipse, line, polyline, polygon, path, text, tspan, marker, linearGradient, stop, clipPath. No <image>, <script>, <style>, <foreignObject>, external links or web fonts. Define repeated drawings once as <symbol> and reuse them with <use>. Short ids, integer coordinates, no unnecessary attributes. Use only equipment from the BoQ; existing or customer-supplied items may be shown in customer scope. No em or en dash characters anywhere.`;
+
+const STORY_BIFOLD = `{"title": string (the solution name, e.g. "Centralised CCTV Monitoring Solution"), "tagline": string (the main products separated by "  |  ", e.g. "Dahua DSS Pro V8 CMS  |  HPE Servers  |  Peplink SD-WAN  |  Video Wall  |  AMC"), "subtitle": string (e.g. "Supply, Installation, Commissioning & Annual Maintenance"), "ref": string (TYPE-CLIENT in capitals for the document reference, e.g. "CCTV-AZIZI"),
+ "letter": [4 paragraphs for the covering letter after "Dear Sir / Madam,": (1) thanks for the opportunity and what the solution does for the customer; (2) the platform and the main components with quantities; (3) "The total investment for ... is AED <total> inclusive of VAT, as detailed in the Bill of Quantities." and the validity; (4) "Should you require any clarification ... using the details below."],
+ "overview": [3 paragraphs: the customer's current situation; what BIFOLD TECHNOLOGIES LLC proposes and what users get; how it is connected, delivered and supported],
+ "briefIntro": string (e.g. "The proposed solution is made up of five building blocks:"),
+ "pillars": [4 to 6 bullets, each "Block name: what it includes, with models and quantities"],
+ "summary": [["Label", "Value"], 6 to 9 rows such as Platform, Server, Sites, Network, Monitoring Room, Professional Services, AMC; do NOT include totals],
+ "diagramIntro": string (one or two sentences introducing the architecture drawing, saying which items are in Bifold scope (solid) and which are the customer's (hatched boxes marked CUSTOMER SCOPE))}`;
+
 const COMMERCIAL_CO = {
   techhub: { TERMS: `[7 to 9 sentences, e.g. "This proposal is valid for 30 days from the date of issue.", "Prices are in UAE Dirhams (AED). VAT at 5% is applicable on all items.", plus scope-specific ones such as provisional quantities, subscription start dates, variation orders and substitution with client approval]`, EXCL: `[] (exclusions go in the assumptions instead)` },
   bifold: { TERMS: `[["Label", "Value"], 5 to 7 rows such as Warranty, Proposal Validity, Delivery Lead Time, VAT, Pricing Currency, Exclusions]`, EXCL: `[4 to 7 bullets fitting this scope]` },
@@ -104,14 +122,17 @@ ${(b.lines || []).slice(0, 200).map((l, i) => `${i + 1}. ${[l.section && "[" + l
 SALESPERSON'S NOTES ABOUT THE SITE AND REQUIREMENT:
 ${clean(b.notes, 5000) || "none given"}
 ${b.instructions ? "\nCHANGES REQUESTED: " + clean(b.instructions, 1500) + "\n" : ""}${b.svg ? "\nCURRENT DRAWING (apply the requested changes, keep everything else):\n" + clean(b.svg, 16000) + "\n" : ""}
-${FIGURE_STYLE(co, hasSite)}
-
-Reply with ONLY one JSON object: {"title": string, "caption": string (e.g. "${hasSite ? "Figure 1 - Solution layout traced from the site plan (left) and logical network topology (right)." : "Figure 1 - Solution architecture."}"), "svg": the complete SVG markup as one string}`;
+${co === "bifold" ? FIGURE_BIFOLD(hasSite) : FIGURE_STYLE(co, hasSite)}
+${b.docRef ? "DOCUMENT REFERENCE: " + clean(b.docRef, 40) + "\n" : ""}${b.month ? "MONTH: " + clean(b.month, 30) + "\n" : ""}
+Reply in EXACTLY this plain-text format, nothing before or after:
+TITLE: <short title>
+CAPTION: <one line, e.g. "${co === "bifold" ? "Figure 1: <Customer> <Solution>, high-level architecture" : hasSite ? "Figure 1 - Solution layout traced from the site plan (left) and logical network topology (right)." : "Figure 1 - Solution architecture."}">
+<svg ...complete drawing...</svg>`;
     return hasSite ? [t] : t;
   }
   if (part === "boqread") return [`Read the line items from this customer Bill of Quantities${b.text ? " (text below)" : " (attached)"}.${b.text ? "\n\n" + clean(b.text, 30000) : ""}\n\nReply with ONLY one JSON object of this shape:\n${SHAPES.boqread}`];
   const total = Number(b.total) || 0, short = co.name.split(" ").slice(0, 2).join(" ");
-  let shape = SHAPES[part].replace(/COMPANY/g, short);
+  let shape = (part === "story" && coKey === "bifold" ? STORY_BIFOLD : SHAPES[part]).replace(/COMPANY/g, short);
   if (part === "commercial") shape = shape.replace("TERMS", COMMERCIAL_CO[coKey].TERMS).replace("EXCL", COMMERCIAL_CO[coKey].EXCL);
   if (part === "diagram") shape = shape.replace("SITE", b.file && b.file.data ? SITE_ON : "null (no site plan was given)");
   const lines = part === "scope" ? (b.lines || []).map((l, i) => ({ ...l, _n: Number(l.n) || i + 1 })) : b.lines;
@@ -149,6 +170,63 @@ function parseJson(text) {
 const noDash = o => typeof o === "string" ? o.replace(/\s*[—–]\s*/g, ", ") : Array.isArray(o) ? o.map(noDash) : o && typeof o === "object" ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, noDash(v)])) : o;
 const FILE_TYPES = { "application/pdf": "document", "image/png": "image", "image/jpeg": "image", "image/webp": "image", "image/gif": "image" };
 
+// Streams Claude's answer and stops before the hosting time limit (Azure Static Web Apps cuts requests at 45 s).
+// Returns the text so far and whether Claude finished; the page then asks again to carry on from there.
+async function streamText(body, deadlineMs, fail) {
+  const ctl = new AbortController(); const t0 = Date.now(); let text = "", done = false, stop = "";
+  const hard = setTimeout(() => ctl.abort(), deadlineMs + 1500);
+  let r;
+  try {
+    r = await fetch((process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com") + "/v1/messages", { method: "POST", signal: ctl.signal,
+      headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: JSON.stringify({ ...body, stream: true }) });
+  } catch { clearTimeout(hard); fail(504, "Claude didn't respond in time. Try again."); }
+  if (!r.ok) { clearTimeout(hard); const j = await r.json().catch(() => ({})); const e = new Error("Claude couldn't draw this right now (" + ((j.error && j.error.type) || r.status) + ")."); e.status = r.status; e.detail = (j.error && j.error.message) || ""; throw e; }
+  const reader = r.body.getReader(), dec = new TextDecoder(); let buf = "";
+  try {
+    for (;;) {
+      if (Date.now() - t0 > deadlineMs) { ctl.abort(); break; }
+      const { value, done: end } = await reader.read(); if (end) break;
+      buf += dec.decode(value, { stream: true });
+      let i; while ((i = buf.indexOf("\n")) >= 0) { const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!line.startsWith("data:")) continue;
+        let ev; try { ev = JSON.parse(line.slice(5)); } catch { continue; }
+        if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") text += ev.delta.text;
+        if (ev.type === "message_delta" && ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason;
+        if (ev.type === "message_stop") done = true;
+        if (ev.type === "error") { const e = new Error("Claude stopped with an error (" + ((ev.error && ev.error.type) || "unknown") + ")."); e.status = 502; throw e; } }
+    }
+  } catch (e) { if (e.status) throw e; }
+  finally { clearTimeout(hard); }
+  return { text, done: done && stop !== "max_tokens", stop };
+}
+function parseFigure(text) {
+  const t = String(text || ""); const a = t.indexOf("<svg"), z = t.lastIndexOf("</svg>");
+  const head = a > 0 ? t.slice(0, a) : "";
+  const title = (head.match(/TITLE:\s*(.+)/) || [])[1] || "", caption = (head.match(/CAPTION:\s*(.+)/) || [])[1] || "";
+  return { title: noDash(title.trim()), caption: noDash(caption.trim()), svg: a >= 0 && z > a ? cleanSvg(t.slice(a, z + 6)) : null };
+}
+async function runFigure(b, fail, clean, content) {
+  const partial = typeof b.partial === "string" ? b.partial.slice(0, 60000) : "";
+  const round = Math.max(0, Math.min(6, Number(b.round) || 0));
+  if (round >= 6) fail(502, "Claude's drawing didn't finish. Try again.");
+  const deadline = Number(process.env.FIGURE_DEADLINE_MS) || 38000;
+  const base = { model: process.env.FIGURE_MODEL || MODEL(), max_tokens: 9000 };
+  let res;
+  if (!partial) res = await streamText({ ...base, messages: [{ role: "user", content }] }, deadline, fail);
+  else {
+    // Carry on from where the last request stopped: as a continued answer, or (for models that don't allow that) by asking for the rest.
+    try { res = await streamText({ ...base, messages: [{ role: "user", content }, { role: "assistant", content: partial.replace(/\s+$/, "") }] }, deadline, fail); res.text = partial.replace(/\s+$/, "") + res.text; }
+    catch (e) {
+      if (e.status !== 400) throw e;
+      const tail = Array.isArray(content) ? content.slice() : [{ type: "text", text: content }];
+      tail.push({ type: "text", text: "\n\nYOU ALREADY WROTE THE START OF THE ANSWER (below). Output ONLY the rest, continuing exactly after its last character, without repeating anything:\n" + partial });
+      res = await streamText({ ...base, messages: [{ role: "user", content: tail }] }, deadline, fail); res.text = partial + res.text;
+    }
+  }
+  if (!res.done) { if (res.stop === "max_tokens") fail(502, "Claude's drawing was too long. Redraw with a simpler instruction."); return { partial: res.text, round: round + 1 }; }
+  const f = parseFigure(res.text); if (!f.svg) fail(502, "Claude's drawing couldn't be used. Try again.");
+  return f;
+}
+
 async function run(b, fail, clean) {
   if (!ready()) fail(501, "Claude drafting isn't set up on the tools site yet (the ANTHROPIC_API_KEY setting is missing).");
   const p = prompt(b, clean);
@@ -163,6 +241,7 @@ async function run(b, fail, clean) {
     } else if (b.part === "boqread" && !b.text) fail(400, "Paste the BoQ or choose a file.");
     content.push({ type: "text", text: p[0] });
   } else content = p;
+  if (b.part === "figure") return runFigure(b, fail, clean, content);
   const max = { boqmap: 400, boqread: 6000, story: 3200, scope: 3500, specs: 3000, commercial: 2600, diagram: 3000, figure: 4800 }[b.part];
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 43000);
   let r;
@@ -178,12 +257,11 @@ async function run(b, fail, clean) {
   if (!r.ok) fail(502, "Claude couldn't draft this right now (" + ((j.error && j.error.type) || r.status) + ").");
   const out = parseJson((j.content || []).filter(c => c.type === "text").map(c => c.text).join(""));
   if (!out || typeof out !== "object") fail(502, "Claude's answer couldn't be read. Try again.");
-  if (b.part === "figure") { const svg = cleanSvg(out.svg); if (!svg) fail(502, "Claude's drawing couldn't be used. Try again."); return { title: noDash(String(out.title || "")), caption: noDash(String(out.caption || "")), svg }; }
   return noDash(out);
 }
 
 // The drawing is shown as an image (scripts never run there), but it is still reduced to plain drawing elements.
-const SVG_TAGS = new Set(["svg", "g", "defs", "symbol", "use", "rect", "circle", "ellipse", "line", "polyline", "polygon", "path", "text", "tspan", "title", "desc", "marker", "lineargradient", "radialgradient", "stop", "clippath"]);
+const SVG_TAGS = new Set(["svg", "g", "defs", "symbol", "use", "rect", "circle", "ellipse", "line", "polyline", "polygon", "path", "text", "tspan", "title", "desc", "marker", "lineargradient", "radialgradient", "stop", "clippath", "pattern"]);
 function cleanSvg(raw) {
   let s = String(raw || "").trim(); const a = s.indexOf("<svg"), z = s.lastIndexOf("</svg>");
   if (a < 0 || z < a || s.length > 60000) return null;

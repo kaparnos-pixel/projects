@@ -157,7 +157,7 @@ const BKPROPDOCX = (function () {
   /* ------------------------------------------------------------------- Bifold ------------------------------------------------------------------- */
   async function bifold(cfg, img) {
     const DX = await loadAs(LIB.docx, "DOCXJS");
-    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, Header, Footer, AlignmentType, BorderStyle, WidthType, ShadingType, VerticalAlign, PageNumber, PageBreak, ImageRun, LevelFormat, TabStopType, SectionType } = DX;
+    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, Header, Footer, AlignmentType, BorderStyle, WidthType, ShadingType, VerticalAlign, PageNumber, PageBreak, ImageRun, LevelFormat, TabStopType, SectionType, PageOrientation } = DX;
     const NV = "1E5A8C", RED = "D81F2A", GR = "F2F3F5", GRL = "EAECEF", WH = "FFFFFF", BG = "CCCCCC";
     const PAGE_W = 11906, MARGIN = 1080, W = PAGE_W - MARGIN * 2;
     const co = cfg.company;
@@ -173,11 +173,11 @@ const BKPROPDOCX = (function () {
       margins: { top: 60, bottom: 60, left: 110, right: 110 }, children: [new Paragraph({ alignment: o.align, spacing: { before: 20, after: 20, line: 248 }, children: [content] })] });
     const kvT = (rows, lw = Math.round(W * 0.34)) => new Table({ width: { size: W, type: WidthType.DXA }, columnWidths: [lw, W - lw], rows: rows.map(([k, v]) => new TableRow({ cantSplit: true, children: [cl(txt(k, { bold: true, color: NV }), { width: lw, fill: GR }), cl(txt(v), { width: W - lw })] })) });
     const m = cfg.meta;
-    const header = new Header({ children: [new Paragraph({ tabStops: [{ type: TabStopType.RIGHT, position: W }], spacing: { after: 0 }, border: { bottom: { style: BorderStyle.SINGLE, size: 10, color: NV, space: 6 } },
+    const mkHeader = W => new Header({ children: [new Paragraph({ tabStops: [{ type: TabStopType.RIGHT, position: W }], spacing: { after: 0 }, border: { bottom: { style: BorderStyle.SINGLE, size: 10, color: NV, space: 6 } },
       children: logo ? [new ImageRun({ type: "png", data: logo.data, transformation: { width: Math.round(logo.w * 46 / logo.h), height: 46 } }), new TextRun({ text: "\t" + nd(m.title), font: "Arial", size: 16, color: "777777" })]
         : [new TextRun({ text: "BIFOLD ", font: "Arial", size: 22, bold: true, color: NV }), new TextRun({ text: "TECHNOLOGIES", font: "Arial", size: 22, bold: true, color: RED }), new TextRun({ text: "\t" + nd(m.title), font: "Arial", size: 16, color: "777777" })] })] });
     const fr = t => new TextRun({ text: t, font: "Arial", size: 14, color: "888888" });
-    const footer = new Footer({ children: [new Paragraph({ tabStops: [{ type: TabStopType.RIGHT, position: W }], spacing: { before: 4 }, border: { top: { style: BorderStyle.SINGLE, size: 6, color: BG, space: 6 } },
+    const mkFooter = W => new Footer({ children: [new Paragraph({ tabStops: [{ type: TabStopType.RIGHT, position: W }], spacing: { before: 4 }, border: { top: { style: BorderStyle.SINGLE, size: 6, color: BG, space: 6 } },
       children: [fr(co.addressLine + "  |  Confidential"), fr("\tPage "), new TextRun({ children: [PageNumber.CURRENT], font: "Arial", size: 14, color: "888888" }), fr(" of "), new TextRun({ children: [PageNumber.TOTAL_PAGES], font: "Arial", size: 14, color: "888888" })] })] });
     // cover
     const cover = [];
@@ -201,18 +201,23 @@ const BKPROPDOCX = (function () {
       k.push(para2(txt(L.salutation || "Dear Sir / Madam,"), { before: 60, after: 140 }));
       arr(L.body).forEach(p => k.push(para2(txt(p), { after: 130 })));
       k.push(para2(txt("We look forward to the opportunity of working with you."), { before: 40, after: 220 }), para2(txt("Yours sincerely,"), { before: 0, after: 60 }));
-      k.push(para2(txt(m.preparedBy, { bold: true, color: NV }), { before: 220, after: 0 }), para2(txt("Sales & Business Development", { color: "555555", size: 18 }), { before: 0, after: 0 }), para2(txt(co.name, { color: "555555", size: 18 }), { before: 0, after: 0 }));
+      k.push(para2(txt((L.signatory || {}).name || m.preparedBy, { bold: true, color: NV }), { before: 220, after: 0 }), para2(txt((L.signatory || {}).title || "Sales & Business Development", { color: "555555", size: 18 }), { before: 0, after: 0 }), para2(txt(co.name, { color: "555555", size: 18 }), { before: 0, after: 0 }));
       const ct = [m.mobile || co.phone, m.email || co.email].filter(Boolean).join("   ·   "); if (ct) k.push(para2(txt(ct, { color: "555555", size: 18 }), { before: 0, after: 0 }));
       k.push(new Paragraph({ children: [new PageBreak()] }));
     }
     n++; k.push(secH(n, "Project Overview")); arr(cfg.overview).forEach(p => k.push(para2(txt(p))));
-    if (cfg.solutionBrief) { n++; k.push(secH(n, "Solution Brief")); if (cfg.solutionBrief.intro) k.push(para2(txt(cfg.solutionBrief.intro))); arr(cfg.solutionBrief.pillars).forEach(p => k.push(bl(p))); }
+    if (cfg.solutionBrief) { n++; k.push(secH(n, "Solution Brief")); if (cfg.solutionBrief.intro) k.push(para2(txt(cfg.solutionBrief.intro))); arr(cfg.solutionBrief.pillars).forEach(p => k.push(bl(p)));
+      if ((cfg.solutionBrief.summary || []).length) { k.push(para2(txt("Solution Summary:", { bold: true, color: NV }), { before: 160, after: 80, keepNext: true })); k.push(kvT(cfg.solutionBrief.summary, Math.round(W * 0.32))); } }
+    // The architecture drawing gets its own landscape page, like the house template.
+    const land = [];
     if (img) {
-      n++; k.push(secH(n, cfg.diagram.title || "Solution Architecture"));
-      const maxW = 620, w = Math.min(maxW, img.w), h = Math.round(img.h * w / img.w);
-      k.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 80, after: 60 }, children: [new ImageRun({ type: "png", data: img.bytes, transformation: { width: w, height: h } })] }));
-      if (cfg.diagram.caption) k.push(para2(txt(cfg.diagram.caption, { italics: true, color: "555555", size: 18 }), { align: AlignmentType.CENTER }));
+      n++; land.push(secH(n, "Solution Architecture Diagram"));
+      if (cfg.diagramIntro) land.push(para2(txt(cfg.diagramIntro, { size: 19 }), { after: 100 }));
+      const w = Math.min(960, img.w), h0 = Math.round(img.h * w / img.w), h = Math.min(h0, 500), ww = Math.round(w * h / h0);
+      land.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 60, after: 60 }, keepNext: true, children: [new ImageRun({ type: "png", data: img.bytes, transformation: { width: ww, height: h } })] }));
+      land.push(para2(txt(cfg.diagram.caption || `Figure 1: ${m.client} ${m.title}, high-level architecture`, { italics: true, color: "555555", size: 18 }), { align: AlignmentType.CENTER }));
     }
+    const k1 = k.splice(0, k.length);
     if (cfg.products.length) {
       n++; k.push(secH(n, "Product Descriptions"));
       cfg.products.forEach((pr, i) => { k.push(new Paragraph({ spacing: { before: 220, after: 80 }, keepNext: true, children: [new TextRun({ text: `${n}.${i + 1}  `, font: "Arial", size: 22, bold: true, color: RED }), new TextRun({ text: nd(pr.title) + (pr.code ? `  (${nd(pr.code)})` : ""), font: "Arial", size: 22, bold: true, color: NV })] }));
@@ -220,7 +225,7 @@ const BKPROPDOCX = (function () {
     }
     // BoQ
     n++; k.push(secH(n, "Pricing: Bill of Quantities"));
-    k.push(para2(txt("All prices are in AED. VAT at 5% is shown separately.", { italics: true, color: "555555", size: 18 })));
+    k.push(para2(txt(cfg.boq.intro || "All prices are in AED. VAT at 5% is shown separately.", { italics: true, color: "555555", size: 18 })));
     { const cIt = 800, cQ = 700, cU = 1300, cT = 1700, cD = W - cIt - cQ - cU - cT; const rows = [];
       const hd = t => txt(t, { bold: true, color: WH });
       rows.push(new TableRow({ tableHeader: true, children: [cl(hd("Item#"), { width: cIt, fill: NV }), cl(hd("Description"), { width: cD, fill: NV }), cl(hd("Qty"), { width: cQ, fill: NV, align: AlignmentType.CENTER }), cl(hd("Unit AED"), { width: cU, fill: NV, align: AlignmentType.RIGHT }), cl(hd("Total AED"), { width: cT, fill: NV, align: AlignmentType.RIGHT })] }));
@@ -250,7 +255,10 @@ const BKPROPDOCX = (function () {
     const page = { page: { size: { width: PAGE_W, height: 16838 }, margin: { top: 1100, right: MARGIN, bottom: 1000, left: MARGIN } } };
     const doc = new Document({ styles: { default: { document: { run: { font: "Arial", size: 20 } } } },
       numbering: { config: [{ reference: "bl", levels: [{ level: 0, format: LevelFormat.BULLET, text: "•", alignment: AlignmentType.LEFT, style: { run: { color: RED }, paragraph: { indent: { left: 460, hanging: 240 } } } }] }] },
-      sections: [{ properties: { ...page }, children: cover }, { properties: { ...page, type: SectionType.NEXT_PAGE }, headers: { default: header }, footers: { default: footer }, children: k }] });
+      sections: [{ properties: { ...page }, children: cover },
+        { properties: { ...page, type: SectionType.NEXT_PAGE }, headers: { default: mkHeader(W) }, footers: { default: mkFooter(W) }, children: k1 },
+        ...(land.length ? [{ properties: { type: SectionType.NEXT_PAGE, page: { size: { orientation: PageOrientation.LANDSCAPE, width: PAGE_W, height: 16838 }, margin: { top: 900, right: MARGIN, bottom: 800, left: MARGIN } } }, headers: { default: mkHeader(16838 - 2 * MARGIN) }, footers: { default: mkFooter(16838 - 2 * MARGIN) }, children: land }] : []),
+        { properties: { ...page, type: SectionType.NEXT_PAGE }, headers: { default: mkHeader(W) }, footers: { default: mkFooter(W) }, children: k }] });
     return Packer.toBlob(doc);
   }
 

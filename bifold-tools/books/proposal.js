@@ -39,7 +39,21 @@ const BKPROP = (function () {
     { title: "Certified Engineers", body: "Our team holds vendor certifications across Cisco, Fortinet, HPE, and more - ensuring every project meets enterprise standards." },
     { title: "RAK-Wide Delivery", body: "Headquartered in Ras Al Khaimah with project delivery capability across all seven emirates." },
     { title: "SLA-Backed Support", body: "Predictable costs and rapid response through our AMC programmes - keeping your business running with minimal disruption." }];
-  const FIELDS = () => [
+  const FIELDS = () => isTH() ? FIELDS_TH() : [
+    ["Cover", [["title", "Solution title (cover, header and letter subject)", "input"], ["tagline", "Products line on the cover (e.g. Dahua DSS Pro V8 CMS  |  HPE Servers  |  Peplink SD-WAN)", "input"], ["subtitle", "Scope line on the cover (e.g. Supply, Installation, Commissioning & Annual Maintenance)", "input"],
+      ["prepName", "Prepared by", "input"], ["prepTitle", "Their title (signs the letter)", "input"], ["prepEmail", "Email", "input"], ["prepMobile", "Mobile", "input"], ["version", "Version (e.g. v.01)", "input"]]],
+    ["Covering letter", [["letter", "Letter paragraphs after \"Dear Sir / Madam,\" (blank line between paragraphs)", 9]]],
+    ["1. Project overview", [["overview", "Paragraphs", 7]]],
+    ["2. Solution brief", [["briefIntro", "Opening line (e.g. The proposed solution is made up of five building blocks:)", "input"], ["requirements", "Building blocks, one per line as \"Name: what it includes\"", 6], ["summaryTable", "Solution summary table, one row per line as \"Label: value\" (the totals are added automatically)", 7]]],
+    ["3. Solution architecture diagram", [["diagramIntro", "Sentence above the drawing", 3]]],
+    ["4. Product descriptions", [["products", "One block per product; first line is the name with the part number in brackets, then a sentence, then \"Spec: value\" lines. Blank line between products.", 10]]],
+    ["6. Payment terms", [["payment", "One per line, \"Label: value\"", 4]]],
+    ["7. Terms and conditions", [["terms", "One per line, \"Label: value\" (warranty, AMC, validity, lead time, VAT, currency...)", 8]]],
+    ["8. Project management", [["responsibilities", "What our project manager and engineers do (one per line)", 6]]],
+    ["9. Implementation plan", [["timeline", "One phase per line: \"Activity | duration | responsible | weeks 1-2\"", 7], ["tlTotal", "Estimated total duration (e.g. 12 Weeks)", "input"]]],
+    ["10. Exclusions and client responsibilities", [["exclusions", "One per line", 7]]],
+  ];
+  const FIELDS_TH = () => [
     ["Cover", [["title", "Proposal title (the solution name on the cover)", "input"], ["site", "Project or site (shown under the customer name, e.g. Vehicle Impound, Office Area)", "input"], ["tagline", "Tagline (e.g. Wi-Fi 7  |  Core Switching  |  PoE)", "input"]]],
     ["1. Executive summary", [["summary", "Paragraphs (blank line between paragraphs). The first states what we propose and the total including VAT.", 7]]],
     ["2. Client understanding and scope of work", [["background", "2.1 Background (paragraphs)", 4], ["requirements", "2.2 Key requirements (one per line)", 7], ["assumptions", "2.3 Assumptions and exclusions (paragraphs)", 6]].concat(isTH() ? [] : [["exclusions", "Exclusions (one per line)", 4]])],
@@ -53,12 +67,19 @@ const BKPROP = (function () {
   const toField = k => ({ summary: () => (P.summary || []).join("\n\n"), background: () => (P.background || []).join("\n\n"), assumptions: () => (P.assumptions || []).join("\n\n"), overview: () => (P.overview || []).join("\n\n"), specs: () => (P.specs || []).join("\n\n"),
     requirements: () => (P.requirements || []).join("\n"), exclusions: () => (P.exclusions || []).join("\n"), responsibilities: () => (P.responsibilities || []).join("\n"),
     products: () => prodText(P.products), payment: () => kvText(P.payment), warranty: () => kvText(P.warranty), terms: () => kvText((P.terms || []).map(t => Array.isArray(t) ? t : ["", t])), timeline: () => tlText(P.timeline), tlTotal: () => (P.timeline || {}).total || "",
-    why: () => whyText(P.why && P.why.length ? P.why : isTH() ? WHY_TH : []), title: () => P.title || "", tagline: () => P.tagline || "", site: () => P.site || "" }[k] || (() => ""))();
+    why: () => whyText(P.why && P.why.length ? P.why : isTH() ? WHY_TH : []), title: () => P.title || "", tagline: () => P.tagline || "", site: () => P.site || "",
+    subtitle: () => P.subtitle || "Supply, Installation & Commissioning", letter: () => (P.letterBody || []).join("\n\n"), briefIntro: () => P.briefIntro || "", summaryTable: () => kvText(P.summaryTable), diagramIntro: () => P.diagramIntro || "",
+    prepName: () => P.prepName || PREP().name, prepTitle: () => P.prepTitle || PREP().title, prepEmail: () => P.prepEmail || PREP().email, prepMobile: () => P.prepMobile || PREP().mobile, version: () => P.version || "v.01" }[k] || (() => ""))();
+  // Default preparer: the signed-in person when they are the manager, otherwise the Bifold sales contact from the house template.
+  function PREP() { const me = (B().D || {}).me || ""; return /^ranjan@/i.test(me) || !me ? { name: "Ranjan Mazumder", title: "Director, Sales & Business Development", email: "ranjan@bifoldtech.com", mobile: "056 4243 777" }
+    : { name: me.split("@")[0].split(/[._-]/).map(w => w ? w[0].toUpperCase() + w.slice(1) : "").join(" "), title: "Sales & Business Development", email: me, mobile: "" }; }
   function fromFields(root) {
     const has = k => !!root.querySelector(`[data-pf="${k}"]`), v = k => (root.querySelector(`[data-pf="${k}"]`) || {}).value || "";
     const set = (k, fn) => { if (has(k)) P[k] = fn(v(k)); };
     set("title", x => x.trim()); set("site", x => x.trim()); set("tagline", x => x.trim()); set("summary", paras); set("background", paras); set("requirements", linesOf); set("assumptions", paras);
-    set("exclusions", linesOf); set("overview", paras); set("specs", paras); set("products", prodOf); set("payment", kvOf); set("warranty", kvOf); set("terms", kvOf); set("responsibilities", linesOf); set("why", whyOf); set("notes", x => x);
+    set("exclusions", linesOf); set("overview", paras); set("subtitle", x => x.trim()); set("letter", x => paras(x)); set("briefIntro", x => x.trim()); set("summaryTable", kvOf); set("diagramIntro", x => x.trim());
+    ["prepName", "prepTitle", "prepEmail", "prepMobile", "version"].forEach(k => set(k, x => x.trim()));
+    if (has("letter")) { P.letterBody = P.letter; delete P.letter; } set("specs", paras); set("products", prodOf); set("payment", kvOf); set("warranty", kvOf); set("terms", kvOf); set("responsibilities", linesOf); set("why", whyOf); set("notes", x => x);
     if (has("timeline")) P.timeline = tlOf(v("timeline"), v("tlTotal").trim(), (P.timeline || {}).weeks);
     // per-line wording for the scope and pricing tables
     const rows = root.querySelectorAll("[data-it]");
@@ -105,8 +126,9 @@ const BKPROP = (function () {
     const box = document.getElementById("pDia"); if (!box) return;
     const dg = P.diagram, r = dg && DIA() ? DIA().svg(dg, colours()) : null, has = !!r;
     box.innerHTML = `<div class="propdhd"><b>${esc(has ? dg.title || "Solution figure" : "Solution figure")}</b><span class="hint" style="margin:0">${has ? esc(dg.caption || "") : "Claude draws the logical topology from the BoQ, and the site layout when a site plan is given."}</span></div>
-      ${r ? `<div class="propsvg"><img alt="Solution figure" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(r.svg)}" style="display:block;width:100%;max-width:${r.w}px;margin:0 auto"></div>` : ""}
+      ${r ? `<div class="propsvg"><img id="pDiaImg" alt="Solution figure" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(r.svg)}" style="display:block;width:100%;max-width:${r.w}px;margin:0 auto"></div>` : ""}
       <div class="propbtns"><input id="pDiaInst" placeholder="${has ? "What to change, e.g. move AP03 to the reception counters" : "Anything Claude should show (optional)"}" maxlength="500"><button type="button" id="pDiaGo"${B().D.ai ? "" : " disabled"}>${has ? "Redraw" : "Draw figure"}</button>${has ? `<button type="button" class="danger" id="pDiaRm">Remove</button>` : ""}</div>`;
+    if (r && /id="logo"/.test(r.svg)) DIA().png(dg, colours(), 1.5, (B().brand() || {}).logo || "/assets/bifold_logo.png").then(pg => { const im = document.getElementById("pDiaImg"); if (im && pg) im.src = pg.dataUrl; }).catch(() => {});
     document.getElementById("pDiaGo").onclick = async e => { const b = e.target; b.disabled = true; b.textContent = "Drawing…"; try { P.diagram = await drawFigure({ instructions: document.getElementById("pDiaInst").value }); drawDiagram(); } catch (er) { B().toast(er.message, 1); b.disabled = false; b.textContent = has ? "Redraw" : "Draw figure"; } };
     const rm = document.getElementById("pDiaRm"); if (rm) rm.onclick = () => { P.diagram = null; drawDiagram(); };
   }
@@ -128,7 +150,9 @@ const BKPROP = (function () {
     const val = i => res[i].status === "fulfilled" ? res[i].value : null;
     const [s, sp, c, dg] = [val(0), val(1), val(2), val(3)];
     const coName = isTH() ? "Tech Hub" : "Bifold";
-    if (s) Object.assign(P, { title: s.title || P.title, site: s.site || P.site || "", ref: s.ref || P.ref || "", tagline: s.tagline || P.tagline, summary: s.summary || [], background: s.background || [], requirements: s.requirements || [], assumptions: s.assumptions || [], overview: s.overview || [] });
+    if (s && isTH()) Object.assign(P, { title: s.title || P.title, site: s.site || P.site || "", ref: s.ref || P.ref || "", tagline: s.tagline || P.tagline, summary: s.summary || [], background: s.background || [], requirements: s.requirements || [], assumptions: s.assumptions || [], overview: s.overview || [] });
+    if (s && !isTH()) Object.assign(P, { title: s.title || P.title, ref: s.ref || P.ref || "", tagline: s.tagline || P.tagline, subtitle: s.subtitle || P.subtitle, letterBody: s.letter || [], overview: s.overview || [], summary: s.overview || [],
+      briefIntro: s.briefIntro || "", requirements: s.pillars || [], summaryTable: s.summary || [], diagramIntro: s.diagramIntro || "" });
     if (sp) Object.assign(P, { specs: sp.specs || [], products: (sp.products || []).map(p => ({ ...p, description: Array.isArray(p.description) ? p.description.join(" ") : p.description })) });
     if (c) Object.assign(P, { payment: c.payment || [], warranty: c.warranty || [], terms: (c.terms || []).map(t => Array.isArray(t) ? t : ["", t]), exclusions: c.exclusions || [], responsibilities: c.responsibilities || [],
       timeline: { phases: ((c.timeline || {}).phases || []).map(p => ({ ...p, responsible: String(p.responsible || "").replace(/COMPANY/g, coName) })), total: (c.timeline || {}).total || "", weeks: (c.timeline || {}).weeks || 0 } });
@@ -150,7 +174,15 @@ const BKPROP = (function () {
   // Figure 1: Claude draws the SVG itself (as in chat). If that fails or times out, the simpler box layout is drawn instead.
   async function drawFigure(extra) {
     const cur = P.diagram && P.diagram.svg ? { svg: P.diagram.svg } : {};
-    try { const f = await ai("figure", { ...(extra.instructions ? cur : {}), ...extra, ...(SITEPLAN ? { file: SITEPLAN } : {}) }); return cleanDiagram(f); }
+    const h = CTX.header(), month = MONTHS[+(h.date || "").slice(5, 7) - 1] ? `${MONTHS[+h.date.slice(5, 7) - 1]} ${h.date.slice(0, 4)}` : "";
+    const docRef = isTH() ? "" : `BT-${String(P.ref || "").toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "") || "PROPOSAL"}-${(P.version || "v.01").replace(/\./g, "")}`;
+    // Claude writes the drawing in stages: each request stops before the hosting time limit and the next carries on.
+    try {
+      const base = { ...(extra.instructions ? cur : {}), ...extra, docRef, month, ...(SITEPLAN ? { file: SITEPLAN } : {}) };
+      let f = await ai("figure", base), round = 0;
+      while (f && f.partial != null && round < 6) { round++; const st = document.getElementById("pStat"); if (st && /busy/.test(st.className)) st.textContent = `Claude is still drawing the solution diagram (part ${round + 1})… the written sections are ready.`;
+        f = await ai("figure", { ...base, partial: f.partial, round: f.round }); }
+      return cleanDiagram(f); }
     catch (e) { if (e.status === 403 || e.status === 501) throw e; const d = await ai("diagram", { instructions: extra.instructions || "", ...(SITEPLAN ? { file: SITEPLAN } : {}) }); return cleanDiagram(d); }
   }
 
@@ -282,8 +314,8 @@ const BKPROP = (function () {
     const docNo = d.number || "DRAFT";
     let img = null;
     if (p.diagram && DIA()) {
-      const pg = await DIA().png(p.diagram, colours(), 2.5);
-      if (pg) { const w = Math.min(650, pg.w), h = Math.round(pg.h * w / pg.w); img = { bytes: pg.bytes, w, h }; }
+      const pg = await DIA().png(p.diagram, colours(), 2.5, (B().brand() || {}).logo || "/assets/bifold_logo.png");
+      if (pg) { const w = Math.min(isTH() ? 650 : 960, pg.w), h = Math.round(pg.h * w / pg.w); img = { bytes: pg.bytes, w, h }; }
     }
     const prose = (p.products || []).map(pr => [pr.title + (pr.code ? ` (${pr.code})` : "") + ".", pr.description, (pr.specs || []).map(s => `${s[0]}: ${s[1]}`).join(". ")].filter(Boolean).join(" ").replace(/\.\./g, ".") + (/[.]$/.test(pr.title) ? "" : ""));
     if (isTH()) {
@@ -304,24 +336,29 @@ const BKPROP = (function () {
       return BKPROPDOCX.techhub(cfg, img);
     }
     let ref = 0;
+    const prep = { name: p.prepName || PREP().name, title: p.prepTitle || PREP().title, email: p.prepEmail || PREP().email, mobile: p.prepMobile || PREP().mobile };
+    const version = p.version || "v.01", refTok = String(p.ref || "").toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const docRef = `BT-${refTok || "PROPOSAL"}-${version.replace(/\./g, "")}`;
+    const short = client.replace(/\s+(L\.?L\.?C\.?|LLC|FZE|FZ-LLC|FZCO|PJSC|Ltd\.?|Limited|Group)\.?$/i, "").split(/\s+/)[0] || client;
     const cfg = {
-      meta: { version: "v.01", client, title, tagline: p.tagline || "", subtitle: "Supply, Installation & Commissioning", date: longDate(d.date).replace(/^0/, ""), docRef: docNo, validity: `${days} Days from date of issue`,
-        preparedBy: d.salesperson || "Ranjan Mazumder", email: D.me, mobile: "" },
+      meta: { version, client, title, tagline: p.tagline || "", subtitle: p.subtitle || "Supply, Installation & Commissioning", date: longDate(d.date).replace(/^0/, ""), docRef, validity: `${days} Days from date of issue`,
+        preparedBy: prep.name, email: prep.email, mobile: prep.mobile },
       company: { name: "BIFOLD TECHNOLOGIES LLC", addressLine: "Office A306, Saraya Avenue, PO Box 554567, Al Garhoud, Dubai, United Arab Emirates", phone: "+971 04 2640 374", email: "info@bifoldtech.com", website: "www.bifoldtech.com" },
-      letter: p.letter === false ? false : { attention: d.attention || "", subject: `Commercial Proposal: ${title}`, body: [
+      letter: p.letter === false ? false : { attention: d.attention || "", subject: `Commercial Proposal: ${title}`, signatory: { name: prep.name, title: prep.title }, body: (p.letterBody || []).length ? p.letterBody : [
         `Thank you for the opportunity to submit our proposal for ${title} at ${client}. We are pleased to present this commercial offer for the supply, installation and commissioning of the proposed solution.`,
-        `The enclosed proposal sets out the scope of works, technical specifications, bill of quantities and commercial terms. The total investment for the project is AED ${fmt(t.total)} (inclusive of VAT), as detailed in the Bill of Quantities.`,
-        `BIFOLD TECHNOLOGIES LLC brings proven expertise in ICT infrastructure delivery, with certified engineers and a dedicated project manager assigned to ensure a smooth, on-time deployment. This proposal is valid for ${days} days from the date of issue.`,
+        `The enclosed proposal sets out the scope of works, technical specifications, bill of quantities and commercial terms. The total investment for the project is AED ${fmt(t.total)} (inclusive of VAT), as detailed in the Bill of Quantities. This proposal is valid for ${days} days from the date of issue.`,
         "Should you require any clarification or wish to discuss any aspect of this proposal, please do not hesitate to contact me directly using the details below."] },
-      overview: [...(p.summary || []), ...(p.background || [])],
-      solutionBrief: (p.overview || []).length || (p.requirements || []).length ? { intro: (p.overview || []).join(" "), pillars: p.requirements || [] } : null,
-      products: p.products || [], diagram: p.diagram || {},
-      boq: { sections: sections(lines).map((s, si) => { let sub = 0; return { title: s.title ? `${String(si + 1).padStart(2, "0")}.  ${s.title}` : "", items: s.items.map(l => { if (!l.sub) { ref++; sub = 0; } else sub++; const it = itemFor(p.items, l, lines.indexOf(l)); return { ref: l.sub ? `${ref}.${sub}` : String(ref), description: (it.scope || [l.name, l.description].filter(Boolean).join(" ")) + (l.model ? ` (${l.model})` : ""), qty: String(l.qty), unit: l.rate ? fmt(l.rate) : "TBD", total: l.rate ? fmt(l.net) : "TBD", italic: !!l.sub }; }) }; }),
-        totals: { exVat: "AED " + fmt(t.sub), vat: "AED " + fmt(t.vat), vatRate: "5%", incVat: "AED " + fmt(t.total) } },
-      payment: p.payment || [], terms: [...(p.warranty || []), ...(p.terms || [])].map(r => [r[0] || "Note", r[1]]),
+      overview: (p.overview || []).length ? p.overview : [...(p.summary || []), ...(p.background || [])],
+      solutionBrief: (p.requirements || []).length || (p.summaryTable || []).length ? { intro: p.briefIntro || "The proposed solution is made up of the following building blocks:", pillars: p.requirements || [],
+        summary: [...(p.summaryTable || []).map(r => [r[0] || "", r[1]]), ["Total (ex. VAT)", "AED " + fmt(t.sub)], ["Total (inc. 5% VAT)", "AED " + fmt(t.total)]] } : null,
+      products: p.products || [], diagram: p.diagram || {}, diagramIntro: p.diagramIntro || `The diagram below shows the end-to-end architecture. Items in Bifold scope are shown in solid colour; items in ${short}'s scope are shown in hatched boxes marked CUSTOMER SCOPE.`,
+      boq: { intro: "All prices are in UAE Dirhams (AED) and exclude VAT unless stated. Items in italics are accessories or licences supplied with the parent item.",
+        sections: sections(lines).map((s, si) => { let sub = 0; return { title: s.title ? `${String(si + 1).padStart(2, "0")}.  ${s.title}` : "", items: s.items.map(l => { if (!l.sub) { ref++; sub = 0; } else sub++; const it = itemFor(p.items, l, lines.indexOf(l)); return { ref: l.sub ? `${ref}.${sub}` : String(ref), description: (it.scope || [l.name, l.description].filter(Boolean).join(" ")) + (l.model && !(it.scope || "").includes(l.model) ? ` (${l.model})` : ""), qty: String(l.qty), unit: l.rate ? fmt(l.rate) : "TBD", total: l.rate ? fmt(l.net) : "TBD", italic: !!l.sub }; }) }; }),
+        totals: { exVat: fmt(t.sub), vat: fmt(t.vat), vatRate: "5%", incVat: fmt(t.total) } },
+      payment: p.payment || [], terms: [...(p.warranty || []), ...(p.terms || [])].map(r => Array.isArray(r) ? [r[0] || "Note", r[1]] : ["Note", r]),
       projectManagement: { intro: "BIFOLD TECHNOLOGIES LLC will assign a dedicated Project Manager and certified engineers for the deployment, responsible for:", responsibilities: p.responsibilities || [] },
-      implementation: { intro: (p.timeline || {}).total ? `Estimated completion within ${String(p.timeline.total).toLowerCase()} from receipt of the confirmed Purchase Order.` : "", weeks: (p.timeline || {}).weeks || Math.max(1, ...((p.timeline || {}).phases || []).flatMap(x => x.weeks || [1])), phases: ((p.timeline || {}).phases || []).map(x => ({ name: x.activity, active: x.weeks || [] })) },
-      exclusions: { intro: "The following are outside the scope of this proposal:", items: p.exclusions || [] },
+      implementation: { intro: (p.timeline || {}).total ? `The project is estimated for completion within ${String(p.timeline.total).toLowerCase()} from receipt of Purchase Order.` : "", weeks: (p.timeline || {}).weeks || Math.max(1, ...((p.timeline || {}).phases || []).flatMap(x => x.weeks || [1])), phases: ((p.timeline || {}).phases || []).map(x => ({ name: x.activity, active: x.weeks || [] })) },
+      exclusions: { intro: `The following are outside the scope of this proposal and are the responsibility of ${client}:`, items: p.exclusions || [] },
     };
     return BKPROPDOCX.bifold(cfg, img);
   }

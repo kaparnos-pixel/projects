@@ -145,14 +145,22 @@ const PROPDIAG = (function () {
     return { svg: out.join(""), w: W, h: H };
   }
 
-  async function png(d, c, scale = 2.5) {
+  // Draws the figure onto a canvas. A drawing with an empty <rect id="logo"> gets the company logo placed in it.
+  const imgOf = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+  async function png(d, c, scale = 2.5, logoUrl) {
     const r = svg(d, c); if (!r) return null;
-    const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(r.svg);
-    const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("The diagram couldn't be drawn.")); i.src = url; });
+    const im = await imgOf("data:image/svg+xml;charset=utf-8," + encodeURIComponent(r.svg)); if (!im) throw new Error("The diagram couldn't be drawn.");
     const cv = document.createElement("canvas"); cv.width = Math.round(r.w * scale); cv.height = Math.round(r.h * scale);
     const cx = cv.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(im, 0, 0, cv.width, cv.height);
+    const slot = (r.svg.match(/<rect\b[^>]*\bid="logo"[^>]*>/) || [])[0];
+    if (slot && logoUrl) {
+      const at = k => +((slot.match(new RegExp("\\b" + k + '="([\\d.]+)"')) || [])[1] || 0);
+      const x = at("x"), y = at("y"), w = at("width"), h = at("height"), lg = await imgOf(logoUrl);
+      if (lg && w && h) { const pad = Math.min(w, h) * 0.12, bw = w - 2 * pad, bh = h - 2 * pad, k = Math.min(bw / lg.naturalWidth, bh / lg.naturalHeight), lw = lg.naturalWidth * k, lh = lg.naturalHeight * k;
+        cx.drawImage(lg, (x + pad + (bw - lw) / 2) * scale, (y + pad + (bh - lh) / 2) * scale, lw * scale, lh * scale); }
+    }
     const blob = await new Promise(res => cv.toBlob(res, "image/png"));
-    return { bytes: new Uint8Array(await blob.arrayBuffer()), w: r.w, h: r.h };
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), w: r.w, h: r.h, dataUrl: cv.toDataURL("image/png") };
   }
   return { svg, png, normalise };
 })();

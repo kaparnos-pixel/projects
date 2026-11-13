@@ -779,7 +779,7 @@ function lineEditor(d) {
     const setFmt = f => { $("ed").classList.toggle("prop", f === "proposal"); $("fmtSeg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.f === f));
       $("fmtHint").textContent = f === "proposal" ? "A detailed proposal: summary, requirements, solution diagram, product descriptions, timeline, terms." : "A one-page quotation PDF with the lines and terms."; };
     $("fmtSeg").querySelectorAll("button").forEach(x => x.onclick = () => setFmt(x.dataset.f));
-    BKPROP.wire({ d, lines, draw, vat, header: () => { const c = CUS.get($("contact").value) || {}; return { customer: c.name || "", attention: $("attention") ? $("attention").value : "", title: $("title") ? $("title").value : "", validDays: Math.max(1, daysBetween($("date").value, $("dueDate").value)) }; } });
+    BKPROP.wire({ d, lines, draw, vat, header: () => { const c = CUS.get($("contact").value) || {}; return { customer: c.name || "", attention: $("attention") ? $("attention").value : "", title: $("title") ? $("title").value : "", validDays: Math.max(1, daysBetween($("date").value, $("dueDate").value)), date: $("date").value }; } });
     // In proposal mode an imported BoQ goes straight on to Claude drafting every section.
     $("impBoq").onclick = () => $("ed").classList.contains("prop") ? $("pBoq").click() : BKPROP.importInto({ lines, draw, vat });
   }

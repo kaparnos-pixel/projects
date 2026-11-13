@@ -885,7 +885,7 @@ function shouldRecord(method, seg, status, user, body) {
   if (a === "books" && method === "GET" && b === "bootstrap") return status === 403;
   if (a === "mk" && (b === "audience" || b === "render.js")) return false;
   if (a === "me") return !!(user && user.aud && user.aud.signin);
-  const fileGet = method === "GET" && ((a === "pnl" && c === "files" && seg[3]) || (a === "deals" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c));
+  const fileGet = method === "GET" && ((a === "pnl" && c === "files" && seg[3]) || (a === "deals" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c) || (a === "books" && b === "docs" && seg[3] === "files" && seg[4]));
   // Photos and signatures shown in the report editor are not logged one by one; downloads are.
   if (a === "pcr" && b === "files" && method === "GET") return seg[3] === "download" || status === 403;
   // Refused reads are logged for people who have some access (trying beyond it); people with none are logged at sign-in.

@@ -264,6 +264,7 @@ function listView(type) {
     journal: [["Date", d => fd(d.date)], ["Journal", d => `<span class="t">${esc(d.number)}</span>`], ["Accounts", d => esc([...new Set(d.gl.map(g => (ACC.get(g[0]) || {}).name))].slice(0, 3).join(", "))], ["Status", d => st(d.view)], ["Amount", d => aed(d.total), "r mono"]],
     transfer: [["Date", d => fd(d.date)], ["Transfer", d => `<span class="t">${esc(d.number)}</span>`], ["From", d => esc(acctName(d.account))], ["To", d => esc(acctName((d.gl.find(g => g[1] > 0) || [])[0]))], ["Status", d => st(d.view)], ["Amount", d => aed(d.amount), "r mono"]],
   }[type];
+  cols[1] = [cols[1][0], (f => d => f(d) + clipCount(d))(cols[1][1]), cols[1][2]];
   const views = VIEWS[type] || [["", "All"], ["posted", "Posted"], ["void", "Void"]];
   page(PLURAL[type], SALES.has(type) ? "Sales" : type === "journal" || type === "transfer" ? "Accountant" : "Purchases",
     `<button id="xl">Export to Excel</button><button class="primary" id="newBtn">+ New ${NAME[type].toLowerCase()}</button>`,
@@ -378,6 +379,67 @@ function wireVerify(c) {
     const checks = {}; document.querySelectorAll("[data-vk]").forEach(i => checks[i.dataset.vk] = i.checked);
     try { await api("PUT", `vendors/${c.id}/verify`, { checks, date: $("vdate").value, note: $("vnote").value }); await load(); toast("Verification saved."); contactView("vendor", c.id); } catch (err) { $("verr").textContent = err.message; busy(b, false); } };
 }
+/* ---------- attachments ---------- */
+const CLIP = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>';
+const clipCount = d => d.fileCount ? ` <span class="clip" title="${d.fileCount} attachment${d.fileCount === 1 ? "" : "s"}">${CLIP}${d.fileCount}</span>` : "";
+const DEF_KIND = { quote: "other", invoice: "po", creditnote: "other", receipt: "payment", po: "quote", bill: "invoice", vendorcredit: "invoice", payment: "payment", expense: "receipt", journal: "other", transfer: "payment" };
+const FILE_MAX = 10 * 1048576;
+const kb = n => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+function readB64(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = () => rej(new Error(`Couldn't read ${file.name}.`)); r.readAsDataURL(file); }); }
+async function uploadFiles(id, files, kind) {
+  let ok = 0; const errs = [];
+  for (const f of files) {
+    if (f.size > FILE_MAX) { errs.push(`${f.name} is larger than 10 MB`); continue; }
+    try { await api("POST", `docs/${id}/files`, { name: f.name, type: f.type || "application/octet-stream", kind: f.kind || kind, data: await readB64(f) }); ok++; }
+    catch (e) { errs.push(`${f.name}: ${e.message}`); }
+  }
+  if (errs.length) toast(errs.join(" · "), 1); else if (ok) toast(`${ok} file${ok === 1 ? "" : "s"} attached.`);
+  return ok;
+}
+const fileUrl = (id, f, dl) => `/api/books/docs/${id}/files/${f.id}${dl ? "/download" : ""}`;
+function attachCard(d) {
+  const files = d.files || [];
+  const kinds = D.fileKinds || {};
+  return `<section class="card" id="attCard"><header><h2>Attachments<span>${files.length}</span></h2><label class="btn" style="padding:4px 10px;font-size:12px;cursor:pointer">+ Upload<input type="file" id="attIn" multiple hidden></label></header>
+    <div class="drop" id="attDrop">Drop files here (PDF, images, Excel, Word; up to 10 MB each)</div>
+    ${files.map(f => `<div class="att" data-f="${f.id}"><button type="button" class="an" data-open title="Open">${esc(f.name)}</button><select data-kind aria-label="File type">${Object.entries(kinds).map(([k, l]) => `<option value="${k}"${k === f.kind ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
+      <span class="am">${kb(f.size)} · ${esc(String(f.by).split("@")[0])} · ${fd(f.at)}</span><span class="aa"><a class="btn" href="${fileUrl(d.id, f, 1)}" title="Download">Download</a><button type="button" class="x" data-rm title="Remove">×</button></span></div>`).join("") || `<div class="bd muted" style="font-size:12px">No files yet. Attach the customer's PO, supplier's tax invoice, receipts, delivery notes or photos.</div>`}</section>`;
+}
+function wireAttach(d, reload) {
+  const kind = DEF_KIND[d.type] || "other";
+  const go2 = async files => { if (!files.length) return; toast(`Uploading ${files.length} file${files.length === 1 ? "" : "s"}…`); if (await uploadFiles(d.id, [...files], kind)) reload(); };
+  $("attIn").onchange = e => go2(e.target.files);
+  const z = $("attDrop");
+  ["dragenter", "dragover"].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.add("on"); }));
+  ["dragleave", "drop"].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove("on"); }));
+  z.addEventListener("drop", e => go2(e.dataTransfer.files));
+  $("attCard").querySelectorAll(".att").forEach(row => {
+    const f = (d.files || []).find(x => x.id === row.dataset.f);
+    row.querySelector("[data-open]").onclick = () => {
+      if (/pdf$/.test(f.type)) window.BXPdf.preview(() => fetch(fileUrl(d.id, f)).then(r => { if (!r.ok) throw new Error("Couldn't open the file."); return r.blob(); }), f.name);
+      else if (/^image\//.test(f.type)) window.open(fileUrl(d.id, f), "_blank", "noopener");
+      else location.href = fileUrl(d.id, f, 1);
+    };
+    row.querySelector("[data-kind]").onchange = async e => { try { await api("PUT", `docs/${d.id}/files/${f.id}`, { kind: e.target.value }); toast("Saved."); } catch (err) { toast(err.message, 1); } };
+    row.querySelector("[data-rm]").onclick = async () => { if (!await ask(`Remove ${f.name}?`, "The file is deleted from this document.", { okText: "Remove", danger: true })) return; try { await api("DELETE", `docs/${d.id}/files/${f.id}`); reload(); } catch (err) { toast(err.message, 1); } };
+  });
+}
+// Files picked in an editor are uploaded once the document is saved.
+function editorFiles(d) {
+  const has = (d.files || []).length;
+  return `<section class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>Attachments</b><label class="btn" style="cursor:pointer">+ Add files<input type="file" id="edFiles" multiple hidden></label></div>
+    <div class="drop" id="edDrop">Drop files here, or use Add files. They're attached when you save.${has ? ` This document already has ${has} file${has === 1 ? "" : "s"}; manage them on the document page.` : ""}</div><div id="edList" class="hint"></div></section>`;
+}
+function wireEditorFiles(queue) {
+  const show = () => { $("edList").innerHTML = queue.map((f, i) => `<span class="chipf">${CLIP} ${esc(f.name)} <small>${kb(f.size)}</small> <button type="button" class="x" data-i="${i}" aria-label="Remove">×</button></span>`).join(" "); $("edList").querySelectorAll("[data-i]").forEach(b => b.onclick = () => { queue.splice(Number(b.dataset.i), 1); show(); }); };
+  const add = fl => { [...fl].forEach(f => { if (f.size > FILE_MAX) toast(`${f.name} is larger than 10 MB.`, 1); else queue.push(f); }); show(); };
+  $("edFiles").onchange = e => { add(e.target.files); e.target.value = ""; };
+  const z = $("edDrop");
+  ["dragenter", "dragover"].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.add("on"); }));
+  ["dragleave", "drop"].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove("on"); }));
+  z.addEventListener("drop", e => add(e.dataTransfer.files));
+}
+async function afterSave(r, queue, type) { if (queue.length) await uploadFiles(r.id, queue, DEF_KIND[type] || "other"); }
 function saveBlob(blob, name) { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); }
 BK.saveBlob = saveBlob;
 
@@ -452,12 +514,14 @@ async function docView(id) {
   page(`${docTitle(d)} ${d.number || ""}`.trim(), `${PLURAL[tp]} · ${d.contactName || ""}`, `<a class="btn" href="#/${ROUTE_OF[tp]}">← ${PLURAL[tp]}</a>`,
     `<div class="dv">${showPaper}<aside class="side">
       <section class="card"><header><h2>${st(d.view)}</h2><span class="muted" style="font-size:12px">${d.sentAt ? "Sent " + fd(d.sentAt) : ""}</span></header><div class="bd acts2">${A.map(([l, k, p, x]) => `<button type="button" data-a="${k}" class="${p ? "primary" : x ? "danger" : ""}">${esc(l)}</button>`).join("")}</div></section>
+      ${attachCard(d)}
       ${["invoice", "bill", "creditnote", "vendorcredit", "receipt", "payment"].includes(tp) && posted ? `<section class="card"><header><h2>Balance</h2></header><div class="bd kv"><span>Total</span><b>${aed(d.total || d.amount)}</b><span>${["invoice", "bill"].includes(tp) ? "Paid / credited" : "Applied"}</span><b>${aed(["invoice", "bill"].includes(tp) ? d.paid : (d.total || d.amount) - d.balance)}</b><span>${["invoice", "bill"].includes(tp) ? "Balance due" : "Unapplied"}</span><b>${aed(d.balance)}</b></div></section>` : ""}
       ${linked.length ? `<section class="card"><header><h2>Linked</h2></header>${linked.join("")}</section>` : ""}
       ${P.acct && glRows.length ? `<section class="card"><header><h2>Journal entry</h2></header><div class="tblwrap"><table class="list compact nohover gltbl"><thead><tr><th>Account</th><th class="r">Debit</th><th class="r">Credit</th></tr></thead><tbody>${glRows.map(g => `<tr><td>${esc(acctName(g[0]))}${g[3] ? `<div class="s">${esc(contactName(g[3]))}</div>` : ""}</td><td class="r mono">${g[1] ? aed(g[1]) : ""}</td><td class="r mono">${g[2] ? aed(g[2]) : ""}</td></tr>`).join("")}</tbody></table></div></section>` : ""}
       ${P.acct && d.tax && d.tax.length ? `<section class="card"><header><h2>VAT return boxes</h2></header><div class="bd vatgrid">${d.tax.map(x => `<span>Box ${esc(x[0])}</span><span class="n">${aed(x[1])} / VAT ${aed(x[2])}</span>`).join("")}</div></section>` : ""}
       <section class="card"><header><h2>History</h2></header><div class="bd" style="font-size:12px;color:var(--muted)">Created by ${esc(d.createdBy)} on ${fd(d.createdAt)}${d.issuedAt ? `<br>Issued by ${esc(d.issuedBy)} on ${fd(d.issuedAt)}` : ""}<br>Last changed by ${esc(d.updatedBy)} on ${fd(d.updatedAt)}${d.voidedBy ? `<br>Voided by ${esc(d.voidedBy)}` : ""}<br><span>Every change is in the Activity log.</span></div></section>
     </aside></div>`, ROUTE_OF[tp]);
+  wireAttach(d, async () => { await load(); docView(id); });
   const pdfName = `${docTitle(d)} ${d.number || "draft"} ${d.contactName || ""}.pdf`;
   const build = () => BKPDF.doc(d);
   const act = {
@@ -572,9 +636,11 @@ function lineEditor(d) {
         <div style="padding:0 16px 14px"><div class="totals" id="totals"></div></div></section>
       <section class="panel"><div class="row"><label><span class="lbl">Notes${side === "sales" ? " (shown on the document)" : ""}</span><textarea id="notes" rows="3" maxlength="3000">${esc(d.notes || "")}</textarea></label>
         ${["quote", "invoice", "po"].includes(t) ? `<label><span class="lbl">Terms and conditions</span><textarea id="terms" rows="3" maxlength="4000">${esc(d.terms != null && !d._fresh ? d.terms : d.terms || (t === "quote" ? s.quoteTerms : t === "po" ? s.poTerms : s.invoiceTerms))}</textarea></label>` : ""}</div></section>
+      ${editorFiles(d)}
       <div class="err" id="err"></div>
       <div class="edfoot">${saveBtns}</div>
     </form>`, ROUTE_OF[t]);
+  const queue = []; wireEditorFiles(queue);
   const body = $("lines");
   const acctSel = (sel) => acctOptions(isLineAcct(side), sel);
   const rowHTML = (l, i) => `<tr data-i="${i}"><td class="h">${i + 1}</td>
@@ -618,7 +684,7 @@ function lineEditor(d) {
     if (b.dataset.s === "posted" && t === "invoice" && payload.supplyDate && daysBetween(payload.supplyDate, payload.date) > 14 && !await ask("Issued more than 14 days after the supply", `The date of supply is ${fd(payload.supplyDate)}. A tax invoice must be issued within 14 days of the date of supply (Art. 67 of the VAT Decree-Law), and the VAT is due for the period of the supply date. Issue it anyway?`, { okText: "Continue" })) return;
     if (b.dataset.s === "posted" && ["invoice", "creditnote"].includes(t) && !await ask(`Issue this ${docTitle({ type: t }).toLowerCase()}?`, "It gets the next number in the sequence and can't be changed afterwards.", { okText: "Issue" })) return;
     busy(b, true);
-    try { const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await load(); toast(`${NAME[t]} ${r.number || "draft"} saved.`); go("#/doc/" + r.id); }
+    try { const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await afterSave(r, queue, t); await load(); toast(`${NAME[t]} ${r.number || "draft"} saved.`); go("#/doc/" + r.id); }
     catch (e) { $("err").textContent = e.message; busy(b, false); }
   });
 }
@@ -642,7 +708,9 @@ function payEditor(d, applyId) {
         <div class="tblwrap"><table class="list compact nohover"><thead><tr><th>${target === "invoice" ? "Invoice" : "Bill"}</th><th>Date</th><th>Due</th><th class="r">Total</th><th class="r">Open</th><th class="r">Payment</th></tr></thead><tbody id="open"></tbody></table></div>
         <div style="padding:10px 16px" class="totals" id="tot"></div></section>
       <section class="panel"><label><span class="lbl">Notes</span><textarea id="notes" rows="2" maxlength="3000">${esc(d.notes || "")}</textarea></label></section>
+      ${editorFiles(d)}
       <div class="err" id="err"></div><div class="edfoot"><button type="button" class="primary" id="save">Save</button></div></form>`, ROUTE_OF[t]);
+  const queue = []; wireEditorFiles(queue);
   const drawOpen = () => {
     const cid = $("contact").value;
     const open = D.docs.filter(x => x.type === target && x.status === "posted" && x.contactId === cid && (x.balance > 0.004 || cur.has(x.id))).sort((a, b) => a.date.localeCompare(b.date));
@@ -659,7 +727,7 @@ function payEditor(d, applyId) {
     const b = e.target; $("err").textContent = ""; busy(b, true);
     const payload = { type: t, contactId: $("contact").value, date: $("date").value, amount: $("amount").value, account: $("account").value, method: $("method").value, chequeNo: $("chequeNo").value, chequeDate: $("chequeDate").value, bankRef: $("bankRef").value, notes: $("notes").value,
       allocs: [...$("open").querySelectorAll("input")].map(i => ({ id: i.dataset.id, amt: num(i.value) })).filter(a => a.amt > 0), etag: d.etag };
-    try { const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await load(); toast(`${NAME[t]} ${r.number} saved.`); go("#/doc/" + r.id); }
+    try { const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await afterSave(r, queue, t); await load(); toast(`${NAME[t]} ${r.number} saved.`); go("#/doc/" + r.id); }
     catch (err) { $("err").textContent = err.message; busy(b, false); }
   };
 }
@@ -674,7 +742,9 @@ function journalEditor(d) {
       <p class="hint" style="margin:0">Opening balances: debit assets, credit liabilities, and put the difference to <b>3900 Opening Balance Equity</b>. Customer and supplier balances need the customer or supplier on the line.</p></section>
       <section class="panel" style="padding:0;overflow:hidden"><div class="tblwrap"><table class="lines" style="min-width:860px"><thead><tr><th class="h">#</th><th>Account</th><th>Customer / supplier</th><th>Memo</th><th class="p">Debit</th><th class="p">Credit</th><th class="rm"></th></tr></thead><tbody id="jl"></tbody></table></div>
       <div style="padding:10px 14px"><button type="button" id="add">+ Add line</button></div><div style="padding:0 16px 14px" class="totals" id="jt"></div></section>
+      ${editorFiles(d)}
       <div class="err" id="err"></div><div class="edfoot"><button type="button" class="primary" id="save">Save journal</button></div></form>`, "journals");
+  const queue = []; wireEditorFiles(queue);
   const row = (l, i) => `<tr data-i="${i}"><td class="h">${i + 1}</td><td><select data-k="account"><option value="">Choose</option>${acctOptions(() => true, l.account)}</select></td>
     <td><select data-k="contactId"><option value="">-</option>${contacts.map(([id, n, k]) => `<option value="${id}"${id === l.contactId ? " selected" : ""}>${esc(n)} (${k})</option>`).join("")}</select></td>
     <td><input data-k="memo" maxlength="200" value="${esc(l.memo || "")}"></td><td class="p"><input class="num" data-k="debit" value="${l.debit || ""}"></td><td class="p"><input class="num" data-k="credit" value="${l.credit || ""}"></td><td class="rm"><button type="button" class="x" data-rm>×</button></td></tr>`;
@@ -686,7 +756,7 @@ function journalEditor(d) {
   draw();
   $("save").onclick = async e => { const b = e.target; busy(b, true); $("err").textContent = "";
     try { const payload = { type: "journal", date: $("date").value, ref: $("ref").value, notes: $("notes").value, opening: $("opening").checked, lines, etag: d.etag };
-      const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await load(); toast(`Journal ${r.number} saved.`); go("#/doc/" + r.id); }
+      const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await afterSave(r, queue, "journal"); await load(); toast(`Journal ${r.number} saved.`); go("#/doc/" + r.id); }
     catch (err) { $("err").textContent = err.message; busy(b, false); } };
 }
 function transferEditor(d) {
@@ -696,10 +766,12 @@ function transferEditor(d) {
     `<form class="ed" novalidate><section class="panel"><div class="row"><label><span class="lbl">From</span><select id="from">${acctOptions(okT, d.account || "1100")}</select></label><label><span class="lbl">To</span><select id="to">${acctOptions(okT, d.toAccount || "1000")}</select></label>
       <label><span class="lbl">Amount (AED)</span><input class="num" id="amount" value="${d.amount || ""}"></label><label><span class="lbl">Date</span><input type="date" id="date" value="${esc(d.date || today())}"></label><label><span class="lbl">Reference</span><input id="ref" maxlength="80" value="${esc(d.ref || "")}"></label></div>
       <label><span class="lbl">Notes</span><textarea id="notes" rows="2">${esc(d.notes || "")}</textarea></label><p class="hint" style="margin:0">Use this for cash deposits, withdrawals, PDCs that cleared into the bank, or moving funds between accounts.</p></section>
+      ${editorFiles(d)}
       <div class="err" id="err"></div><div class="edfoot"><button type="button" class="primary" id="save">Save transfer</button></div></form>`, "banking");
+  const queue = []; wireEditorFiles(queue);
   $("save").onclick = async e => { const b = e.target; busy(b, true); $("err").textContent = "";
     try { const payload = { type: "transfer", account: $("from").value, toAccount: $("to").value, amount: $("amount").value, date: $("date").value, ref: $("ref").value, notes: $("notes").value, etag: d.etag };
-      const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await load(); toast(`Transfer ${r.number} saved.`); go("#/doc/" + r.id); }
+      const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await afterSave(r, queue, "transfer"); await load(); toast(`Transfer ${r.number} saved.`); go("#/doc/" + r.id); }
     catch (err) { $("err").textContent = err.message; busy(b, false); } };
 }
 

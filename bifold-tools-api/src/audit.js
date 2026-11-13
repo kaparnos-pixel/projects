@@ -167,6 +167,13 @@ module.exports = function makeAudit(H) {
       if (b === "vendors" && d === "verify") return [A, "Recorded supplier VAT verification", name, ch];
       if (b === "vendors") return [A, "Added supplier", out.name, ""];
       if (b === "customers") return [A, "Added customer", out.name, ""];
+      if (b === "docs" && d === "files") {
+        const where = (aud.changes || [])[0] || "";
+        if (method === "POST") return [A, "Uploaded file", out.file ? out.file.name : clean(body.name, 200), [where, out.file ? Math.max(1, Math.round(out.file.size / 1024)) + " KB" : ""].filter(Boolean).join(", ")];
+        if (method === "GET") return [A, seg[5] === "download" ? "Downloaded file" : "Opened file", name, where];
+        if (method === "PUT") return [A, "Edited file details", name, where];
+        if (method === "DELETE") return [A, "Deleted file", name, where];
+      }
       if (b === "docs") {
         const lbl = LBL[out.type || body.type] || "document";
         const who = [out.contactName, money(out.total || out.amount)].filter(Boolean).join(", ");

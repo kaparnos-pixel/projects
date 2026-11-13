@@ -26,6 +26,7 @@
 // Access: section "books" = full accounting. Section "quotes" = quotations only (sales staff).
 
 const crypto = require("crypto");
+const { BlobServiceClient } = require("@azure/storage-blob");
 
 const EMIRATES = ["Abu Dhabi", "Dubai", "Sharjah", "Ajman", "Umm Al Quwain", "Ras Al Khaimah", "Fujairah"];
 const BOX1 = { "Abu Dhabi": "1a", "Dubai": "1b", "Sharjah": "1c", "Ajman": "1d", "Umm Al Quwain": "1e", "Ras Al Khaimah": "1f", "Fujairah": "1g" };
@@ -352,13 +353,13 @@ module.exports = function makeBooks(H) {
   // ---------- documents ----------
   const dPK = co => "doc-" + co;
   const HEAD = ["RowKey", "type", "number", "status", "date", "dueDate", "contactId", "contactName", "contactTrn", "ref", "subtotal", "vatAmt", "total", "amount", "account",
-    "emirate", "allocs", "gl", "tax", "fromId", "toId", "sentAt", "voidReason", "createdBy", "createdAt", "updatedBy", "updatedAt", "title", "invoiceRef"];
+    "emirate", "allocs", "gl", "tax", "fromId", "toId", "sentAt", "voidReason", "createdBy", "createdAt", "updatedBy", "updatedAt", "title", "invoiceRef", "files"];
   function headOut(e) {
     return {
       id: e.rowKey || e.RowKey, type: e.type, number: e.number || "", status: e.status, date: e.date, dueDate: e.dueDate || "", contactId: e.contactId || "", contactName: e.contactName || "",
       contactTrn: e.contactTrn || "", ref: e.ref || "", subtotal: num(e.subtotal), vatAmt: num(e.vatAmt), total: num(e.total), amount: num(e.amount), account: e.account || "",
       emirate: e.emirate || "", allocs: j(e.allocs, []), gl: j(e.gl, []), tax: j(e.tax, []), fromId: e.fromId || "", toId: e.toId || "", sentAt: e.sentAt || "",
-      voidReason: e.voidReason || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, title: e.title || "", invoiceRef: e.invoiceRef || "",
+      voidReason: e.voidReason || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, title: e.title || "", invoiceRef: e.invoiceRef || "", fileCount: docFiles(e).length,
     };
   }
   async function allDocs(co) { return (await all(await table(T), dPK(co), HEAD)).map(headOut); }
@@ -618,7 +619,7 @@ module.exports = function makeBooks(H) {
     const { gl, tax } = postingFor(d, TYPES[f.type].journal ? body.jlines : body.lines || [], settings);
     f.gl = JSON.stringify(gl); f.tax = JSON.stringify(tax);
   }
-  const fullOut = e => ({ ...headOut(e), ...unpackJson(e), etag: e.etag });
+  const fullOut = e => ({ ...headOut(e), ...unpackJson(e), files: docFiles(e), etag: e.etag });
 
   async function getDoc(user, id) {
     const co = coOf(user);
@@ -687,7 +688,7 @@ module.exports = function makeBooks(H) {
     if (status === "posted") postInto(f, body, ctx.settings); else { f.gl = "[]"; f.tax = "[]"; }
     f.number = cur.number || (tp.taxDoc && status !== "posted" ? "" : await nextNumber(ctx.co, cur.type));
     if (status === "posted" && cur.status !== "posted") { body.issuedAt = new Date().toISOString(); body.issuedBy = user.email; } else { body.issuedAt = old.issuedAt; body.issuedBy = old.issuedBy; }
-    const next = { partitionKey: dPK(ctx.co), rowKey: id, ...f, fromId: cur.fromId || "", toId: cur.toId || "", sentAt: cur.sentAt || (status === "sent" ? new Date().toISOString() : ""), voidReason: "", createdBy: cur.createdBy, createdAt: cur.createdAt,
+    const next = { partitionKey: dPK(ctx.co), rowKey: id, ...f, files: cur.files || "[]", fromId: cur.fromId || "", toId: cur.toId || "", sentAt: cur.sentAt || (status === "sent" ? new Date().toISOString() : ""), voidReason: "", createdBy: cur.createdBy, createdAt: cur.createdAt,
       updatedBy: user.email, updatedAt: new Date().toISOString(), ...packJson(body) };
     if (user.aud) { user.aud.name = `${tp.label} ${f.number || "draft"}`; user.aud.changes = diff(cur, next); if (status === "posted" && cur.status !== "posted") user.aud.issued = true; }
     try { await t.updateEntity(next, "Replace", { etag: b.etag || cur.etag }); }
@@ -760,6 +761,77 @@ module.exports = function makeBooks(H) {
     if (cur.status === "converted") fail(400, "This has been converted, so it's kept. Cancel it instead.");
     if (!tp.ledger && cur.createdBy !== user.email && !user.isManager && !isAcct(user)) fail(403, "Only the person who created this or an accountant can delete it.");
     await t.deleteEntity(dPK(co), id);
+    const fl = docFiles(cur); if (fl.length) { const c = await blobs(); await Promise.all(fl.map(x => c.deleteBlob(x.id).catch(() => {}))); }
+  }
+
+  // ---------- attachments: customer POs, supplier invoices, receipts, delivery notes, photos (Blob Storage "books-files") ----------
+  // The list lives in the document row's "files" column. Anyone who can open the document can view and add files;
+  // the person who added a file, an accountant or a manager can remove it. Removing a file from a posted document is
+  // limited to managers, because supporting documents are part of the tax records.
+  const FILE_MAX = 10 * 1048576, FILES_MAX = 40;
+  const FILE_KINDS = { po: "Customer PO", quote: "Supplier quotation", invoice: "Supplier tax invoice", receipt: "Receipt", delivery: "Delivery note", contract: "Contract / LPO", declaration: "Customer declaration", payment: "Payment proof", photo: "Photo", other: "Other" };
+  function docFiles(e) { try { const a = JSON.parse(e.files || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } }
+  let container;
+  async function blobs() {
+    if (!container) { const cs = process.env.STORAGE_CONNECTION; if (!cs) fail(500, "Storage is not set up yet."); const c = BlobServiceClient.fromConnectionString(cs).getContainerClient("books-files"); await c.createIfNotExists(); container = c; }
+    return container;
+  }
+  async function loadForFiles(user, id) {
+    const co = coOf(user);
+    const e = await getOrNull(await table(T), dPK(co), id);
+    if (!e) fail(404, "This document doesn't exist.");
+    if (!typeAllowed(user, e.type)) needAcct(user);
+    return { co, e };
+  }
+  async function changeFiles(user, id, fn) {
+    const t = await table(T);
+    for (let i = 0; i < 4; i++) {
+      const { co, e } = await loadForFiles(user, id);
+      const files = fn(docFiles(e), e);
+      try { await t.updateEntity({ partitionKey: dPK(co), rowKey: id, files: JSON.stringify(files) }, "Merge", { etag: e.etag }); return files; }
+      catch (err) { if (err.statusCode !== 412) throw err; }
+    }
+    fail(409, "The attachments were changed by someone else at the same time. Try again.");
+  }
+  async function addFile(user, id, b) {
+    const { co, e } = await loadForFiles(user, id);
+    if (user.co === "all") fail(400, "Switch to a company to add files.");
+    if (docFiles(e).length >= FILES_MAX) fail(400, `A document can hold at most ${FILES_MAX} files.`);
+    const name = clean(b.name, 200).replace(/[\\/\u0000-\u001f]/g, "_") || "file", type = clean(b.type, 120) || "application/octet-stream";
+    const buf = Buffer.from(String(b.data || ""), "base64");
+    if (!buf.length) fail(400, `${name} is empty.`);
+    if (buf.length > FILE_MAX) fail(413, `${name} is larger than 10 MB.`);
+    const fid = crypto.randomUUID();
+    await (await blobs()).getBlockBlobClient(fid).uploadData(buf, { blobHTTPHeaders: { blobContentType: type }, metadata: { name: encodeURIComponent(name), doc: id, co } });
+    const f = { id: fid, kind: FILE_KINDS[b.kind] ? b.kind : "other", name, type, size: buf.length, note: clean(b.note, 200), by: user.email, at: new Date().toISOString() };
+    if (user.aud) { user.aud.name = name; user.aud.changes = [`${TYPES[e.type].label} ${e.number || "draft"}`]; }
+    try { const files = await changeFiles(user, id, l => { if (l.length >= FILES_MAX) fail(400, `A document can hold at most ${FILES_MAX} files.`); return l.concat(f); }); return { file: f, files }; }
+    catch (err) { await (await blobs()).deleteBlob(fid).catch(() => {}); throw err; }
+  }
+  async function removeFile(user, id, fid) {
+    let gone = null;
+    const files = await changeFiles(user, id, (l, e) => {
+      gone = l.find(x => x.id === fid); if (!gone) fail(404, "That file is no longer attached.");
+      if (user.aud) { user.aud.name = gone.name; user.aud.changes = [`${TYPES[e.type].label} ${e.number || "draft"}`]; }
+      if (e.status === "posted" && !user.isManager) fail(403, "This document is posted, so its supporting files are part of the tax records. Only a manager can remove them.");
+      if (gone.by !== user.email && !isAcct(user) && !user.isManager) fail(403, "Only the person who added this file, an accountant or a manager can remove it.");
+      return l.filter(x => x.id !== fid);
+    });
+    await (await blobs()).deleteBlob(fid).catch(() => {});
+    return { files };
+  }
+  async function getFile(user, id, fid, download) {
+    const { e } = await loadForFiles(user, id);
+    const f = docFiles(e).find(x => x.id === fid); if (!f) fail(404, "That file is no longer attached.");
+    if (user.aud) { user.aud.name = f.name; user.aud.changes = [`${TYPES[e.type].label} ${e.number || "draft"}`]; }
+    let buf; try { buf = await (await blobs()).getBlockBlobClient(fid).downloadToBuffer(); } catch (err) { if (err.statusCode === 404) fail(404, "That file is no longer available."); throw err; }
+    const inline = !download && /^(image\/(png|jpeg|gif|webp)|application\/pdf)$/.test(f.type);
+    return { __binary: buf, headers: { "Content-Type": inline ? f.type : "application/octet-stream", "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(f.name)}`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } };
+  }
+  async function editFile(user, id, fid, b) {
+    const files = await changeFiles(user, id, (l, e) => { const x = l.find(y => y.id === fid); if (!x) fail(404, "That file is no longer attached."); if (user.aud) { user.aud.name = x.name; user.aud.changes = [`${TYPES[e.type].label} ${e.number || "draft"}`]; }
+      return l.map(y => y.id === fid ? { ...y, kind: FILE_KINDS[b.kind] ? b.kind : y.kind, note: b.note != null ? clean(b.note, 200) : y.note } : y); });
+    return { files };
   }
 
   async function markSent(user, id) {
@@ -806,7 +878,7 @@ module.exports = function makeBooks(H) {
     return {
       company: { key: co, name: CO[co].name }, settings: s, accounts: accts, items, docs: list, customers, vendors, vver,
       perms: { acct, manager: !!user.isManager, quotesOnly: !acct }, vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
-      acctTypes: ACCT_TYPES, sys: SYS, emirates: EMIRATES, today: today(), me: user.email,
+      acctTypes: ACCT_TYPES, sys: SYS, fileKinds: FILE_KINDS, emirates: EMIRATES, today: today(), me: user.email,
     };
   }
 
@@ -876,6 +948,13 @@ module.exports = function makeBooks(H) {
       if (id && sub === "apply" && method === "PUT") return applyCredit(user, id, body);
       if (id && sub === "sent" && method === "POST") return markSent(user, id);
       if (id && sub === "convert" && method === "POST") return convert(user, id, body);
+      if (id && sub === "files") {
+        const fid = seg[3];
+        if (!fid && method === "POST") return addFile(user, id, body);
+        if (fid && method === "GET") return getFile(user, id, fid, seg[4] === "download");
+        if (fid && method === "PUT") return editFile(user, id, fid, body);
+        if (fid && method === "DELETE") return removeFile(user, id, fid);
+      }
     }
     fail(404, "Unknown request.");
   }

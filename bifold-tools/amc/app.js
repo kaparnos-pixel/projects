@@ -619,6 +619,12 @@ function renderAmcSheet() {
       <div class="docrow"><button type="button" class="primary sm" id="x_visit">Schedule visit</button><span class="muted small">Service report:</span><button type="button" class="sm" id="x_srDocx">Word</button><button type="button" class="sm" id="x_srPdf">PDF</button><button type="button" class="sm" id="x_srPv">Preview</button><button type="button" class="ghost sm" id="x_editAward">Edit award details</button></div>
       <div class="list" style="border:1px solid var(--line);border-radius:8px" id="x_visits"></div></div>`);
   }
+  if (a.invoices && a.invoices.length) {
+    const inv = a.invoices, net = inv.reduce((s, x) => s + num(x.subtotal), 0), tot = inv.reduce((s, x) => s + num(x.total), 0), paid = inv.reduce((s, x) => s + num(x.paid), 0), due = inv.reduce((s, x) => s + num(x.balance), 0);
+    const LBL = { paid: "Paid", partial: "Part paid", open: "Open", overdue: "Overdue", draft: "Draft" };
+    body.push(`<div class="sec"><h3>Invoices</h3><div class="facts"><div class="fact"><div class="k">Invoiced (excl. VAT)</div><div class="v mono">${esc(aed(net))}</div><div class="sub">${v ? Math.round(net / v * 100) + "% of the annual value" : ""}</div></div><div class="fact"><div class="k">Invoiced (incl. VAT)</div><div class="v mono">${esc(aed(tot))}</div></div><div class="fact"><div class="k">Received</div><div class="v mono">${esc(aed(paid))}</div></div><div class="fact"><div class="k">Outstanding</div><div class="v mono">${esc(aed(due))}</div></div></div>
+      <div class="list" style="border:1px solid var(--line);border-radius:8px">${inv.map(x => `<a class="row" href="/books/#/doc/${encodeURIComponent(x.id)}" style="display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:9px 12px;text-decoration:none;color:inherit;border-top:1px solid var(--line)"><span><b>${esc(x.number || "Draft")}</b> <span class="muted small">${esc(fmt(x.date))}${x.dueDate ? " · due " + esc(fmt(x.dueDate)) : ""}</span></span><span class="chip ${x.view === "paid" ? "completed" : x.view === "overdue" ? "expired" : ""}">${esc(LBL[x.view] || x.view)}</span><span class="mono">${esc(aed(x.total))}</span></a>`).join("")}</div></div>`);
+  }
   body.push(`<div class="sec"><h3>Proposal</h3>${proposalBlock(a)}</div>`);
   body.push(`<div class="sec"><h3>Files</h3><div class="files" id="x_files">${filesHTML(a.files, true)}</div><label class="drop" id="x_drop">Drop files here or click to upload (up to 10 MB each)<input type="file" id="x_fileInput" multiple></label></div>`);
   body.push(`<div class="sec"><h3>Activity</h3><div class="log">${(a.history || []).slice().reverse().map(h => `<div><time>${esc(fmt(h.at))}</time><span>${esc(h.text)} · ${esc(nameOf(h.by))}</span></div>`).join("") || '<span class="muted">No activity yet.</span>'}</div></div>`);
@@ -1074,6 +1080,9 @@ async function refresh() {
   S.visits.clear(); r.visits.forEach(v => S.visits.set(v.id, v));
 }
 async function boot() {
+  // Links from other tools: /amc/#amc=<id> opens that AMC.
+  const deep = /^#amc=([\w-]+)$/.exec(location.hash);
+  if (deep) history.replaceState(null, "", "#amcs");
   route();
   try {
     const [me, customers] = await Promise.all([api("GET", "me"), api("GET", "customers")]);
@@ -1084,6 +1093,7 @@ async function boot() {
     tag.title = S.isAdmin ? "You can view and edit every AMC." : "You can view and edit the AMCs you create. Managers see every AMC.";
     await refresh();
     S.ready = true; renderAll();
+    if (deep) openAmcById(decodeURIComponent(deep[1]));
   } catch (e) {
     S.ready = true; $("offline").hidden = false; $("offline").textContent = errMsg(e); renderAll(); return;
   }

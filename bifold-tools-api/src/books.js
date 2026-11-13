@@ -103,7 +103,7 @@ const DEFAULT_ORG = {
 const MAX_LINES = 300;
 
 module.exports = function makeBooks(H) {
-  const { table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, rowCo, listCustomers, createCustomer, sup, diff, deals } = H;
+  const { table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, rowCo, listCustomers, createCustomer, sup, diff, deals, amcGet } = H;
   const T = "books";
   const r2 = x => Math.round((Number(x) + Number.EPSILON) * 100) / 100;
   const j = (s, d) => { try { const v = JSON.parse(s || ""); return v == null ? d : v; } catch { return d; } };
@@ -353,13 +353,13 @@ module.exports = function makeBooks(H) {
   // ---------- documents ----------
   const dPK = co => "doc-" + co;
   const HEAD = ["RowKey", "type", "number", "status", "date", "dueDate", "contactId", "contactName", "contactTrn", "ref", "subtotal", "vatAmt", "total", "amount", "account",
-    "emirate", "allocs", "gl", "tax", "fromId", "toId", "sentAt", "voidReason", "createdBy", "createdAt", "updatedBy", "updatedAt", "title", "invoiceRef", "files", "internalNote", "internalBy", "internalAt", "dealId"];
+    "emirate", "allocs", "gl", "tax", "fromId", "toId", "sentAt", "voidReason", "createdBy", "createdAt", "updatedBy", "updatedAt", "title", "invoiceRef", "files", "internalNote", "internalBy", "internalAt", "dealId", "amcId", "amcRef"];
   function headOut(e) {
     return {
       id: e.rowKey || e.RowKey, type: e.type, number: e.number || "", status: e.status, date: e.date, dueDate: e.dueDate || "", contactId: e.contactId || "", contactName: e.contactName || "",
       contactTrn: e.contactTrn || "", ref: e.ref || "", subtotal: num(e.subtotal), vatAmt: num(e.vatAmt), total: num(e.total), amount: num(e.amount), account: e.account || "",
       emirate: e.emirate || "", allocs: j(e.allocs, []), gl: j(e.gl, []), tax: j(e.tax, []), fromId: e.fromId || "", toId: e.toId || "", sentAt: e.sentAt || "",
-      voidReason: e.voidReason || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, title: e.title || "", invoiceRef: e.invoiceRef || "", fileCount: docFiles(e).length, internalNote: e.internalNote || "", internalBy: e.internalBy || "", internalAt: e.internalAt || "", dealId: e.dealId || "",
+      voidReason: e.voidReason || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, title: e.title || "", invoiceRef: e.invoiceRef || "", fileCount: docFiles(e).length, internalNote: e.internalNote || "", internalBy: e.internalBy || "", internalAt: e.internalAt || "", dealId: e.dealId || "", amcId: e.amcId || "", amcRef: e.amcRef || "",
     };
   }
   async function allDocs(co) { return (await all(await table(T), dPK(co), HEAD)).map(headOut); }
@@ -690,7 +690,7 @@ module.exports = function makeBooks(H) {
     if (status === "posted") postInto(f, body, ctx.settings); else { f.gl = "[]"; f.tax = "[]"; }
     f.number = cur.number || (tp.taxDoc && status !== "posted" ? "" : await nextNumber(ctx.co, cur.type));
     if (status === "posted" && cur.status !== "posted") { body.issuedAt = new Date().toISOString(); body.issuedBy = user.email; } else { body.issuedAt = old.issuedAt; body.issuedBy = old.issuedBy; }
-    const next = { partitionKey: dPK(ctx.co), rowKey: id, ...f, files: cur.files || "[]", internalNote: cur.internalNote || "", internalBy: cur.internalBy || "", internalAt: cur.internalAt || "", dealId: cur.dealId || "", fromId: cur.fromId || "", toId: cur.toId || "", sentAt: cur.sentAt || (status === "sent" ? new Date().toISOString() : ""), voidReason: "", createdBy: cur.createdBy, createdAt: cur.createdAt,
+    const next = { partitionKey: dPK(ctx.co), rowKey: id, ...f, files: cur.files || "[]", internalNote: cur.internalNote || "", internalBy: cur.internalBy || "", internalAt: cur.internalAt || "", dealId: cur.dealId || "", amcId: cur.amcId || "", amcRef: cur.amcRef || "", fromId: cur.fromId || "", toId: cur.toId || "", sentAt: cur.sentAt || (status === "sent" ? new Date().toISOString() : ""), voidReason: "", createdBy: cur.createdBy, createdAt: cur.createdAt,
       updatedBy: user.email, updatedAt: new Date().toISOString(), ...packJson(body) };
     if (user.aud) { user.aud.name = `${tp.label} ${f.number || "draft"}`; user.aud.changes = diff(cur, next); if (status === "posted" && cur.status !== "posted") user.aud.issued = true; }
     try { await t.updateEntity(next, "Replace", { etag: b.etag || cur.etag }); }
@@ -902,6 +902,35 @@ module.exports = function makeBooks(H) {
     } catch { /* the deal may be deleted or belong to someone else: the quotation change still stands */ }
   }
 
+  // ---------- AMC Tracker link: an invoice can be tracked against an annual maintenance contract ----------
+  const canAmc = user => user.isManager || (user.sections || []).includes("amc");
+  async function linkAmc(user, id, b) {
+    const co = coOf(user);
+    needAcct(user);
+    if (!canAmc(user)) fail(403, "You don't have access to AMC proposals and contracts. Ask a manager to give you access.");
+    const t = await table(T);
+    const inv = await getOrNull(t, dPK(co), id);
+    if (!inv || inv.type !== "invoice") fail(404, "Only invoices can be tracked in the AMC Tracker.");
+    const amcId = clean(b.amcId, 60);
+    let ref = "";
+    if (amcId) {
+      const a = await (async () => { const keep = user.aud; user.aud = {}; try { return await amcGet(user, amcId); } finally { user.aud = keep; } })().catch(() => null);
+      if (!a) fail(404, "That AMC no longer exists, or you can't see it.");
+      if (a.customerId !== inv.contactId) fail(400, `That AMC is for ${a.customerName}, but this invoice is for ${inv.contactName}.`);
+      ref = a.ref;
+    }
+    await t.updateEntity({ partitionKey: dPK(co), rowKey: id, amcId, amcRef: ref }, "Merge");
+    if (user.aud) { user.aud.name = `Tax invoice ${inv.number || "draft"}`; user.aud.changes = [amcId ? `AMC ${ref}` : `unlinked from AMC ${inv.amcRef || ""}`]; }
+    return getDoc(user, id);
+  }
+  async function invoicesForAmc(user, amcId) {
+    if (user.co === "all") return [];
+    const docs = decorate(await allDocs(user.co));
+    return docs.filter(d => d.type === "invoice" && d.amcId === amcId && d.status !== "void")
+      .map(d => ({ id: d.id, number: d.number, date: d.date, dueDate: d.dueDate, subtotal: d.subtotal, total: d.total, paid: d.paid, balance: d.balance, status: d.status, view: d.view }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
   async function markSent(user, id) {
     const co = coOf(user);
     const t = await table(T);
@@ -945,7 +974,7 @@ module.exports = function makeBooks(H) {
     const s = { ...settings }; delete s.counters;
     return {
       company: { key: co, name: CO[co].name }, settings: s, accounts: accts, items, docs: list, customers, vendors, vver,
-      perms: { acct, manager: !!user.isManager, quotesOnly: !acct, pipeline: canPipeline(user) }, vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
+      perms: { acct, manager: !!user.isManager, quotesOnly: !acct, pipeline: canPipeline(user), amc: canAmc(user) }, vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
       acctTypes: ACCT_TYPES, sys: SYS, fileKinds: FILE_KINDS, emirates: EMIRATES, today: today(), me: user.email,
     };
   }
@@ -1017,6 +1046,7 @@ module.exports = function makeBooks(H) {
       if (id && sub === "sent" && method === "POST") return markSent(user, id);
       if (id && sub === "internal" && method === "PUT") return saveInternal(user, id, body);
       if (id && sub === "deal" && method === "POST") return addToPipeline(user, id, body);
+      if (id && sub === "amc" && method === "PUT") return linkAmc(user, id, body);
       if (id && sub === "convert" && method === "POST") return convert(user, id, body);
       if (id && sub === "files") {
         const fid = seg[3];
@@ -1028,5 +1058,5 @@ module.exports = function makeBooks(H) {
     }
     fail(404, "Unknown request.");
   }
-  return { route, alerts, TYPES };
+  return { route, alerts, TYPES, invoicesForAmc };
 };

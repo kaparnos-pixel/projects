@@ -264,7 +264,7 @@ function listView(type) {
     journal: [["Date", d => fd(d.date)], ["Journal", d => `<span class="t">${esc(d.number)}</span>`], ["Accounts", d => esc([...new Set(d.gl.map(g => (ACC.get(g[0]) || {}).name))].slice(0, 3).join(", "))], ["Status", d => st(d.view)], ["Amount", d => aed(d.total), "r mono"]],
     transfer: [["Date", d => fd(d.date)], ["Transfer", d => `<span class="t">${esc(d.number)}</span>`], ["From", d => esc(acctName(d.account))], ["To", d => esc(acctName((d.gl.find(g => g[1] > 0) || [])[0]))], ["Status", d => st(d.view)], ["Amount", d => aed(d.amount), "r mono"]],
   }[type];
-  cols[1] = [cols[1][0], (f => d => f(d) + clipCount(d) + (d.dealId ? ` <span class="clip" title="In the Sales Pipeline">● pipeline</span>` : ""))(cols[1][1]), cols[1][2]];
+  cols[1] = [cols[1][0], (f => d => f(d) + clipCount(d) + (d.dealId ? ` <span class="clip" title="In the Sales Pipeline">● pipeline</span>` : "") + (d.amcId ? ` <span class="clip" title="Tracked in the AMC Tracker">● AMC ${esc(d.amcRef || "")}</span>` : ""))(cols[1][1]), cols[1][2]];
   const views = VIEWS[type] || [["", "All"], ["posted", "Posted"], ["void", "Void"]];
   page(PLURAL[type], SALES.has(type) ? "Sales" : type === "journal" || type === "transfer" ? "Accountant" : "Purchases",
     `<button id="xl">Export to Excel</button><button class="primary" id="newBtn">+ New ${NAME[type].toLowerCase()}</button>`,
@@ -439,6 +439,46 @@ function wireEditorFiles(queue) {
   ["dragleave", "drop"].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove("on"); }));
   z.addEventListener("drop", e => add(e.dataTransfer.files));
 }
+// Tracks an invoice in the AMC Tracker: link it to an AMC for the same customer, or create one from the invoice
+// (optionally marked awarded, with the contract term, PM visits and expiry alerts) and link it.
+async function amcDialog(d) {
+  let boot; try { boot = await fetch("/api/amc/bootstrap", { cache: "no-store" }).then(r => r.ok ? r.json() : Promise.reject(new Error("Couldn't load the AMC Tracker."))); } catch (e) { toast(e.message, 1); return false; }
+  const mine = (boot.amcs || []).filter(a => a.customerId === d.contactId && a.status !== "lost").sort((a, b) => (b.status === "awarded") - (a.status === "awarded") || String(b.createdAt).localeCompare(String(a.createdAt)));
+  const con = new Map((boot.contracts || []).map(c => [c.amcId, c]));
+  const start = d.supplyDate || d.date;
+  const systems = (d.lines || []).map(l => [l.name, l.description].filter(Boolean).join(": ")).join("\n");
+  return dialog(`<form><h3>Track ${esc(label(d))} in the AMC Tracker</h3>
+    <div class="seg" role="tablist" id="amcMode"><button type="button" data-m="link" aria-pressed="${mine.length ? "true" : "false"}"${mine.length ? "" : " disabled"}>Link to an existing AMC (${mine.length})</button><button type="button" data-m="new" aria-pressed="${mine.length ? "false" : "true"}">Create a new AMC</button></div>
+    <div id="m_link"${mine.length ? "" : " hidden"}><label><span class="lbl">AMC for ${esc(d.contactName)}</span><select id="amcPick">${mine.map(a => { const c = con.get(a.id); return `<option value="${a.id}">${esc(a.ref)} · ${esc(a.status === "awarded" && c ? `${fd(c.start)} to ${fd(c.end)}` : a.status)} · AED ${aed(a.value)}</option>`; }).join("")}</select></label></div>
+    <div id="m_new"${mine.length ? " hidden" : ""} style="display:grid;gap:10px">
+      <label><span class="lbl">Systems covered</span><textarea id="an_sys" rows="3" maxlength="6000">${esc(systems)}</textarea></label>
+      <div class="fields"><label><span class="lbl">Annual value (AED, excl. VAT)</span><input class="num" id="an_val" value="${d.subtotal}"></label><label><span class="lbl">Term</span><select id="an_months"><option value="6">6 months</option><option value="12" selected>12 months</option><option value="24">24 months</option><option value="36">36 months</option></select></label><label><span class="lbl">Contract start</span><input type="date" id="an_start" value="${esc(start)}"></label></div>
+      <label class="chk"><input type="checkbox" id="an_award" checked> Mark as awarded now (this invoice is for an agreed contract)</label>
+      <div class="fields" id="an_aw"><label><span class="lbl">PM visits</span><select id="an_pm"><option value="0">None</option><option value="1">Monthly</option><option value="3" selected>Quarterly</option><option value="6">Every 6 months</option><option value="12">Yearly</option></select></label><label><span class="lbl">Expiry alert to</span><input id="an_mail" type="email" value="${esc(D.me)}"></label><label><span class="lbl">Customer PO / LPO</span><input id="an_lpo" maxlength="60" value="${esc(d.ref || "")}"></label></div>
+      <label class="chk" id="an_schW"><input type="checkbox" id="an_sched" checked> Schedule the PM visits across the contract</label>
+    </div>
+    <div class="err"></div><div class="foot"><button type="button" data-x>Cancel</button><button class="primary" type="submit">Track in AMC Tracker</button></div></form>`, { wide: true,
+    onOpen: (dl, done) => {
+      let mode = mine.length ? "link" : "new";
+      dl.querySelectorAll("#amcMode button").forEach(b => b.onclick = () => { mode = b.dataset.m; dl.querySelectorAll("#amcMode button").forEach(x => x.setAttribute("aria-pressed", x === b)); dl.querySelector("#m_link").hidden = mode !== "link"; dl.querySelector("#m_new").hidden = mode !== "new"; });
+      const aw = dl.querySelector("#an_award"); aw.onchange = () => { dl.querySelector("#an_aw").hidden = !aw.checked; dl.querySelector("#an_schW").hidden = !aw.checked; };
+      dl.querySelector("form").onsubmit = async e => {
+        e.preventDefault(); const btn = e.submitter; busy(btn, true); const err = dl.querySelector(".err"); err.textContent = "";
+        const call = async (method, path, body) => { const r = await fetch("/api/" + path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "The request failed."); return j; };
+        try {
+          let amcId = mode === "link" ? dl.querySelector("#amcPick").value : "";
+          if (mode === "new") {
+            const months = Number(dl.querySelector("#an_months").value), st0 = dl.querySelector("#an_start").value;
+            const a = await call("POST", "amc/amcs", { customerId: d.contactId, systems: dl.querySelector("#an_sys").value, value: dl.querySelector("#an_val").value, termMonths: months, proposedStart: st0 });
+            amcId = a.id;
+            if (aw.checked) await call("POST", `amc/amcs/${amcId}/award`, { awardDate: d.date, start: st0, months, pmMonths: Number(dl.querySelector("#an_pm").value), alertDays: 60, notifyEmail: dl.querySelector("#an_mail").value.trim(), lpo: dl.querySelector("#an_lpo").value, schedule: dl.querySelector("#an_sched").checked });
+          }
+          await api("PUT", `docs/${d.id}/amc`, { amcId });
+          toast(mode === "new" ? "AMC created and the invoice is tracked against it." : "Invoice tracked in the AMC Tracker."); done(true);
+        } catch (er) { err.textContent = er.message; busy(btn, false); }
+      };
+    } });
+}
 // Creates a Sales Pipeline deal from a quotation and attaches the quotation PDF to it.
 async function sendToPipeline(q) {
   const r = await api("POST", `docs/${q.id}/deal`, {});
@@ -468,10 +508,13 @@ async function docView(id) {
   if ((tp === "quote") && P.acct && ["draft", "sent", "accepted"].includes(d.status)) A.push(["Convert to invoice", "convert", true]);
   if (tp === "po" && ["draft", "sent", "accepted"].includes(d.status)) A.push(["Convert to bill", "convert", true]);
   if (["creditnote", "vendorcredit", "receipt", "payment"].includes(tp) && posted && d.balance > 0.004) A.push(["Apply to " + (SALES.has(tp) ? "invoices" : "bills"), "apply", true]);
+  if (tp === "invoice" && d.amcId) A.push([`Open AMC ${d.amcRef || ""}`.trim(), "amcopen"]);
+  else if (tp === "invoice" && P.amc && d.status !== "void") A.push(["Track in AMC Tracker", "amclink"]);
   if (tp === "quote" && d.dealId) A.push(["Open in Sales Pipeline", "pipe"]);
   else if (tp === "quote" && P.pipeline && d.status !== "cancelled") A.push(["Add to Sales Pipeline", "addpipe"]);
   if (canEdit) A.push(["Edit", "edit"]);
   A.push(["Upload files", "upload"]);
+  if (tp === "invoice" && d.amcId && P.amc) A.push(["Unlink from AMC", "amcunlink"]);
   if (["quote", "invoice", "creditnote", "po", "receipt"].includes(tp)) A.push(["Preview PDF", "preview"], ["Download PDF", "pdf"]);
   if (["quote", "invoice", "creditnote", "po"].includes(tp) && d.status !== "draft" || (tp === "quote" || tp === "po")) A.push(["Email", "email"]);
   if (tp === "quote" && ["draft", "sent"].includes(d.status)) A.push(["Mark accepted", "accept"], ["Mark declined", "decline"]);
@@ -550,6 +593,9 @@ async function docView(id) {
     credit: async () => { const r = await api("POST", `docs/${id}/convert`, {}); sessionStorage.setItem("bk-draft", JSON.stringify(r.draft)); go(`#/new/${r.draft.type}?draft=1`); return "nav"; },
     apply: async () => { await applyDialog(d); return "stay"; },
     edit: () => { go("#/edit/" + id); return "nav"; },
+    amcopen: () => { location.href = "/amc/#amc=" + encodeURIComponent(d.amcId); return "stay"; },
+    amclink: async () => { const r = await amcDialog(d); return r ? undefined : "stay"; },
+    amcunlink: async () => { if (!await ask("Stop tracking in the AMC Tracker?", `${label(d)} will no longer show on AMC ${d.amcRef}.`, { okText: "Unlink" })) return "stay"; await api("PUT", `docs/${id}/amc`, { amcId: "" }); },
     pipe: () => { location.href = "/pipeline/#" + encodeURIComponent(d.dealId); return "stay"; },
     addpipe: async () => { const dealId = await sendToPipeline(d); toast("Added to the Sales Pipeline with the quotation PDF attached."); return dealId; },
     upload: () => { $("attCard").scrollIntoView({ behavior: "smooth", block: "center" }); $("attIn").click(); return "stay"; },

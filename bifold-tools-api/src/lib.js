@@ -691,7 +691,8 @@ const sup = () => supMod || (supMod = require("./suppliers")({ table, getOrNull,
 // ---------- Books: accounting, VAT and quotations (src/books.js) ----------
 let booksMod;
 const books = () => booksMod || (booksMod = require("./books")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, rowCo, listCustomers, createCustomer, sup, diff: (a, b) => audit().diff(a, b),
-  deals: { create: createDeal, update: updateDeal, get: getDeal, note: addDealNote } }));
+  deals: { create: createDeal, update: updateDeal, get: getDeal, note: addDealNote },
+  amcGet: (user, id) => amc()("GET", ["amcs", id], user, {}) }));
 
 // ---------- team access (src/access.js) ----------
 let accessMod;
@@ -820,7 +821,12 @@ async function route(method, seg, user, body) {
   const [a, id, sub] = seg;
   access().guard(method, seg, body, user);
   if (a === "access") return access().route(method, seg, user, body);
-  if (a === "amc") return amc()(method, seg.slice(1), user, body);
+  if (a === "amc") {
+    const r = await amc()(method, seg.slice(1), user, body);
+    // An AMC opened in full also lists the Books invoices tracked against it.
+    if (method === "GET" && seg[1] === "amcs" && seg[2] && !seg[3] && r && user.co !== "all") r.invoices = await books().invoicesForAmc(user, seg[2]).catch(() => []);
+    return r;
+  }
   if (a === "mk") return mk().route(method, seg.slice(1), user, body);
   if (a === "pcr") return pcr().route(method, seg.slice(1), user, body);
   if (a === "suppliers") return sup().route(method, seg.slice(1), user, body);

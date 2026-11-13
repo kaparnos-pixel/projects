@@ -100,15 +100,24 @@ async function quickContact(kind) {
 }
 
 /* ---------- navigation ---------- */
+// The Books sections live in the left sidebar under Books & VAT (assets/access.js); this marks the current one,
+// fills the breadcrumb and shows counts that need attention.
+const SECTION = { dashboard: ["Dashboard"], customers: ["Customers", "Sales"], quotes: ["Quotations", "Sales"], invoices: ["Invoices", "Sales"], receipts: ["Payments received", "Sales"], creditnotes: ["Credit notes", "Sales"],
+  vendors: ["Suppliers", "Purchases"], pos: ["Purchase orders", "Purchases"], bills: ["Bills", "Purchases"], payments: ["Payments made", "Purchases"], expenses: ["Expenses", "Purchases"], vendorcredits: ["Vendor credits", "Purchases"],
+  banking: ["Banking", "Accountant"], journals: ["Manual journals", "Accountant"], accounts: ["Chart of accounts", "Accountant"], items: ["Items", "Accountant"],
+  vat: ["VAT return", "Tax and reports"], ct: ["Corporate tax", "Tax and reports"], reports: ["Reports", "Tax and reports"], settings: ["Settings", "Setup"] };
 function nav(active) {
-  const P = D.perms;
-  const L = (h, t, k) => `<a href="#/${h}" class="${active === (k || h) ? "on" : ""}">${esc(t)}</a>`;
-  if (P.quotesOnly) { $("bkNav").innerHTML = L("quotes", "Quotations"); return; }
-  $("bkNav").innerHTML = L("dashboard", "Dashboard") + `<span class="sep"></span><span class="gl">Sales</span>` + L("customers", "Customers") + L("quotes", "Quotations") + L("invoices", "Invoices") + L("receipts", "Received") + L("creditnotes", "Credit notes")
-    + `<span class="sep"></span><span class="gl">Purchases</span>` + L("vendors", "Suppliers") + L("pos", "POs") + L("bills", "Bills") + L("payments", "Paid") + L("expenses", "Expenses") + L("vendorcredits", "Vendor credits")
-    + `<span class="sep"></span><span class="gl">Accountant</span>` + L("banking", "Banking") + L("journals", "Journals") + L("accounts", "Chart of accounts") + L("items", "Items")
-    + `<span class="sep"></span>` + L("reports", "Reports") + L("vat", "VAT return", "vat") + L("report/ct", "Corporate tax", "ct") + L("settings", "Settings");
-  const on = $("bkNav").querySelector("a.on"); if (on) on.scrollIntoView({ block: "nearest", inline: "nearest" });
+  const BX = window.BX; if (!BX) return;
+  const hash = active === "ct" ? "#/report/ct" : "#/" + (active || "dashboard");
+  BX.markSub(hash);
+  const sec = SECTION[active] || [];
+  BX.crumb(sec.length ? [["Books & VAT", "#/dashboard"]].concat(sec[1] ? [[sec[1]]] : []).concat(active === "dashboard" ? [] : [[sec[0]]]) : [["Books & VAT", "#/dashboard"]]);
+  if (D && !D.perms.quotesOnly) {
+    const t = D.today;
+    const od = D.docs.filter(d => d.type === "invoice" && d.view === "overdue").length;
+    const due = D.docs.filter(d => d.type === "bill" && d.status === "posted" && d.balance > 0.004 && d.dueDate <= addDays(t, 7)).length;
+    BX.subCount("#/invoices", od, `${od} overdue`); BX.subCount("#/bills", due, `${due} due within 7 days`);
+  }
 }
 function page(title, tag, acts, body, navKey) {
   nav(navKey);

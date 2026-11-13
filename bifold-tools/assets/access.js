@@ -163,7 +163,12 @@
     { group: "Service", items: [{ href: "/amc/", label: "AMC Tracker", icon: "amc", need: ["amc", "visits"], subs: [["#overview", "Overview", []], ["#amcs", "Contracts & proposals", ["amc"]], ["#visits", "Maintenance visits", ["amc", "visits"]]] },
       { href: "/completion/", label: "Completion Reports", icon: "completion", need: ["completion"] }] },
     { group: "Marketing", items: [{ href: "/campaigns/", label: "Email Campaigns", icon: "campaigns", need: ["campaigns"], subs: [["#campaigns", "Campaigns", ["campaigns"]], ["#contacts", "Contacts & lists", ["campaigns"]], ["#media", "Image library", ["campaigns"]]] }] },
-    { group: "Finance", items: [{ href: "/books/", label: "Books & VAT", icon: "books", need: ["books", "quotes"], subs: [["#/dashboard", "Dashboard", ["books"]], ["#/quotes", "Quotations", ["books", "quotes"]], ["#/invoices", "Invoices", ["books"]], ["#/bills", "Bills", ["books"]], ["#/banking", "Banking", ["books"]], ["#/reports", "Reports", ["books"]], ["#/vat", "VAT return", ["books"]]] },
+    { group: "Finance", items: [{ href: "/books/", label: "Books & VAT", icon: "books", need: ["books", "quotes"], subs: [["#/dashboard", "Dashboard", ["books"]],
+        [null, "Sales", ["books", "quotes"]], ["#/customers", "Customers", ["books"]], ["#/quotes", "Quotations", ["books", "quotes"]], ["#/invoices", "Invoices", ["books"]], ["#/receipts", "Payments received", ["books"]], ["#/creditnotes", "Credit notes", ["books"]],
+        [null, "Purchases", ["books"]], ["#/vendors", "Suppliers", ["books"]], ["#/pos", "Purchase orders", ["books"]], ["#/bills", "Bills", ["books"]], ["#/payments", "Payments made", ["books"]], ["#/expenses", "Expenses", ["books"]], ["#/vendorcredits", "Vendor credits", ["books"]],
+        [null, "Accountant", ["books"]], ["#/banking", "Banking", ["books"]], ["#/journals", "Manual journals", ["books"]], ["#/accounts", "Chart of accounts", ["books"]], ["#/items", "Items", ["books"]],
+        [null, "Tax and reports", ["books"]], ["#/vat", "VAT return", ["books"]], ["#/report/ct", "Corporate tax", ["books"]], ["#/reports", "All reports", ["books"]],
+        [null, "Setup", ["books"]], ["#/settings", "Settings", ["books"]]] },
       { href: "/pdc/", label: "PDC & Guarantees", icon: "pdc", need: ["pdc"] }] },
     { group: "Master data", items: [{ href: "/customers/", label: "Customers", icon: "customers", need: ["customers"] }, { href: "/suppliers/", label: "Suppliers & Vendors", icon: "suppliers", need: ["suppliers", "pdc"], subs: [["#dir", "Directory", []], ["#what", "Who supplies what", []], ["#people", "All contacts", []]] }] },
     { group: "Administration", items: [{ href: "/access/", label: "Team access", icon: "access", need: ["manager"] }, { href: "/activity/", label: "Activity log", icon: "log", need: ["manager"] }] },
@@ -198,7 +203,21 @@
     document.querySelectorAll("[placeholder],[aria-label],[title]").forEach(el => ["placeholder", "aria-label", "title"].forEach(a => { const v = el.getAttribute(a); if (v && /Bifold/.test(v)) el.setAttribute(a, fix(v)); }));
   }
 
+  // Sub-sections of the open tool. An entry with no link is a group heading; groups fold open and closed, the open/closed
+  // choice is remembered, and the group holding the current page always opens.
+  const folded = (() => { try { return new Set(JSON.parse(store.get("bx-folded") || "[]")); } catch { return new Set(); } })();
+  let subsHTML = () => "";
   function build(m) {
+    subsHTML = it => {
+      const list = it.subs.filter(s => allowed(m, s[2]));
+      let g = "", html = "";
+      list.forEach((s, i) => {
+        if (!s[0]) { const has = list.slice(i + 1).findIndex(x => !x[0]); const items = list.slice(i + 1, has < 0 ? undefined : i + 1 + has); if (!items.length) return;
+          g = it.href + ":" + s[1]; html += `<button type="button" class="sgh${folded.has(g) ? " shut" : ""}" data-g="${esc(g)}" aria-expanded="${!folded.has(g)}"><span>${esc(s[1])}</span><i aria-hidden="true"></i></button>`; return; }
+        html += `<a class="sub" href="${it.href}${s[0]}" data-hash="${s[0]}"${g ? ` data-g="${esc(g)}"` : ""}${g && folded.has(g) ? " hidden" : ""}>${esc(s[1])}<em class="ct" hidden></em></a>`;
+      });
+      return html ? `<div class="bx-subs">${html}</div>` : "";
+    };
     document.body.classList.add("bx");
     const flat = [];
     const navHTML = NAV.map(g => {
@@ -207,7 +226,7 @@
       return `<div class="bx-grp">${g.group ? `<span>${esc(g.group)}</span>` : ""}${items.map(it => {
         flat.push(it);
         const on = it.href === "/" ? path === "/" : path.startsWith(it.href);
-        const subs = on && it.subs ? it.subs.filter(s => allowed(m, s[2])).map(s => `<a class="sub" href="${it.href}${s[0]}" data-hash="${s[0]}">${esc(s[1])}</a>`).join("") : "";
+        const subs = on && it.subs ? subsHTML(it) : "";
         return `<a href="${it.href}" class="${on ? "on" : ""}" data-key="${it.icon}">${ICON[it.icon]}<span>${esc(it.label)}</span><em class="ct" hidden></em></a>${subs}`;
       }).join("")}</div>`;
     }).join("");
@@ -231,7 +250,24 @@
     if (coSel) coSel.onchange = () => { store.set("bx-co", coSel.value); location.reload(); };
 
     // sub-links for the AMC tracker follow the hash
-    const syncSub = () => side.querySelectorAll("a.sub").forEach(a => { const h = (location.hash || (path.startsWith("/campaigns/") ? "#campaigns" : path.startsWith("/suppliers/") ? "#dir" : path.startsWith("/books/") ? "#/dashboard" : "#overview")).replace(/^#(edit|report)\/.*$/, "#campaigns").replace(/^(#\/[a-z]+).*$/, "$1"); a.classList.toggle("on", h === a.dataset.hash); });
+    // Fold / unfold a group of sub-sections.
+    side.addEventListener("click", e => { const h = e.target.closest(".sgh"); if (!h) return; e.preventDefault(); const g = h.dataset.g, shut = !h.classList.contains("shut");
+      h.classList.toggle("shut", shut); h.setAttribute("aria-expanded", !shut); side.querySelectorAll(`a.sub[data-g="${CSS.escape(g)}"]`).forEach(a => { a.hidden = shut; });
+      if (shut) folded.add(g); else folded.delete(g); store.set("bx-folded", JSON.stringify([...folded])); });
+    // Pages with their own routing (Books) mark the current sub-section themselves: BX.markSub("#/invoices").
+    window.BX = Object.assign(window.BX || {}, {
+      markSub(hash) { side.querySelectorAll("a.sub").forEach(a => { const on = a.dataset.hash === hash; a.classList.toggle("on", on); if (on && a.hidden && a.dataset.g) { a.hidden = false; const h = side.querySelector(`.sgh[data-g="${CSS.escape(a.dataset.g)}"]`); if (h) { h.classList.remove("shut"); h.setAttribute("aria-expanded", "true"); side.querySelectorAll(`a.sub[data-g="${CSS.escape(a.dataset.g)}"]`).forEach(x => { x.hidden = false; }); } } });
+        const cur = side.querySelector("a.sub.on"); if (cur) cur.scrollIntoView({ block: "nearest" }); },
+      subCount(hash, n, title) { const a = side.querySelector(`a.sub[data-hash="${CSS.escape(hash)}"] .ct`); if (!a) return; a.hidden = !n; a.textContent = n > 99 ? "99+" : n || ""; if (title) a.title = title; },
+      // Breadcrumb under the tool name: crumb([["Books & VAT", "#/dashboard"], ["Sales"], ["Invoices"]]). The tool name is the first part.
+      crumb(parts) { const box = top.querySelector(".bx-crumb"); if (!box) return;
+        let root = box.querySelector("[data-root]"); if (!root) { root = box.querySelector("b"); if (!root) return; root.dataset.root = "1"; root.dataset.label = root.textContent; }
+        while (root.nextSibling) root.nextSibling.remove();
+        const rest = (parts || []).slice(1);
+        const el = document.createElement(rest.length ? "a" : "b"); el.dataset.root = "1"; el.dataset.label = root.dataset.label; el.textContent = root.dataset.label; if (rest.length) el.href = (parts[0] && parts[0][1]) || "#"; root.replaceWith(el);
+        rest.forEach(([t], i) => { const sep = document.createElement("i"); sep.textContent = "/"; const x = document.createElement(i === rest.length - 1 ? "b" : "span"); x.textContent = t; box.append(sep, x); }); },
+    });
+    const syncSub = () => path.startsWith("/books/") ? null : side.querySelectorAll("a.sub").forEach(a => { const h = (location.hash || (path.startsWith("/campaigns/") ? "#campaigns" : path.startsWith("/suppliers/") ? "#dir" : path.startsWith("/books/") ? "#/dashboard" : "#overview")).replace(/^#(edit|report)\/.*$/, "#campaigns").replace(/^(#\/[a-z]+).*$/, "$1"); a.classList.toggle("on", h === a.dataset.hash); });
     syncSub(); addEventListener("hashchange", syncSub);
     top.querySelector(".bx-burger").onclick = () => document.body.classList.toggle("bx-open");
     side.addEventListener("click", e => { if (e.target.closest("a")) document.body.classList.remove("bx-open"); });

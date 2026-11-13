@@ -154,3 +154,17 @@ html[data-co="techhub"] .qa a.primary{color:#003C50}
 html[data-co="all"] .bx-co select{border-color:#B76E00}
 @media (max-width:760px){.bx-co span{display:none}}
 .bx-co + .bx-search{margin-left:0}
+
+/* sub-sections with group headings (Books) */
+.bx-subs{margin:2px 0 6px;padding:2px 0 4px 0;position:relative}
+.bx-subs::before{content:"";position:absolute;left:21px;top:4px;bottom:6px;width:1px;background:var(--bx-navy-line)}
+.bx-nav .sgh{all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;width:100%;cursor:pointer;padding:9px 12px 4px 34px;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--bx-navy-muted);opacity:.85}
+.bx-nav .sgh:hover{color:#fff;opacity:1}
+.bx-nav .sgh:focus-visible{outline:2px solid var(--bx-sky);border-radius:6px}
+.bx-nav .sgh i{width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s}
+.bx-nav .sgh.shut i{transform:rotate(-45deg)}
+.bx-subs a.sub{padding:6px 12px 6px 34px;margin:1px 0;border-radius:7px}
+.bx-subs a.sub:hover{background:rgba(255,255,255,.05);color:#fff}
+.bx-subs a.sub.on{background:rgba(255,255,255,.08);color:#fff;font-weight:600}
+.bx-subs a.sub.on::before{left:19px}
+.bx-subs a.sub .ct{font-style:normal;font-size:10px;padding:0 6px;line-height:16px}

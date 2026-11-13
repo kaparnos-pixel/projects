@@ -1,11 +1,6 @@
 /* Books: accounting, VAT and quotations. Builds on bifold.css + shell.css (brand tokens switch for Tech Hub). */
 .bk{max-width:1280px}
-.bk-nav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;margin:-6px 0 18px;padding:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);scrollbar-width:thin;position:sticky;top:calc(var(--bx-top,60px) + 8px);z-index:20}
-.bk-nav a{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:8px;color:var(--muted);text-decoration:none;font-weight:600;font-size:13px;white-space:nowrap}
-.bk-nav a:hover{color:var(--fg);background:var(--sunk)}
-.bk-nav a.on{background:var(--accent);color:var(--on-accent)}
-.bk-nav .sep{width:1px;background:var(--line);margin:6px 4px;flex:0 0 1px}
-.bk-nav .gl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);align-self:center;padding:0 4px 0 6px;opacity:.75}
+.bk header.top{padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:18px}
 header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:16px}
 header.top .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}
@@ -164,8 +159,7 @@ dialog .sec{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:u
 .check i{font-style:normal;font-weight:800;width:18px;flex:0 0 18px}
 .check .ok i{color:var(--good)} .check .no i{color:var(--bad)} .check .wa i{color:var(--warn)}
 .empty strong{display:block;color:var(--fg);font-size:15px;margin-bottom:4px}
-@media print{.bx-side,.bx-top,.bk-nav,header.top .acts,.periodbar,.tools{display:none!important}body.bx{padding:0}.rep{border:0;box-shadow:none}}
-.side table.list{min-width:0}
+@media print{.bx-side,.bx-top,.side table.list{min-width:0}
 .side .tblwrap{overflow-x:visible}
 .clip{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:700;color:var(--muted);margin-left:4px}
 .drop{border:1.5px dashed var(--line);border-radius:8px;padding:10px 12px;margin:10px 14px;font-size:12px;color:var(--muted);text-align:center}

@@ -569,8 +569,8 @@ FIELDS.forEach(f=>{const el=$(f);el.addEventListener(el.tagName==="SELECT"?"chan
 $("poValue").addEventListener("blur",e=>{e.target.value=fmtIn(S.poValue)});
 
 // ---------- Pull from Books: a quotation or invoice fills the PnL; supplier bills add actual costs ----------
-const canBooks=()=>ME&&(ME.isManager||(ME.sections||[]).some(k=>k==="books"||k==="quotes"));
-const canBills=()=>ME&&(ME.isManager||(ME.sections||[]).includes("books"));
+const canBooks=()=>ME&&(ME.isManager||(ME.sections||[]).some(k=>["books","quotes","bk_sales","bk_bank","bk_reports"].includes(k)));
+const canBills=()=>ME&&(ME.isManager||(ME.sections||[]).some(k=>["books","bk_purch","bk_bank","bk_reports"].includes(k)));
 let PULL={type:"quote",docs:null,bills:null,pick:null,billPick:new Set()};
 const fdate=d=>d?new Date(d+"T00:00:00Z").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"}):"";
 function renderSource(){const n=$("srcNote");const s=S.source;if(!s){n.hidden=true;return}n.hidden=false;

@@ -739,7 +739,7 @@ async function alerts(user) {
           text: vs.length > 1 ? `Oldest planned ${fd(v.scheduledDate)} · ${v.ref}` : `Planned ${fd(v.scheduledDate)} · ${v.engineers || "no engineer assigned"}` }); });
     }
   }).catch(() => {}));
-  if (has("books")) jobs.push(books().alerts(user).then(l => out.push(...l)).catch(() => {}));
+  if (["books", "bk_sales", "bk_purch", "bk_reports"].some(has)) jobs.push(books().alerts(user).then(l => out.push(...l)).catch(() => {}));
   if (has("hr")) jobs.push(hr().alerts(user).then(l => out.push(...l)).catch(() => {}));
   await Promise.all(jobs);
   const rank = { high: 0, medium: 1, low: 2 };

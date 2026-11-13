@@ -298,7 +298,7 @@ module.exports = function makeHr(H) {
     const [s, emps, leave, runs, org] = await Promise.all([settings(co), listEmployees(co), listLeave(co), listRuns(co), books().orgProfile(co).catch(() => ({ legalName: CO[co].name }))]);
     const enriched = emps.map(e => ({ ...e, service: service(e, leave, t0), gratuity: gratuity(e, leave, t0), leave: leaveBalance(e, leave, t0) }));
     return { company: { key: co, name: CO[co].name }, org, settings: s, employees: enriched, leave, runs, leaveTypes: LEAVE_TYPES, payMethods: PAY_METHODS, docs: DOCS, today: t0, me: user.email, isManager: !!user.isManager,
-      books: user.isManager || (user.sections || []).includes("books") };
+      books: user.isManager || ["books", "bk_bank"].some(k => (user.sections || []).includes(k)) };
   }
   async function alerts(user) {
     if (user.co === "all") return [];

@@ -16,12 +16,17 @@ const SECTIONS = [
   { key: "amc", name: "AMC proposals & contracts", hint: "Create AMC proposals, award contracts, see contract values" },
   { key: "visits", name: "Maintenance visits & reports", hint: "Schedule and complete visits, upload photos, send visit reports" },
   { key: "completion", name: "Project completion reports", hint: "Completion reports with BoQ, serial numbers, site pictures, warranty and customer sign-off" },
-  { key: "books", name: "Books (accounting & VAT)", hint: "Invoices, bills, payments, banking, journals, reports and the VAT return" },
-  { key: "quotes", name: "Quotations", hint: "Create and send quotations only (no access to the accounts)" },
+  { key: "books", name: "Books: full access", hint: "Everything in Books & VAT, including settings, chart of accounts, voiding and the tax-return journals (accountant)" },
+  { key: "bk_sales", name: "Books: Sales", hint: "Customers, quotations, tax invoices, payments received and credit notes" },
+  { key: "bk_purch", name: "Books: Purchases", hint: "Suppliers, purchase orders, bills, payments made, expenses and vendor credits" },
+  { key: "bk_bank", name: "Books: Banking & journals", hint: "Bank and cash accounts, transfers and manual journals; can see every transaction" },
+  { key: "bk_reports", name: "Books: Reports & VAT (view only)", hint: "Financial reports, VAT return and corporate tax, and the documents behind them; no changes" },
+  { key: "quotes", name: "Books: Quotations only", hint: "Create and send quotations only (no access to the accounts)" },
   { key: "hr", name: "HR & Payroll", hint: "Employees, salaries, leave, payroll runs, WPS file, payslips and gratuity (sensitive)" },
   { key: "campaigns", name: "Email Campaigns", hint: "Design, schedule and send marketing emails; import and manage contacts" },
 ];
 const KEYS = SECTIONS.map(s => s.key);
+const BOOKS_KEYS = ["books", "bk_sales", "bk_purch", "bk_bank", "bk_reports", "quotes"];
 const CACHE_MS = 30000;
 
 module.exports = function makeAccess(H) {
@@ -68,9 +73,9 @@ module.exports = function makeAccess(H) {
     if (a === "cheques") return "pdc";
     if (a === "mk") return "campaigns";
     if (a === "pcr") return "completion";
-    if (a === "suppliers") return method === "GET" ? ["suppliers", "pdc", "books"] : "suppliers";
+    if (a === "suppliers") return method === "GET" ? ["suppliers", "pdc", "books", "bk_purch", "bk_bank", "bk_reports"] : "suppliers";
     if (a === "hr") return "hr";
-    if (a === "books") return ["books", "quotes"]; // books.js narrows quotation-only users to quotations
+    if (a === "books") return BOOKS_KEYS; // books.js narrows each person to their areas
     if (a === "amc") {
       if (b === "bootstrap" || b === "files") return ["amc", "visits"];
       if (b === "amcs") return "amc";
@@ -91,7 +96,7 @@ module.exports = function makeAccess(H) {
     if (n === "manager") fail(403, "Only managers can do this.");
     const has = k => user.sections.includes(k);
     if (n === "any") { if (!user.sections.length) fail(403, `You don't have access to ${user.homeCo === "techhub" ? "Tech Hub Tools" : "Bifold Tools"} yet. Ask ${boss(user)} to give you access.`); return; }
-    if (n === "customersOrTool") { if (!["customers", "pnl", "pipeline", "pdc", "amc", "completion", "books", "quotes"].some(has)) fail(403, `You don't have access to edit customers. Ask ${boss(user)} to give you access.`); return; }
+    if (n === "customersOrTool") { if (!["customers", "pnl", "pipeline", "pdc", "amc", "completion", "books", "quotes", "bk_sales"].some(has)) fail(403, `You don't have access to edit customers. Ask ${boss(user)} to give you access.`); return; }
     const list = Array.isArray(n) ? n : [n];
     if (!list.some(has)) fail(403, `You don't have access to ${list.map(label).join(" or ")}. Ask ${boss(user)} to give you access.`);
   }

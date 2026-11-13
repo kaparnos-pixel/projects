@@ -18,6 +18,11 @@ const PLURAL = { quote: "Quotations", invoice: "Invoices", receipt: "Payments re
 const NAME = { quote: "Quotation", invoice: "Invoice", receipt: "Payment received", creditnote: "Credit note", po: "Purchase order", bill: "Bill", payment: "Payment made", vendorcredit: "Vendor credit", expense: "Expense", journal: "Manual journal", transfer: "Transfer" };
 const SALES = new Set(["quote", "invoice", "receipt", "creditnote"]);
 const LINE_TYPES = new Set(["quote", "invoice", "creditnote", "po", "bill", "vendorcredit", "expense"]);
+// Team access areas (set by a manager in Team access): full, sales, purch, bank, reports, quotes.
+const AREA = { quote: "sales", invoice: "sales", receipt: "sales", creditnote: "sales", po: "purch", bill: "purch", payment: "purch", vendorcredit: "purch", expense: "purch", journal: "bank", transfer: "bank" };
+const canW = t => { const P = D.perms; return t === "quote" ? P.quotes : !!P[AREA[t]]; };
+const canR = t => D.perms.reports || D.perms.bank || canW(t);
+const seesLedger = () => D.perms.reports || D.perms.bank;
 const METHODS = ["Bank transfer", "Cheque", "PDC", "Cash", "Card", "Online payment"];
 
 let D = null, ACC = new Map(), CUS = new Map(), VEN = new Map(), ITEMS = new Map(), DOCS = new Map(), ME = null;
@@ -112,7 +117,7 @@ function nav(active) {
   BX.markSub(hash);
   const sec = SECTION[active] || [];
   BX.crumb(sec.length ? [["Books & VAT", "#/dashboard"]].concat(sec[1] ? [[sec[1]]] : []).concat(active === "dashboard" ? [] : [[sec[0]]]) : [["Books & VAT", "#/dashboard"]]);
-  if (D && !D.perms.quotesOnly) {
+  if (D && (D.perms.sales || D.perms.purch || seesLedger())) {
     const t = D.today;
     const od = D.docs.filter(d => d.type === "invoice" && d.view === "overdue").length;
     const due = D.docs.filter(d => d.type === "bill" && d.status === "posted" && d.balance > 0.004 && d.dueDate <= addDays(t, 7)).length;
@@ -131,24 +136,26 @@ async function route() {
   const [a, b, c] = h.split("/");
   const P = D.perms;
   try {
-    if (P.quotesOnly && !["quotes", "doc", "new", "edit"].includes(a)) return go("#/quotes");
-    if (!a || a === "dashboard") return dashboard();
-    if (LISTS[a]) return listView(LISTS[a]);
-    if (a === "customers") return contactsView("customer");
-    if (a === "vendors") return contactsView("vendor");
-    if (a === "contact") return contactView(b, c);
+    // Each person lands on the first area they can use and is sent back there from anything else.
+    const home = seesLedger() ? "#/dashboard" : P.sales ? "#/invoices" : P.purch ? "#/bills" : "#/quotes";
+    const no = () => { if (location.hash !== home) toast("You don't have access to that part of Books. Ask a manager to give you access.", true); return go(home); };
+    if (!a || a === "dashboard") return seesLedger() ? dashboard() : go(home);
+    if (LISTS[a]) return canR(LISTS[a]) ? listView(LISTS[a]) : no();
+    if (a === "customers") return canR("invoice") ? contactsView("customer") : no();
+    if (a === "vendors") return canR("bill") ? contactsView("vendor") : no();
+    if (a === "contact") return canR(b === "vendor" ? "bill" : "invoice") ? contactView(b, c) : no();
     if (a === "doc") return docView(b);
-    if (a === "new") return editor(b, null);
+    if (a === "new") return canW(b) ? editor(b, null) : no();
     if (a === "edit") return editor(null, b);
-    if (a === "banking") return banking();
-    if (a === "account") return accountView(b);
-    if (a === "accounts") return coa();
-    if (a === "items") return itemsView();
-    if (a === "reports") return reportsHome();
-    if (a === "report") return BKREP.render(b, params(), page);
-    if (a === "vat") return BKREP.render("vat", params(), page);
-    if (a === "settings") return settingsView();
-    go("#/dashboard");
+    if (a === "banking") return seesLedger() ? banking() : no();
+    if (a === "account") return seesLedger() ? accountView(b) : no();
+    if (a === "accounts") return seesLedger() ? coa() : no();
+    if (a === "items") return P.items || seesLedger() ? itemsView() : no();
+    if (a === "reports") return P.reports ? reportsHome() : no();
+    if (a === "report") return P.reports ? BKREP.render(b, params(), page) : no();
+    if (a === "vat") return P.reports ? BKREP.render("vat", params(), page) : no();
+    if (a === "settings") return P.full ? settingsView() : no();
+    go(home);
   } catch (e) { console.error(e); $("app").innerHTML = `<div class="empty"><strong>Something went wrong</strong>${esc(e.message)}</div>`; }
 }
 addEventListener("hashchange", route);
@@ -213,7 +220,7 @@ function dashboard() {
   else if (!s.vatRegistered && taxable > 187500) warn.push(`<div class="note warn"><b>Voluntary VAT registration is open</b>Taxable supplies in the last 12 months are AED ${aed(taxable, 0)} (voluntary threshold AED 187,500; mandatory AED 375,000).</div>`);
   if (s.vatRegistered && !s.trn) warn.push(`<div class="note bad"><b>Add your TRN</b>Tax invoices must show your Tax Registration Number. <a href="#/settings">Open Settings</a></div>`);
   if (aspDays > 0 && aspDays < 240) warn.push(`<div class="note"><b>E-invoicing: ${aspDays} days to appoint an Accredited Service Provider</b>Businesses under AED 50M revenue must appoint an ASP by 31 Mar 2027 and issue e-invoices from 1 Jul 2027 (${eDays} days). Keep customer TRNs and addresses complete; the Settings page has a readiness check.</div>`);
-  page("Dashboard", `${D.company.name} · Books`, `<button class="primary" data-new="invoice">+ Invoice</button><button data-new="quote">+ Quotation</button><button data-new="receipt">Receive payment</button><button data-new="bill">+ Bill</button><button data-new="expense">+ Expense</button>`,
+  page("Dashboard", `${D.company.name} · Books`, [["invoice", "+ Invoice"], ["quote", "+ Quotation"], ["receipt", "Receive payment"], ["bill", "+ Bill"], ["expense", "+ Expense"], ["journal", "+ Journal"]].filter(x => canW(x[0]) && !(x[0] === "journal" && D.perms.full)).map((x, i) => `<button${i === 0 ? ' class="primary"' : ""} data-new="${x[0]}">${x[1]}</button>`).join(""),
     `${warn.length ? `<div style="display:grid;gap:8px;margin-bottom:16px">${warn.join("")}</div>` : ""}
     <section class="kpis">
       ${kpi("Receivables", inv.reduce((a, d) => a + d.balance, 0), `${inv.length} open · <b class="${od.length ? "neg" : ""}">${od.length} overdue (AED ${aedS(od.reduce((a, d) => a + d.balance, 0))})</b>`, "#/invoices?view=unpaid", "var(--accent)")}
@@ -276,7 +283,7 @@ function listView(type) {
   cols[1] = [cols[1][0], (f => d => f(d) + clipCount(d) + (d.dealId ? ` <span class="clip" title="In the Sales Pipeline">● pipeline</span>` : "") + (d.amcId ? ` <span class="clip" title="Tracked in the AMC Tracker">● AMC ${esc(d.amcRef || "")}</span>` : ""))(cols[1][1]), cols[1][2]];
   const views = VIEWS[type] || [["", "All"], ["posted", "Posted"], ["void", "Void"]];
   page(PLURAL[type], SALES.has(type) ? "Sales" : type === "journal" || type === "transfer" ? "Accountant" : "Purchases",
-    `<button id="xl">Export to Excel</button><button class="primary" id="newBtn">+ New ${NAME[type].toLowerCase()}</button>`,
+    `<button id="xl">Export to Excel</button>${canW(type) ? `<button class="primary" id="newBtn">+ New ${NAME[type].toLowerCase()}</button>` : `<span class="st draft">View only</span>`}`,
     `<div class="tools"><div class="seg" id="vseg">${views.map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${k === view}">${l}</button>`).join("")}</div>
       <input type="search" id="q" placeholder="Search number, name, reference" value="${esc(p.q || "")}"><input type="date" id="from" value="${esc(p.from || "")}" aria-label="From"><input type="date" id="to" value="${esc(p.to || "")}" aria-label="To"><span class="cnt" id="cnt"></span></div>
     <div class="panel listpanel"><div class="tblwrap"><table class="list"><thead><tr>${cols.map(c => `<th class="${c[2] || ""}">${c[0]}</th>`).join("")}</tr></thead><tbody id="rows"></tbody><tfoot id="foot"></tfoot></table><div class="empty" id="empty" hidden></div></div></div>`, ROUTE_OF[type]);
@@ -295,7 +302,7 @@ function listView(type) {
   };
   ["q", "from", "to"].forEach(id => $(id).oninput = draw);
   $("vseg").querySelectorAll("button").forEach(b => b.onclick = () => { const pp = new URLSearchParams(params()); if (b.dataset.v) pp.set("view", b.dataset.v); else pp.delete("view"); go(`#/${ROUTE_OF[type]}${pp.toString() ? "?" + pp : ""}`); });
-  $("newBtn").onclick = () => go("#/new/" + type);
+  if ($("newBtn")) $("newBtn").onclick = () => go("#/new/" + type);
   draw();
 }
 
@@ -318,7 +325,7 @@ function contactsView(kind) {
   const list = kind === "customer" ? D.customers : D.vendors;
   const bal = contactBalances(kind);
   page(kind === "customer" ? "Customers" : "Suppliers", kind === "customer" ? "Sales" : "Purchases",
-    `<a class="btn" href="${kind === "customer" ? "/customers/" : "/suppliers/"}">Manage the full list</a><button class="primary" id="add">+ New ${kind === "customer" ? "customer" : "supplier"}</button>`,
+    `<a class="btn" href="${kind === "customer" ? "/customers/" : "/suppliers/"}">Manage the full list</a>${canW(kind === "customer" ? "invoice" : "bill") ? `<button class="primary" id="add">+ New ${kind === "customer" ? "customer" : "supplier"}</button>` : ""}`,
     `<div class="tools"><input type="search" id="q" placeholder="Search name or TRN"><label class="chk"><input type="checkbox" id="only"> Only with a balance</label><span class="cnt" id="cnt"></span></div>
     <div class="panel listpanel"><div class="tblwrap"><table class="list"><thead><tr><th>Name</th><th>TRN</th><th>Emirate</th><th class="r">${kind === "customer" ? "Receivable" : "Payable"}</th><th class="r">Overdue</th><th class="r">Unused credits</th><th class="r">${kind === "customer" ? "Net sales" : "Net purchases"}</th></tr></thead><tbody id="rows"></tbody><tfoot id="foot"></tfoot></table></div></div>`, kind === "customer" ? "customers" : "vendors");
   const draw = () => {
@@ -332,7 +339,7 @@ function contactsView(kind) {
     $("rows").querySelectorAll("tr").forEach(tr => tr.onclick = () => go(`#/contact/${kind}/${tr.dataset.id}`));
   };
   $("q").oninput = draw; $("only").onchange = draw;
-  $("add").onclick = async () => { const c = await quickContact(kind); if (c) go(`#/contact/${kind}/${c.id}`); };
+  if ($("add")) $("add").onclick = async () => { const c = await quickContact(kind); if (c) go(`#/contact/${kind}/${c.id}`); };
   draw();
 }
 // Statement lines for a customer or supplier: invoices/bills raise the balance; receipts, payments and credits lower it.
@@ -408,14 +415,16 @@ async function uploadFiles(id, files, kind) {
 const fileUrl = (id, f, dl) => `/api/books/docs/${id}/files/${f.id}${dl ? "/download" : ""}`;
 function attachCard(d) {
   const files = d.files || [];
-  const kinds = D.fileKinds || {};
-  return `<section class="card" id="attCard"><header><h2>Attachments<span>${files.length}</span></h2><label class="btn" style="padding:4px 10px;font-size:12px;cursor:pointer">+ Upload<input type="file" id="attIn" multiple hidden></label></header>
-    <div class="drop" id="attDrop">Drop files here (PDF, images, Excel, Word; up to 10 MB each)</div>
+  const kinds = D.fileKinds || {}, ro = !canW(d.type);
+  return `<section class="card${ro ? " ro" : ""}" id="attCard"><header><h2>Attachments<span>${files.length}</span></h2>${ro ? "" : `<label class="btn" style="padding:4px 10px;font-size:12px;cursor:pointer">+ Upload<input type="file" id="attIn" multiple hidden></label>`}</header>
+    ${ro ? (files.length ? "" : `<div class="bd muted" style="font-size:13px">No files.</div>`) : `<div class="drop" id="attDrop">Drop files here (PDF, images, Excel, Word; up to 10 MB each)</div>`}
     ${files.map(f => `<div class="att" data-f="${f.id}"><button type="button" class="an" data-open title="Open">${esc(f.name)}</button><select data-kind aria-label="File type">${Object.entries(kinds).map(([k, l]) => `<option value="${k}"${k === f.kind ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
       <span class="am">${kb(f.size)} · ${esc(String(f.by).split("@")[0])} · ${fd(f.at)}</span><span class="aa"><a class="btn" href="${fileUrl(d.id, f, 1)}" title="Download">Download</a><button type="button" class="x" data-rm title="Remove">×</button></span></div>`).join("") || `<div class="bd muted" style="font-size:12px">No files yet. Attach the customer's PO, supplier's tax invoice, receipts, delivery notes or photos.</div>`}</section>`;
 }
 function wireAttach(d, reload) {
   const kind = DEF_KIND[d.type] || "other";
+  if (!canW(d.type)) { $("attCard").querySelectorAll(".att").forEach(row => { const f = (d.files || []).find(x => x.id === row.dataset.f); row.querySelector("[data-kind]").disabled = true; row.querySelector("[data-rm]").remove();
+    row.querySelector("[data-open]").onclick = () => { if (/pdf$/.test(f.type)) window.BXPdf.preview(() => fetch(fileUrl(d.id, f)).then(r => { if (!r.ok) throw new Error("Couldn't open the file."); return r.blob(); }), f.name); else if (/^image\//.test(f.type)) window.open(fileUrl(d.id, f), "_blank", "noopener"); else location.href = fileUrl(d.id, f, 1); }; }); return; }
   const go2 = async files => { if (!files.length) return; toast(`Uploading ${files.length} file${files.length === 1 ? "" : "s"}…`); if (await uploadFiles(d.id, [...files], kind)) reload(); };
   $("attIn").onchange = e => go2(e.target.files);
   const z = $("attDrop");
@@ -508,13 +517,13 @@ async function docView(id) {
   nav(ROUTE_OF[(DOCS.get(id) || {}).type]);
   $("app").innerHTML = `<div class="empty">Opening…</div>`;
   let d; try { d = await api("GET", "docs/" + id); } catch (e) { $("app").innerHTML = `<div class="empty"><strong>Can't open this document</strong>${esc(e.message)}</div>`; return; }
-  const P = D.perms, tp = d.type, posted = d.status === "posted";
+  const P = D.perms, tp = d.type, posted = d.status === "posted", W = canW(tp);
   const A = []; // [label, action, primary?, danger?]
   const canEdit = (tp === "quote" || tp === "po") ? d.status !== "cancelled" : d.status === "draft" || (posted && ["bill", "receipt", "payment", "expense", "journal", "transfer"].includes(tp));
   if (d.status === "draft" && ["invoice", "creditnote", "bill"].includes(tp)) A.push([tp === "bill" ? "Post bill" : "Issue " + docTitle(d).toLowerCase(), "issue", true]);
   if (tp === "invoice" && posted && d.balance > 0.004) A.push(["Record payment", "pay", true]);
   if (tp === "bill" && posted && d.balance > 0.004) A.push(["Pay bill", "pay", true]);
-  if ((tp === "quote") && P.acct && ["draft", "sent", "accepted"].includes(d.status)) A.push(["Convert to invoice", "convert", true]);
+  if ((tp === "quote") && canW("invoice") && ["draft", "sent", "accepted"].includes(d.status)) A.push(["Convert to invoice", "convert", true]);
   if (tp === "po" && ["draft", "sent", "accepted"].includes(d.status)) A.push(["Convert to bill", "convert", true]);
   if (["creditnote", "vendorcredit", "receipt", "payment"].includes(tp) && posted && d.balance > 0.004) A.push(["Apply to " + (SALES.has(tp) ? "invoices" : "bills"), "apply", true]);
   if (tp === "invoice" && d.amcId) A.push([`Open AMC ${d.amcRef || ""}`.trim(), "amcopen"]);
@@ -531,9 +540,13 @@ async function docView(id) {
   if (tp === "invoice" && posted) A.push(["Create credit note", "credit"]);
   if (tp === "bill" && posted) A.push(["Record vendor credit", "credit"]);
   if (LINE_TYPES.has(tp)) A.push(["Duplicate", "dup"]);
-  if (posted && (P.acct)) A.push(["Void", "void", false, true]);
+  if (posted && P.full) A.push(["Void", "void", false, true]);
   if ((tp === "quote" || tp === "po") && ["draft", "sent", "accepted", "declined"].includes(d.status)) A.push(["Cancel", "cancel", false, true]);
   if (d.status === "draft" || ((tp === "quote" || tp === "po") && d.status !== "converted")) A.push(["Delete", "del", false, true]);
+  // What each action needs: change rights on this document, or on the document it creates.
+  const NEEDS = { pay: tp === "invoice" ? "receipt" : "payment", convert: tp === "quote" ? "invoice" : "bill", credit: tp === "invoice" ? "creditnote" : "vendorcredit" };
+  const READ_OK = new Set(["preview", "pdf", "amcopen", "pipe"]);
+  for (let i = A.length - 1; i >= 0; i--) { const k = A[i][1]; const ok = READ_OK.has(k) || (NEEDS[k] ? W && canW(NEEDS[k]) : W); if (!ok) A.splice(i, 1); }
   const lines = d.lines || [];
   const B = BK.brand();
   const showVat = vatOn() && !["journal", "transfer"].includes(tp);
@@ -582,12 +595,12 @@ async function docView(id) {
     `<div class="dv">${showPaper}<aside class="side">
       <section class="card"><header><h2>${st(d.view)}</h2><span class="muted" style="font-size:12px">${d.sentAt ? "Sent " + fd(d.sentAt) : ""}</span></header><div class="bd acts2">${A.map(([l, k, p, x]) => `<button type="button" data-a="${k}" class="${p ? "primary" : x ? "danger" : ""}">${esc(l)}</button>`).join("")}</div></section>
       ${attachCard(d)}
-      <section class="card"><header><h2>Internal notes<span>team only, never printed</span></h2></header><div class="bd" style="display:grid;gap:8px"><textarea id="inote" rows="3" maxlength="3000" placeholder="e.g. Customer asked for delivery on Sunday; PO copy received by email">${esc(d.internalNote || "")}</textarea>
+      ${W ? "" : `<div class="note" style="margin-bottom:14px"><b>View only</b>You can open, preview and download this document but not change it.</div>`}<section class="card"${W ? "" : " hidden"}><header><h2>Internal notes<span>team only, never printed</span></h2></header><div class="bd" style="display:grid;gap:8px"><textarea id="inote" rows="3" maxlength="3000" placeholder="e.g. Customer asked for delivery on Sunday; PO copy received by email">${esc(d.internalNote || "")}</textarea>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="hint" style="margin:0">${d.internalBy ? `Last edited by ${esc(String(d.internalBy).split("@")[0])} on ${fd(d.internalAt)}` : "Editable at any time, even after issue."}</span><button type="button" id="inoteSave">Save note</button></div></div></section>
       ${["invoice", "bill", "creditnote", "vendorcredit", "receipt", "payment"].includes(tp) && posted ? `<section class="card"><header><h2>Balance</h2></header><div class="bd kv"><span>Total</span><b>${aed(d.total || d.amount)}</b><span>${["invoice", "bill"].includes(tp) ? "Paid / credited" : "Applied"}</span><b>${aed(["invoice", "bill"].includes(tp) ? d.paid : (d.total || d.amount) - d.balance)}</b><span>${["invoice", "bill"].includes(tp) ? "Balance due" : "Unapplied"}</span><b>${aed(d.balance)}</b></div></section>` : ""}
       ${linked.length ? `<section class="card"><header><h2>Linked</h2></header>${linked.join("")}</section>` : ""}
-      ${P.acct && glRows.length ? `<section class="card"><header><h2>Journal entry</h2></header><div class="tblwrap"><table class="list compact nohover gltbl"><thead><tr><th>Account</th><th class="r">Debit</th><th class="r">Credit</th></tr></thead><tbody>${glRows.map(g => `<tr><td>${esc(acctName(g[0]))}${g[3] ? `<div class="s">${esc(contactName(g[3]))}</div>` : ""}</td><td class="r mono">${g[1] ? aed(g[1]) : ""}</td><td class="r mono">${g[2] ? aed(g[2]) : ""}</td></tr>`).join("")}</tbody></table></div></section>` : ""}
-      ${P.acct && d.tax && d.tax.length ? `<section class="card"><header><h2>VAT return boxes</h2></header><div class="bd vatgrid">${d.tax.map(x => `<span>Box ${esc(x[0])}</span><span class="n">${aed(x[1])} / VAT ${aed(x[2])}</span>`).join("")}</div></section>` : ""}
+      ${(seesLedger() || P.full) && glRows.length ? `<section class="card"><header><h2>Journal entry</h2></header><div class="tblwrap"><table class="list compact nohover gltbl"><thead><tr><th>Account</th><th class="r">Debit</th><th class="r">Credit</th></tr></thead><tbody>${glRows.map(g => `<tr><td>${esc(acctName(g[0]))}${g[3] ? `<div class="s">${esc(contactName(g[3]))}</div>` : ""}</td><td class="r mono">${g[1] ? aed(g[1]) : ""}</td><td class="r mono">${g[2] ? aed(g[2]) : ""}</td></tr>`).join("")}</tbody></table></div></section>` : ""}
+      ${(seesLedger() || P.full) && d.tax && d.tax.length ? `<section class="card"><header><h2>VAT return boxes</h2></header><div class="bd vatgrid">${d.tax.map(x => `<span>Box ${esc(x[0])}</span><span class="n">${aed(x[1])} / VAT ${aed(x[2])}</span>`).join("")}</div></section>` : ""}
       <section class="card"><header><h2>History</h2></header><div class="bd" style="font-size:12px;color:var(--muted)">Created by ${esc(d.createdBy)} on ${fd(d.createdAt)}${d.issuedAt ? `<br>Issued by ${esc(d.issuedBy)} on ${fd(d.issuedAt)}` : ""}<br>Last changed by ${esc(d.updatedBy)} on ${fd(d.updatedAt)}${d.voidedBy ? `<br>Voided by ${esc(d.voidedBy)}` : ""}<br><span>Every change is in the Activity log.</span></div></section>
     </aside></div>`, ROUTE_OF[tp]);
   wireAttach(d, async () => { await load(); docView(id); });
@@ -659,7 +672,7 @@ async function editor(type, id) {
   const p = params();
   if (!d && p.draft) { try { d = JSON.parse(sessionStorage.getItem("bk-draft") || "null"); } catch {} sessionStorage.removeItem("bk-draft"); if (d) { d.type = type; d._fresh = true; } }
   if (!NAME[type]) return go("#/dashboard");
-  if (D.perms.quotesOnly && type !== "quote") return go("#/quotes");
+  if (!canW(type)) { toast("You don't have access to create or change this in Books.", true); return go(id ? "#/doc/" + id : "#/dashboard"); }
   if (!d) d = { type, _fresh: true, contactId: p.contact || "", date: today(), lines: [] };
   if (LINE_TYPES.has(type)) return lineEditor(d);
   if (type === "receipt" || type === "payment") return payEditor(d, p.apply);
@@ -711,7 +724,7 @@ function lineEditor(d) {
       ${vat && side === "purch" ? `<div class="hint">Buying phones, computers, tablets or parts to resell? Use <b>Domestic reverse charge</b>: the supplier shouldn't charge VAT, and you give them your written declaration.</div>` : ""}
       <div class="hint" id="cinfo"></div></section>
       <section class="panel" style="padding:0;overflow:hidden"><div class="tblwrap"><table class="lines"><thead><tr><th class="h">#</th><th>Item / description</th><th class="n">Qty</th><th class="p">Rate</th><th class="d">Disc %</th>${vat ? `<th class="v">VAT</th>` : ""}<th class="a">Account</th><th class="amt">Amount</th><th class="rm"></th></tr></thead><tbody id="lines"></tbody></table></div>
-        <div style="padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="addLine">+ Add line</button>${D.perms.acct ? `<a class="btn" href="#/items" target="_blank">Manage items</a>` : ""}</div>
+        <div style="padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="addLine">+ Add line</button>${D.perms.items ? `<a class="btn" href="#/items" target="_blank">Manage items</a>` : ""}</div>
         <div style="padding:0 16px 14px"><div class="totals" id="totals"></div></div></section>
       <section class="panel"><div class="row"><label><span class="lbl">Notes${side === "sales" ? " (shown on the document)" : ""}</span><textarea id="notes" rows="3" maxlength="3000">${esc(d.notes || "")}</textarea></label>
         ${["quote", "invoice", "po"].includes(t) ? `<label><span class="lbl">Terms and conditions</span><textarea id="terms" rows="3" maxlength="4000">${esc(d.terms != null && !d._fresh ? d.terms : d.terms || (t === "quote" ? s.quoteTerms : t === "po" ? s.poTerms : s.invoiceTerms))}</textarea></label>` : ""}</div></section>
@@ -862,7 +875,7 @@ function banking() {
   const accts = D.accounts.filter(a => isMoneyAcct(a) && a.active);
   const L = ledger();
   const bal = c => r2(L.filter(l => l.acct === c).reduce((a, l) => a + l.dr - l.cr, 0));
-  page("Banking", "Accountant", `<button data-new="transfer">Transfer</button><button data-new="expense">+ Expense</button><button data-new="payment">Pay a supplier</button><button class="primary" data-new="receipt">Receive payment</button>`,
+  page("Banking", "Accountant", [["transfer", "Transfer"], ["expense", "+ Expense"], ["payment", "Pay a supplier"], ["receipt", "Receive payment", 1]].filter(x => canW(x[0])).map(x => `<button${x[2] ? ' class="primary"' : ""} data-new="${x[0]}">${x[1]}</button>`).join(""),
     `<section class="kpis">${accts.map(a => `<a class="kpi" href="#/account/${a.code}" style="--c:${bal(a.code) < 0 ? "var(--bad)" : "var(--good)"}"><div class="k">${esc(a.name)}</div><div class="v"><small>AED</small>${aed(bal(a.code))}</div><div class="s">${esc(a.code)} · ${esc(D.acctTypes[a.type][1])}</div></a>`).join("")}</section>
     <div class="note">Add more bank or card accounts in the <a href="#/accounts">Chart of accounts</a> (type Bank). Open an account to see every transaction and its running balance.</div>`, "banking");
   $("app").querySelectorAll("[data-new]").forEach(b => b.onclick = () => go("#/new/" + b.dataset.new));
@@ -890,7 +903,7 @@ function coa() {
   const bal = c => r2(L.filter(l => l.acct === c).reduce((a, l) => a + l.dr - l.cr, 0));
   const groups = ["asset", "liability", "equity", "income", "expense"];
   const GN = { asset: "Assets", liability: "Liabilities", equity: "Equity", income: "Income", expense: "Expenses" };
-  page("Chart of accounts", "Accountant", `<button class="primary" id="add">+ New account</button>`,
+  page("Chart of accounts", "Accountant", D.perms.full ? `<button class="primary" id="add">+ New account</button>` : "",
     `<div class="tools"><input type="search" id="q" placeholder="Search code or name"><label class="chk"><input type="checkbox" id="inact"> Show inactive</label></div>
     <div class="panel listpanel"><div class="tblwrap"><table class="list compact"><thead><tr><th>Code</th><th>Account</th><th>Type</th><th class="r">Balance (AED)</th></tr></thead><tbody id="rows"></tbody></table></div></div>`, "accounts");
   const draw = () => {
@@ -899,7 +912,7 @@ function coa() {
       return l.length ? `<tr class="nohover"><td colspan="4" style="background:var(--sunk);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">${GN[g]}</td></tr>` + l.map(a => `<tr data-c="${a.code}" class="${a.active ? "" : "void"}"><td class="mono">${a.code}</td><td><span class="t">${esc(a.name)}</span>${a.system ? ` <span class="st">system</span>` : ""}${a.ctPct ? ` <span class="st partial" title="Not deductible for corporate tax">CT ${a.ctPct}% add-back</span>` : ""}${a.description ? `<div class="s">${esc(a.description)}</div>` : ""}</td><td>${esc(D.acctTypes[a.type][1])}</td><td class="r mono"><a href="#/account/${a.code}" onclick="event.stopPropagation()">${aed(signed(a.code, bal(a.code)))}</a></td></tr>`).join("") : ""; }).join("");
     $("rows").querySelectorAll("tr[data-c]").forEach(tr => tr.onclick = () => acctDialog(ACC.get(tr.dataset.c)));
   };
-  $("q").oninput = draw; $("inact").onchange = draw; $("add").onclick = () => acctDialog(null); draw();
+  $("q").oninput = draw; $("inact").onchange = draw; if ($("add")) $("add").onclick = () => acctDialog(null); draw();
 }
 async function acctDialog(a) {
   const types = Object.entries(D.acctTypes).map(([k, v]) => `<option value="${k}"${a && a.type === k ? " selected" : ""}>${esc(v[1])} (${v[0]})</option>`).join("");
@@ -919,7 +932,7 @@ async function acctDialog(a) {
 
 /* ---------- items ---------- */
 function itemsView() {
-  page("Items", "Accountant", `<button id="imp">Import from Excel</button><button id="xl">Export</button><button class="primary" id="add">+ New item</button>`,
+  page("Items", "Accountant", D.perms.items ? `<button id="imp">Import from Excel</button><button id="xl">Export</button><button class="primary" id="add">+ New item</button>` : `<button id="xl">Export</button>`,
     `<div class="tools"><input type="search" id="q" placeholder="Search name, SKU or brand"><select id="k"><option value="">Goods and services</option><option value="goods">Goods</option><option value="service">Services</option></select><label class="chk"><input type="checkbox" id="inact"> Show inactive</label><span class="cnt" id="cnt"></span></div>
     <div class="panel listpanel"><div class="tblwrap"><table class="list"><thead><tr><th>Item</th><th>SKU</th><th>Type</th><th>VAT</th><th class="r">Sale price</th><th class="r">Purchase price</th><th class="r">Margin</th></tr></thead><tbody id="rows"></tbody></table><div class="empty" id="empty" hidden><strong>No items yet</strong>Add the products and services you sell so quotations and invoices fill themselves.</div></div></div>`, "items");
   const draw = () => {
@@ -929,9 +942,9 @@ function itemsView() {
     $("empty").hidden = !!D.items.length; $("cnt").textContent = `${vis.length} of ${D.items.length}`;
     $("rows").querySelectorAll("tr").forEach(tr => tr.onclick = () => itemDialog(ITEMS.get(tr.dataset.id)));
   };
-  ["q", "k"].forEach(id => $(id).oninput = draw); $("inact").onchange = draw; $("add").onclick = () => itemDialog(null);
+  ["q", "k"].forEach(id => $(id).oninput = draw); $("inact").onchange = draw; if ($("add")) $("add").onclick = () => itemDialog(null);
   $("xl").onclick = () => exportSheets(`${D.company.name} items`, [["Items", [["name", "sku", "brand", "kind", "unit", "salePrice", "purchasePrice", "vat", "salesAcct", "purchaseAcct", "description"], ...D.items.map(i => [i.name, i.sku, i.brand, i.kind, i.unit, i.salePrice, i.purchasePrice, i.vat, i.salesAcct, i.purchaseAcct, i.description])]]]).catch(e => toast(e.message, 1));
-  $("imp").onclick = importItems;
+  if ($("imp")) $("imp").onclick = importItems;
   draw();
 }
 async function itemDialog(i) {

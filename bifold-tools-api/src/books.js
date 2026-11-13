@@ -112,9 +112,30 @@ module.exports = function makeBooks(H) {
 
   // ---------- who may do what ----------
   const coOf = user => { if (user.co === "all") fail(400, "Books work one company at a time. Switch to Bifold or Tech Hub in the top bar."); return user.co; };
-  const isAcct = user => user.isManager || (user.sections || []).includes("books");
-  const needAcct = user => { if (!isAcct(user)) fail(403, "You can work on quotations only. Ask a manager for Books access to do anything else."); };
-  const typeAllowed = (user, type) => isAcct(user) || (TYPES[type] && TYPES[type].quoteOk);
+  // Team access inside Books. "books" is full access (the accountant). The others open one area each:
+  //   quotes      quotations only               bk_sales    customers, quotations, invoices, receipts, credit notes
+  //   bk_purch    suppliers, POs, bills, payments, expenses, vendor credits
+  //   bk_bank     banking, transfers, manual journals (reads every transaction)   bk_reports  every report and the VAT / CT returns, read only
+  // Settings, the chart of accounts, the lock date, voiding and tax-return journals stay with full access.
+  const AREA = { quote: "sales", invoice: "sales", receipt: "sales", creditnote: "sales", po: "purch", bill: "purch", payment: "purch", vendorcredit: "purch", expense: "purch", journal: "bank", transfer: "bank" };
+  const AREA_NAME = { sales: "Sales", purch: "Purchases", bank: "Banking and journals", reports: "Reports and VAT" };
+  function permsOf(user) {
+    const s = user.sections || [], full = !!user.isManager || s.includes("books");
+    const p = { full, manager: !!user.isManager, sales: full || s.includes("bk_sales"), purch: full || s.includes("bk_purch"), bank: full || s.includes("bk_bank"), reports: full || s.includes("bk_reports") };
+    p.quotes = p.sales || s.includes("quotes");
+    p.quotesOnly = p.quotes && !p.sales && !p.purch && !p.bank && !p.reports;
+    p.items = p.full || p.sales || p.purch;
+    return p;
+  }
+  const isAcct = user => permsOf(user).full;
+  const needAcct = user => { if (!isAcct(user)) fail(403, "This needs full Books access. Ask a manager."); };
+  const canWrite = (user, type) => { const p = permsOf(user); return type === "quote" ? p.quotes : !!p[AREA[type]]; };
+  const canRead = (user, type) => { const p = permsOf(user); return p.reports || p.bank || canWrite(user, type); }; // banking needs every bank movement
+  const denyType = type => fail(403, `You don't have access to ${type === "quote" ? "quotations" : AREA_NAME[AREA[type]] || "this part of Books"} in Books. Ask a manager to give you access.`);
+  const needWrite = (user, type) => { if (!canWrite(user, type)) denyType(type); };
+  const needRead = (user, type) => { if (!canRead(user, type)) denyType(type); };
+  const needArea = (user, area) => { if (!permsOf(user)[area]) fail(403, `You don't have access to ${AREA_NAME[area] || area} in Books. Ask a manager to give you access.`); };
+  const typeAllowed = canWrite;
 
   // ---------- settings ----------
   const sPK = co => "set-" + co;
@@ -284,7 +305,7 @@ module.exports = function makeBooks(H) {
     return f;
   }
   async function saveItem(user, id, b) {
-    needAcct(user);
+    if (!permsOf(user).items) fail(403, "Items need Sales, Purchases or full Books access. Ask a manager.");
     const co = coOf(user);
     const t = await table(T);
     const f = itemIn(b, await listAccounts(co));
@@ -304,7 +325,7 @@ module.exports = function makeBooks(H) {
     return itemOut(await t.getEntity(iPK(co), id));
   }
   async function importItems(user, b) {
-    needAcct(user);
+    if (!permsOf(user).items) fail(403, "Items need Sales, Purchases or full Books access. Ask a manager.");
     const co = coOf(user);
     const rows = Array.isArray(b.rows) ? b.rows.slice(0, 2000) : [];
     if (!rows.length) fail(400, "The file has no item rows.");
@@ -322,7 +343,7 @@ module.exports = function makeBooks(H) {
     return { added, updated, invalid };
   }
   async function deleteItem(user, id) {
-    needAcct(user);
+    if (!permsOf(user).items) fail(403, "Items need Sales, Purchases or full Books access. Ask a manager.");
     const co = coOf(user);
     const t = await table(T);
     const cur = await getOrNull(t, iPK(co), id);
@@ -482,7 +503,7 @@ module.exports = function makeBooks(H) {
   async function docIn(user, b, cur, ctx) {
     const type = cur ? cur.type : String(b.type || "");
     const tp = TYPES[type]; if (!tp) fail(400, "Unknown document type.");
-    if (!typeAllowed(user, type)) needAcct(user);
+    needWrite(user, type);
     const { settings: s, accts } = ctx;
     const A = new Map(accts.map(a => [a.code, a]));
     const date = clean(b.date, 10) || today();
@@ -625,7 +646,7 @@ module.exports = function makeBooks(H) {
     const co = coOf(user);
     const e = await getOrNull(await table(T), dPK(co), id);
     if (!e) fail(404, "This document doesn't exist.");
-    if (!typeAllowed(user, e.type)) needAcct(user);
+    needRead(user, e.type);
     const docs = decorate(await allDocs(co));
     const d = docs.find(x => x.id === id);
     const out = { ...fullOut(e), paid: d.paid, balance: d.balance, view: d.view };
@@ -641,7 +662,7 @@ module.exports = function makeBooks(H) {
     const ctx = await ctxFor(user);
     const type = String(b.type || "");
     if (!TYPES[type]) fail(400, "Unknown document type.");
-    if (!typeAllowed(user, type)) needAcct(user);
+    needWrite(user, type);
     const { f, body } = await docIn(user, b, null, ctx);
     const wantDraft = DRAFTABLE.has(type) && b.status === "draft";
     const now = new Date().toISOString();
@@ -668,7 +689,7 @@ module.exports = function makeBooks(H) {
     const t = await table(T);
     const cur = sameCo(await getOrNull(t, dPK(ctx.co), id), ctx.co);
     const tp = TYPES[cur.type];
-    if (!typeAllowed(user, cur.type)) needAcct(user);
+    needWrite(user, cur.type);
     if (cur.status === "void") fail(400, "This document is void and can't be changed.");
     if (tp.taxDoc && cur.status === "posted") fail(400, `An issued ${tp.label.toLowerCase()} can't be changed. Issue a credit note for the difference, or void it and issue a new one.`);
     if (cur.type === "creditnote" || cur.type === "vendorcredit") { if (cur.status === "posted") fail(400, "An issued credit can't be changed. Use Apply credit, or void it."); }
@@ -701,10 +722,10 @@ module.exports = function makeBooks(H) {
 
   // Credit notes and vendor credits: change what they're applied to without touching the entry.
   async function applyCredit(user, id, b) {
-    needAcct(user);
     const ctx = await ctxFor(user);
     const t = await table(T);
     const cur = sameCo(await getOrNull(t, dPK(ctx.co), id), ctx.co);
+    needWrite(user, cur.type);
     if (!APPLIES[cur.type] || cur.status !== "posted") fail(400, "Only issued credits and payments can be applied.");
     const target = APPLIES[cur.type];
     const allocs = (Array.isArray(b.allocs) ? b.allocs : []).map(a => ({ id: clean(a.id, 60), amt: r2(num(a.amt)) })).filter(a => a.id && a.amt > 0);
@@ -730,7 +751,7 @@ module.exports = function makeBooks(H) {
     const t = await table(T);
     const cur = sameCo(await getOrNull(t, dPK(ctx.co), id), ctx.co);
     const tp = TYPES[cur.type];
-    if (!typeAllowed(user, cur.type)) needAcct(user);
+    needWrite(user, cur.type);
     if (user.aud) user.aud.name = `${tp.label} ${cur.number || "draft"}`;
     if (!tp.ledger) {
       if (cur.status === "converted") fail(400, "This has been converted. Void the document it became instead.");
@@ -738,6 +759,7 @@ module.exports = function makeBooks(H) {
       if (cur.type === "quote" && cur.dealId) await syncDeal(user, { ...cur, status: "cancelled" }, `cancelled (${clean(b.reason, 120)})`);
       return getDoc(user, id);
     }
+    if (!isAcct(user)) fail(403, "Voiding a posted document needs full Books access. Ask your accountant or a manager.");
     if (cur.status !== "posted") fail(400, "Only posted documents can be voided. Delete a draft instead.");
     if (locked(ctx.settings, cur.date)) fail(400, lockMsg(ctx.settings));
     const reason = clean(b.reason, 300); if (!reason) fail(400, "Say why it is being voided. The reason is kept with the document.");
@@ -758,12 +780,12 @@ module.exports = function makeBooks(H) {
     const t = await table(T);
     const cur = await getOrNull(t, dPK(co), id);
     if (!cur) return;
-    if (!typeAllowed(user, cur.type)) needAcct(user);
+    needWrite(user, cur.type);
     const tp = TYPES[cur.type];
     if (user.aud) user.aud.name = `${tp.label} ${cur.number || "draft"}`;
     if (tp.ledger && cur.status !== "draft") fail(400, "Posted documents are kept for the FTA record rules (5 years for VAT, 7 years for corporate tax). Void it instead.");
     if (cur.status === "converted") fail(400, "This has been converted, so it's kept. Cancel it instead.");
-    if (!tp.ledger && cur.createdBy !== user.email && !user.isManager && !isAcct(user)) fail(403, "Only the person who created this or an accountant can delete it.");
+    if (!tp.ledger && cur.createdBy !== user.email && !isAcct(user)) fail(403, "Only the person who created this or someone with full Books access can delete it.");
     await t.deleteEntity(dPK(co), id);
     const fl = docFiles(cur); if (fl.length) { const c = await blobs(); await Promise.all(fl.map(x => c.deleteBlob(x.id).catch(() => {}))); }
   }
@@ -780,11 +802,11 @@ module.exports = function makeBooks(H) {
     if (!container) { const cs = process.env.STORAGE_CONNECTION; if (!cs) fail(500, "Storage is not set up yet."); const c = BlobServiceClient.fromConnectionString(cs).getContainerClient("books-files"); await c.createIfNotExists(); container = c; }
     return container;
   }
-  async function loadForFiles(user, id) {
+  async function loadForFiles(user, id, readOnly) {
     const co = coOf(user);
     const e = await getOrNull(await table(T), dPK(co), id);
     if (!e) fail(404, "This document doesn't exist.");
-    if (!typeAllowed(user, e.type)) needAcct(user);
+    if (readOnly) needRead(user, e.type); else needWrite(user, e.type);
     return { co, e };
   }
   async function changeFiles(user, id, fn) {
@@ -825,7 +847,7 @@ module.exports = function makeBooks(H) {
     return { files };
   }
   async function getFile(user, id, fid, download) {
-    const { e } = await loadForFiles(user, id);
+    const { e } = await loadForFiles(user, id, true);
     const f = docFiles(e).find(x => x.id === fid); if (!f) fail(404, "That file is no longer attached.");
     if (user.aud) { user.aud.name = f.name; user.aud.changes = [`${TYPES[e.type].label} ${e.number || "draft"}`]; }
     let buf; try { buf = await (await blobs()).getBlockBlobClient(fid).downloadToBuffer(); } catch (err) { if (err.statusCode === 404) fail(404, "That file is no longer available."); throw err; }
@@ -845,7 +867,7 @@ module.exports = function makeBooks(H) {
     const t = await table(T);
     const cur = await getOrNull(t, dPK(co), id);
     if (!cur) fail(404, "This document doesn't exist.");
-    if (!typeAllowed(user, cur.type)) needAcct(user);
+    needWrite(user, cur.type);
     const note = clean(b.internalNote, 3000);
     if (user.aud) { user.aud.name = `${TYPES[cur.type].label} ${cur.number || "draft"}`; user.aud.changes = [note ? "internal note: " + note.slice(0, 80) : "internal note cleared"]; }
     await t.updateEntity({ partitionKey: dPK(co), rowKey: id, internalNote: note, internalBy: user.email, internalAt: new Date().toISOString() }, "Merge");
@@ -864,7 +886,7 @@ module.exports = function makeBooks(H) {
     const t = await table(T);
     const q = await getOrNull(t, dPK(co), id);
     if (!q || q.type !== "quote") fail(404, "This quotation doesn't exist.");
-    if (!typeAllowed(user, q.type)) needAcct(user);
+    needWrite(user, q.type);
     if (q.dealId) { const existing = await quietly(user, () => deals.get(user, q.dealId)).catch(() => null); if (existing) fail(409, "This quotation is already in the Sales Pipeline.", { dealId: q.dealId }); }
     if (!q.contactId) fail(400, "Choose the customer on the quotation first.");
     const t0 = today();
@@ -906,7 +928,7 @@ module.exports = function makeBooks(H) {
   const canAmc = user => user.isManager || (user.sections || []).includes("amc");
   async function linkAmc(user, id, b) {
     const co = coOf(user);
-    needAcct(user);
+    needArea(user, "sales");
     if (!canAmc(user)) fail(403, "You don't have access to AMC proposals and contracts. Ask a manager to give you access.");
     const t = await table(T);
     const inv = await getOrNull(t, dPK(co), id);
@@ -948,7 +970,7 @@ module.exports = function makeBooks(H) {
   async function pnlSources(user, type) {
     const co = coOf(user);
     const want = type === "bill" ? ["bill"] : ["quote", "invoice"];
-    const docs = decorate(await allDocs(co)).filter(d => want.includes(d.type) && typeAllowed(user, d.type) && !["void", "cancelled"].includes(d.status) && (d.type !== "invoice" || d.status === "posted"));
+    const docs = decorate(await allDocs(co)).filter(d => want.includes(d.type) && canRead(user, d.type) && !["void", "cancelled"].includes(d.status) && (d.type !== "invoice" || d.status === "posted"));
     return docs.map(d => ({ id: d.id, type: d.type, number: d.number, date: d.date, contactId: d.contactId, contactName: d.contactName, ref: d.ref, title: d.title, subtotal: d.subtotal, total: d.total, status: d.view }))
       .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 1000);
   }
@@ -956,7 +978,7 @@ module.exports = function makeBooks(H) {
     const co = coOf(user);
     const e = await getOrNull(await table(T), dPK(co), id);
     if (!e || !["quote", "invoice", "bill"].includes(e.type)) fail(404, "That quotation, invoice or bill doesn't exist.");
-    if (!typeAllowed(user, e.type)) needAcct(user);
+    needRead(user, e.type);
     const body = unpackJson(e), items = new Map((await listItems(co)).map(i => [i.id, i]));
     const side = e.type === "bill" ? "purch" : "sales";
     const lines = (body.lines || []).map(l => {
@@ -973,7 +995,7 @@ module.exports = function makeBooks(H) {
     const t = await table(T);
     const cur = await getOrNull(t, dPK(co), id);
     if (!cur) fail(404, "This document doesn't exist.");
-    if (!typeAllowed(user, cur.type)) needAcct(user);
+    needWrite(user, cur.type);
     const patch = { partitionKey: dPK(co), rowKey: id, sentAt: new Date().toISOString() };
     if ((cur.type === "quote" || cur.type === "po") && cur.status === "draft") patch.status = "sent";
     if (user.aud) user.aud.name = `${TYPES[cur.type].label} ${cur.number}`;
@@ -988,7 +1010,7 @@ module.exports = function makeBooks(H) {
     if (!cur) fail(404, "This document doesn't exist.");
     const to = { quote: "invoice", po: "bill", invoice: "creditnote", bill: "vendorcredit" }[cur.type];
     if (!to) fail(400, "This document can't be converted.");
-    if (!isAcct(user)) needAcct(user);
+    needWrite(user, cur.type); needWrite(user, to);
     if (cur.status === "converted" || cur.status === "cancelled" || cur.status === "void" || cur.status === "declined") fail(400, "This can't be converted in its current status.");
     if (cur.type === "invoice" && cur.status !== "posted") fail(400, "Issue the invoice before crediting it.");
     const body = unpackJson(cur);
@@ -1004,29 +1026,34 @@ module.exports = function makeBooks(H) {
   // ---------- bootstrap: everything the page needs ----------
   async function bootstrap(user) {
     const co = coOf(user);
-    const acct = isAcct(user);
-    const [settings, accts, items, docs, customers, vendors, vver] = await Promise.all([loadSettings(co), listAccounts(co), listItems(co), allDocs(co), listCustomers(user), acct ? vendorsOf(user) : Promise.resolve([]), acct ? verifications(co) : Promise.resolve({})]);
-    let list = decorate(docs);
-    if (!acct) list = list.filter(d => d.type === "quote").map(d => ({ ...d, gl: [], tax: [] }));
+    const P = permsOf(user), acct = P.full;
+    if (!P.quotes && !P.purch && !P.bank && !P.reports) fail(403, "You don't have access to Books. Ask a manager to give you access.");
+    const seeVendors = P.purch || P.reports || P.bank;
+    const [settings, accts, items, docs, customers, vendors, vver] = await Promise.all([loadSettings(co), listAccounts(co), listItems(co), allDocs(co), listCustomers(user), seeVendors ? vendorsOf(user) : Promise.resolve([]), seeVendors ? verifications(co) : Promise.resolve({})]);
+    // Only the documents this person may read. Ledger lines are kept only for those who see reports, so nobody
+    // can rebuild bank balances or profit from a partial set.
+    let list = decorate(docs).filter(d => canRead(user, d.type));
+    if (!P.reports && !P.bank) list = list.map(d => ({ ...d, gl: [], tax: [] }));
     const s = { ...settings }; delete s.counters;
     return {
       company: { key: co, name: CO[co].name }, settings: s, accounts: accts, items, docs: list, customers, vendors, vver,
-      perms: { acct, manager: !!user.isManager, quotesOnly: !acct, pipeline: canPipeline(user), amc: canAmc(user) }, vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
+      perms: { ...P, acct, pipeline: canPipeline(user), amc: canAmc(user) }, vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
       acctTypes: ACCT_TYPES, sys: SYS, fileKinds: FILE_KINDS, emirates: EMIRATES, today: today(), me: user.email,
     };
   }
 
   // Alerts for the bell and the home page.
   async function alerts(user) {
-    if (user.co === "all" || !isAcct(user)) return [];
+    const P = permsOf(user);
+    if (user.co === "all" || !(P.sales || P.purch || P.reports)) return [];
     const co = user.co, t0 = today(), wk = addDays(t0, 7);
     const docs = decorate(await allDocs(co));
     const out = [];
     const od = docs.filter(d => d.type === "invoice" && d.view === "overdue");
-    if (od.length) out.push({ tool: "books", severity: "medium", when: od.map(d => d.dueDate).sort()[0], href: "/books/#/invoices?view=overdue",
+    if (od.length && (P.sales || P.reports)) out.push({ tool: "books", severity: "medium", when: od.map(d => d.dueDate).sort()[0], href: "/books/#/invoices?view=overdue",
       title: `${od.length} overdue invoice${od.length === 1 ? "" : "s"}`, text: `AED ${od.reduce((a, d) => a + d.balance, 0).toLocaleString("en-US", { maximumFractionDigits: 0 })} to collect` });
     const due = docs.filter(d => d.type === "bill" && d.status === "posted" && d.balance > 0 && d.dueDate <= wk);
-    if (due.length) out.push({ tool: "books", severity: due.some(d => d.dueDate < t0) ? "medium" : "low", when: due.map(d => d.dueDate).sort()[0], href: "/books/#/bills?view=due",
+    if (due.length && (P.purch || P.reports)) out.push({ tool: "books", severity: due.some(d => d.dueDate < t0) ? "medium" : "low", when: due.map(d => d.dueDate).sort()[0], href: "/books/#/bills?view=due",
       title: `${due.length} bill${due.length === 1 ? "" : "s"} due within 7 days`, text: `AED ${due.reduce((a, d) => a + d.balance, 0).toLocaleString("en-US", { maximumFractionDigits: 0 })} to pay` });
     return out;
   }
@@ -1037,7 +1064,7 @@ module.exports = function makeBooks(H) {
   const VCHECKS = ["trn", "licence", "address", "bank", "activity"];
   async function verifications(co) { const m = {}; (await all(await table(T), vPK(co))).forEach(e => { m[e.rowKey] = { checks: j(e.checks, {}), note: e.note || "", date: e.date || "", by: e.by || "" }; }); return m; }
   async function verifyVendor(user, id, b) {
-    needAcct(user);
+    needArea(user, "purch");
     const co = coOf(user);
     const v = await contactFor(user, "vendor", id);
     const checks = {}; VCHECKS.forEach(k => { checks[k] = !!(b.checks && b.checks[k]); });
@@ -1049,7 +1076,7 @@ module.exports = function makeBooks(H) {
     return (await verifications(co))[id];
   }
   async function addVendor(user, b) {
-    needAcct(user);
+    needArea(user, "purch");
     return sup().route("POST", [], user, { name: b.name, trn: b.trn, email: b.email, phone: b.phone, address: b.address, emirate: b.emirate, country: b.country || "UAE", kind: "Supplier", status: "active" });
   }
   async function addCustomer(user, b) { return createCustomer(user, b); }

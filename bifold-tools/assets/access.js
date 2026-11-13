@@ -157,15 +157,18 @@
     out: I('<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 16l4-4-4-4M14 12H4"/>'),
     user: I('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/>'),
   };
+  // Books & VAT areas (team access): full, Sales, Purchases, Banking & journals, Reports & VAT, Quotations only.
+  const BK = { any: ["books", "bk_sales", "bk_purch", "bk_bank", "bk_reports", "quotes"], ledger: ["books", "bk_bank", "bk_reports"], reports: ["books", "bk_reports"],
+    sales: ["books", "bk_sales", "bk_bank", "bk_reports"], purch: ["books", "bk_purch", "bk_bank", "bk_reports"], items: ["books", "bk_sales", "bk_purch", "bk_bank", "bk_reports"] };
   // Navigation by business function. "need" lists the sections that open an item.
   const NAV = [
     { group: null, items: [{ href: "/", label: "Home", icon: "home", need: [] }] },
     { group: "Sales", items: [{ href: "/pipeline/", label: "Sales Pipeline", icon: "pipeline", need: ["pipeline"] }, { href: "/pnl/", label: "PnL Calculator", icon: "pnl", need: ["pnl"] }] },
-    { group: "Finance", items: [{ href: "/books/", label: "Books & VAT", icon: "books", need: ["books", "quotes"], subs: [["#/dashboard", "Dashboard", ["books"]],
-        [null, "Sales", ["books", "quotes"]], ["#/customers", "Customers", ["books"]], ["#/quotes", "Quotations", ["books", "quotes"]], ["#/invoices", "Invoices", ["books"]], ["#/receipts", "Payments received", ["books"]], ["#/creditnotes", "Credit notes", ["books"]],
-        [null, "Purchases", ["books"]], ["#/vendors", "Suppliers", ["books"]], ["#/pos", "Purchase orders", ["books"]], ["#/bills", "Bills", ["books"]], ["#/payments", "Payments made", ["books"]], ["#/expenses", "Expenses", ["books"]], ["#/vendorcredits", "Vendor credits", ["books"]],
-        [null, "Accountant", ["books"]], ["#/banking", "Banking", ["books"]], ["#/journals", "Manual journals", ["books"]], ["#/accounts", "Chart of accounts", ["books"]], ["#/items", "Items", ["books"]],
-        [null, "Tax and reports", ["books"]], ["#/vat", "VAT return", ["books"]], ["#/report/ct", "Corporate tax", ["books"]], ["#/reports", "All reports", ["books"]],
+    { group: "Finance", items: [{ href: "/books/", label: "Books & VAT", icon: "books", need: BK.any, subs: [["#/dashboard", "Dashboard", BK.ledger],
+        [null, "Sales", BK.any], ["#/customers", "Customers", BK.sales], ["#/quotes", "Quotations", BK.any.filter(k => k !== "bk_purch")], ["#/invoices", "Invoices", BK.sales], ["#/receipts", "Payments received", BK.sales], ["#/creditnotes", "Credit notes", BK.sales],
+        [null, "Purchases", BK.purch], ["#/vendors", "Suppliers", BK.purch], ["#/pos", "Purchase orders", BK.purch], ["#/bills", "Bills", BK.purch], ["#/payments", "Payments made", BK.purch], ["#/expenses", "Expenses", BK.purch], ["#/vendorcredits", "Vendor credits", BK.purch],
+        [null, "Accountant", BK.items], ["#/banking", "Banking", BK.ledger], ["#/journals", "Manual journals", BK.ledger], ["#/accounts", "Chart of accounts", BK.ledger], ["#/items", "Items", BK.items],
+        [null, "Tax and reports", BK.reports], ["#/vat", "VAT return", BK.reports], ["#/report/ct", "Corporate tax", BK.reports], ["#/reports", "All reports", BK.reports],
         [null, "Setup", ["books"]], ["#/settings", "Settings", ["books"]]] },
       { href: "/pdc/", label: "PDC & Guarantees", icon: "pdc", need: ["pdc"] }] },
     { group: "People", items: [{ href: "/hr/", label: "HR & Payroll", icon: "hr", need: ["hr"], subs: [["#/dashboard", "Dashboard", ["hr"]], ["#/employees", "Employees", ["hr"]], ["#/leave", "Leave", ["hr"]], ["#/payroll", "Payroll runs", ["hr"]], ["#/gratuity", "End of service", ["hr"]], ["#/documents", "Documents and expiry", ["hr"]], ["#/settings", "Settings", ["hr"]]] }] },
@@ -175,7 +178,7 @@
     { group: "Master data", items: [{ href: "/customers/", label: "Customers", icon: "customers", need: ["customers"] }, { href: "/suppliers/", label: "Suppliers & Vendors", icon: "suppliers", need: ["suppliers", "pdc"], subs: [["#dir", "Directory", []], ["#what", "Who supplies what", []], ["#people", "All contacts", []]] }] },
     { group: "Administration", items: [{ href: "/access/", label: "Team access", icon: "access", need: ["manager"] }, { href: "/activity/", label: "Activity log", icon: "log", need: ["manager"] }] },
   ];
-  const SECTION_NAMES = { books: "Books", quotes: "Quotations", pnl: "PnL", pipeline: "Pipeline", pdc: "PDC", customers: "Customers", suppliers: "Suppliers", amc: "AMC proposals", visits: "Visits", campaigns: "Campaigns", completion: "Completion", hr: "HR & Payroll" };
+  const SECTION_NAMES = { books: "Books (full)", quotes: "Quotations", pnl: "PnL", pipeline: "Pipeline", pdc: "PDC", customers: "Customers", suppliers: "Suppliers", amc: "AMC proposals", visits: "Visits", campaigns: "Campaigns", completion: "Completion", hr: "HR & Payroll", bk_sales: "Books: Sales", bk_purch: "Books: Purchases", bk_bank: "Books: Banking", bk_reports: "Books: Reports" };
   const allowed = (m, keys) => !keys.length || keys.some(k => k === "manager" ? m.isManager : m.isManager || (m.sections || []).includes(k));
   const path = location.pathname.replace(/index\.html$/, "");
   const initials = e => { const p = String(e).split("@")[0].split(/[._-]+/).filter(Boolean); return ((p[0] || "?")[0] + (p[1] ? p[1][0] : (p[0] || "")[1] || "")).toUpperCase(); };
@@ -361,7 +364,7 @@
       brandPage(m);
       build(m);
       if (!m.isManager) document.querySelectorAll("[data-manager]").forEach(el => { el.hidden = true; });
-      const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/suppliers/": ["suppliers", "pdc"], "/amc/": ["amc", "visits"], "/campaigns/": ["campaigns"], "/completion/": ["completion"], "/books/": ["books", "quotes"], "/hr/": ["hr"], "/access/": ["manager"], "/activity/": ["manager"] };
+      const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/suppliers/": ["suppliers", "pdc"], "/amc/": ["amc", "visits"], "/campaigns/": ["campaigns"], "/completion/": ["completion"], "/books/": BK.any, "/hr/": ["hr"], "/access/": ["manager"], "/activity/": ["manager"] };
       document.querySelectorAll("body > :not(.bx-side) a[href]").forEach(a => { const k = LINK[a.getAttribute("href")]; if (k && !allowed(m, k)) a.hidden = true; });
       if (m.noAccess) block(m, "You don't have access yet");
       else if (pageNeeds.length && !allowed(m, pageNeeds)) block(m, "You don't have access to this tool");

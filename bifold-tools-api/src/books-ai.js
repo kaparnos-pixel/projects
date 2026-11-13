@@ -33,58 +33,80 @@ const RULES = `HOUSE RULES
 
 const fmtLines = lines => (lines || []).slice(0, 200).map((l, i) => `${i + 1}. ${[l.section && "[" + l.section + "]", l.sub ? "(sub-item)" : "", l.name, l.description, l.model && "model " + l.model, (l.qty || "") + " " + (l.unit || ""), l.rate ? "AED " + l.rate : "price TBD"].filter(Boolean).join(" | ")}`).join("\n");
 
+const STYLE_TH = `STYLE (Tech Hub house style, follow closely):
+- Executive summary, 3 paragraphs: (1) "Tech Hub Information Technology is pleased to present this proposal to <customer> for <what>: <the main components in one sentence>. Total investment is AED <total> including VAT." (2) the design: which brands and models do what, and how it is managed. (3) "Tech Hub will deliver the project end to end - <steps> - with an estimated completion of <duration> from Purchase Order."
+- Background: the site, its areas or buildings, how many points or users each area has, and what the customer requires (name the required brands when the BoQ shows them).
+- Key requirements: 6 to 10 specific bullets that name models, quantities, locations and services (one bullet each for security, switching, backbone, wireless, cabling, segmentation, services, as the BoQ supports).
+- Assumptions: 2 to 3 paragraphs covering provisional quantities, what the client provides (ISP, PCs, power, racks), what is excluded (civil works, core drilling), and subscription terms.
+- Solution overview: 2 paragraphs describing how the parts connect, location by location, and the headroom left for future growth.`;
+
 const SHAPES = {
   boqmap: `{"header": row index of the column headings (0-based, -1 if none), "cols": {"ref": col or -1, "description": col, "model": col or -1, "brand": col or -1, "qty": col or -1, "uom": col or -1, "rate": col or -1, "total": col or -1}}
 Columns are 0-based. "rate" is the unit price, "total" the line amount. If description is split over two columns, give the main one.`,
   boqread: `{"items": [{"section": string or "", "description": string (as written, may be long), "model": string or "", "qty": number, "uom": string or "", "rate": number or null, "sub": true for accessories, licences, mounts, cables listed under a main item}]}
 Keep every line item in order. Use the BoQ's unit prices exactly; if only a line total is given, rate = total / qty. Section headings are not items: put them in "section" of the items below them. Skip subtotal, VAT and total rows.`,
-  story: `{"title": string (the solution name for the cover, e.g. "Campus Wi-Fi 7 Upgrade"), "tagline": string (3 to 5 domains separated by "  |  "),
- "summary": [3 paragraphs; the first states what we propose and the total investment including VAT given below],
- "background": [1 to 2 paragraphs about the customer's situation and need],
- "requirements": [4 to 7 bullets: key requirements this proposal meets],
- "assumptions": [2 to 3 short paragraphs: assumptions the offer relies on],
- "overview": [1 to 2 paragraphs describing the proposed solution and how the parts work together],
- "products": [for each MAJOR item (not accessories), at most 8: {"title": string, "code": part number from the BoQ or "", "description": 1 to 2 sentences, "specs": [["Spec", "Value"], 4 to 7 rows from the BoQ text and well-known public vendor specifications]}]}`,
-  commercial: `{"payment": [["Label", "Value"], 1 to 3 rows that add up to 100%],
- "timeline": {"phases": [{"activity": string, "duration": string (e.g. "2 weeks"), "responsible": "COMPANY" or "Client" or "COMPANY and Client", "weeks": [week numbers this phase is active, 1-based]}], 5 to 7 phases, first is order confirmation and procurement, last is handover; "weeks": total weeks (integer), "total": string (e.g. "6 Weeks")},
- "warranty": [["Label", "Value"], 3 to 4 rows],
- "terms": [["Label", "Value"], 5 to 7 rows],
- "exclusions": [4 to 7 bullets fitting this scope],
- "responsibilities": [5 to 7 bullets: what our project team does],
- "why": [{"title": string, "body": one sentence}, exactly 4 cards]}`,
-  diagram: `{"title": string (e.g. "Proposed network architecture"), "caption": string (one sentence),
- "nodes": [{"id": short id, "label": string (max 28 chars, include a count for grouped devices, e.g. "12 x Aruba AP-735"), "sub": string (model or role, max 40 chars, may be ""), "kind": one of cloud|isp|firewall|router|core|switch|wifi|ap|server|storage|nvr|camera|pbx|phone|pc|printer|ups|rack|access|display|other, "tier": 0-5}],
- "edges": [{"from": id, "to": id, "label": string (link type such as "10G uplink", "PoE", "SIP trunk", may be "")}]}
-Diagram rules: 4 to 16 nodes. Group identical devices into ONE node with a count. Tier 0 is the outside world (internet, ISP, PSTN), then security, then core, then distribution or access, then end devices at the highest tier. At most 5 nodes on one tier. Every node is linked to something. Use equipment from the BoQ; existing customer systems (internet, existing LAN, users) may be added when the solution obviously connects to them. A UPS links to what it powers with the label "power".`,
+  story: `{"title": string (the solution name for the cover, e.g. "Office Area Network & Wireless: Fortinet & Ubiquiti UniFi"), "site": string (the project or site in a few words, e.g. "Vehicle Impound, Office Area", or "" if unknown), "ref": string (2 to 4 short uppercase words joined by hyphens for the proposal number, customer first, e.g. "EGA-IMPOUND-NET"), "tagline": string (3 to 5 domains separated by "  |  "),
+ "summary": [3 paragraphs], "background": [1 to 2 paragraphs], "requirements": [6 to 10 bullets], "assumptions": [2 to 3 paragraphs], "overview": [2 paragraphs]}`,
+  scope: `{"items": [{"n": the line number given, "scope": string (1 to 2 sentences for the scope table: what is supplied or done, key specifications from the BoQ and public vendor data, and where it goes, e.g. "FortiGate-70G next-generation firewall, 10 x GE RJ45 ports (including 7 x internal ports, 2 x WAN ports, 1 x DMZ port) - installed at the MDF"), "label": string (short pricing label, max 70 characters, e.g. "FortiGate-70G firewall, 10 x GE RJ45 (7 internal, 2 WAN, 1 DMZ)"), "brand": string (the brand, e.g. "Fortinet", "Ubiquiti UniFi"; for cabling the cable type such as "Cat6 UTP"; for services "COMPANY"), "qtyUnit": string (e.g. "1 No", "3 Nos", "8 Pts", "1 Lot (100 m)")}]}
+One entry for every line listed, same numbers. Never change quantities.`,
+  specs: `{"specs": [3 to 6 paragraphs, each starting with a category and a colon, e.g. "Firewall: ...", "Switching: ...", "Wireless: ...", "Cabling: ...", "Backbone: ...", naming each model with its part number in brackets and its key specifications from the BoQ and public vendor data],
+ "products": [for each MAJOR item (not accessories, cabling or services), at most 8: {"title": string, "code": part number from the BoQ or "", "description": 1 to 2 sentences, "specs": [["Spec", "Value"], 4 to 7 rows]}]}`,
+  commercial: `{"payment": [["Label", "Value"], 1 to 3 rows that add up to 100% or state the credit terms],
+ "timeline": {"phases": [{"activity": string, "duration": string (e.g. "2 days", "1-2 weeks"), "responsible": "COMPANY" or "Client" or "COMPANY & Client", "weeks": [week numbers this phase is active, 1-based]}], 5 to 8 phases fitting this scope (site survey, procurement, cabling, installation, configuration, testing, handover), "weeks": total weeks (integer), "total": string (e.g. "3-4 Weeks")},
+ "warranty": [["Label", "Value"], 3 to 4 rows: hardware warranty naming the brands, installation warranty, AMC option, remote support],
+ "terms": TERMS,
+ "exclusions": EXCL,
+ "responsibilities": [5 to 7 bullets: what our project team does]}`,
+  diagram: `{"title": string (e.g. "Solution layout and network topology"), "caption": string (e.g. "Figure 1 - Solution layout traced from the site plan (left) and logical network topology (right)." or, without a site plan, "Figure 1 - Logical network topology."),
+ "topology": {"tiers": [[{"id": short id, "label": string (max 34 chars, e.g. "MDF - UniFi Switch Pro 24 PoE"), "sub": string (max 40 chars, e.g. "400W | Cloud Key | 8 data pts"), "kind": one of cloud|isp|mgmt|firewall|router|core|switch|ap|apout|server|storage|nvr|camera|pbx|phone|pc|printer|ups|access|display|other, "dashed": true only for optional or remote items}], ... one array per tier, top (internet) to bottom (end devices), at most 3 boxes per tier, 4 to 8 tiers],
+  "links": [{"from": id, "to": id, "label": string (e.g. "New 24C SM fibre (~100 m)", may be ""), "style": "cat6" | "outdoor" | "fibre" | "wan" | "mgmt"}]},
+ "networks": [2 to 4 short lines, e.g. "Staff SSID / wired - Staff VLAN, WPA3/WPA2"],
+ "site": SITE}
+Rules: group identical devices into one box with a count ("3 x U7 Pro") unless they sit in different named locations, in which case give each its own box with the location in "sub" (e.g. "U7 Pro - Reception"). Use equipment from the BoQ; the internet or ISP may be added. Every box is linked to something.`,
+};
+const SITE_ON = `{"areas": [{"label": string (UPPERCASE room or building name as on the plan), "x": 0-100, "y": 0-100, "w": width 0-100, "h": height 0-100, "plain": true for other buildings shown only for context}],
+  "devices": [{"id": short id, "label": string (e.g. "AP02"), "sub": string (e.g. "UniFi U7 Pro"), "kind": "ap" | "apout" | "switch" | "firewall" | "camera" | "server" | "other", "x": 0-100, "y": 0-100}],
+  "links": [{"from": device id, "to": device id, "style": "cat6" | "outdoor" | "fibre"}],
+  "notes": [{"title": string (e.g. "33 DATA POINTS"), "text": string (e.g. "Reception / Manager (prov.)"), "x": 0-100, "y": 0-100}]}
+Trace the site plan: x and y are percentages of the plan's width and height (0,0 top left). Put each device where the BoQ or notes say it goes; label racks and switches by location (MDF, IDF).`;
+
+const COMMERCIAL_CO = {
+  techhub: { TERMS: `[7 to 9 sentences, e.g. "This proposal is valid for 30 days from the date of issue.", "Prices are in UAE Dirhams (AED). VAT at 5% is applicable on all items.", plus scope-specific ones such as provisional quantities, subscription start dates, variation orders and substitution with client approval]`, EXCL: `[] (exclusions go in the assumptions instead)` },
+  bifold: { TERMS: `[["Label", "Value"], 5 to 7 rows such as Warranty, Proposal Validity, Delivery Lead Time, VAT, Pricing Currency, Exclusions]`, EXCL: `[4 to 7 bullets fitting this scope]` },
 };
 
 function prompt(b, clean) {
   const part = String(b.part || "");
   if (!SHAPES[part]) return null;
-  const co = CO[b.company] || CO.techhub;
+  const coKey = CO[b.company] ? b.company : "techhub", co = CO[coKey];
   if (part === "boqmap") return `These are the first rows of a customer's Bill of Quantities spreadsheet, one row per line, cells separated by " | " (empty cells shown as "").\n\n${clean(b.sample, 12000)}\n\nWork out which columns hold what. Reply with ONLY one JSON object of this shape:\n${SHAPES.boqmap}`;
   if (part === "boqread") return [`Read the line items from this customer Bill of Quantities${b.text ? " (text below)" : " (attached)"}.${b.text ? "\n\n" + clean(b.text, 30000) : ""}\n\nReply with ONLY one JSON object of this shape:\n${SHAPES.boqread}`];
-  const total = Number(b.total) || 0;
-  return `You are drafting part of a ${co.name} commercial proposal (${co.base}).
+  const total = Number(b.total) || 0, short = co.name.split(" ").slice(0, 2).join(" ");
+  let shape = SHAPES[part].replace(/COMPANY/g, short);
+  if (part === "commercial") shape = shape.replace("TERMS", COMMERCIAL_CO[coKey].TERMS).replace("EXCL", COMMERCIAL_CO[coKey].EXCL);
+  if (part === "diagram") shape = shape.replace("SITE", b.file && b.file.data ? SITE_ON : "null (no site plan was given)");
+  const lines = part === "scope" ? (b.lines || []).map((l, i) => ({ ...l, _n: Number(l.n) || i + 1 })) : b.lines;
+  const text = `You are drafting part of a ${co.name} commercial proposal (${co.base}).
 
 CUSTOMER: ${clean(b.customer, 150)}${b.attention ? " (attention: " + clean(b.attention, 100) + ")" : ""}
 PROPOSAL SUBJECT: ${clean(b.title, 200) || "not given, infer it from the BoQ"}
 TOTAL INVESTMENT: ${total ? "AED " + total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " including 5% VAT (AED " + (Number(b.subtotal) || 0).toLocaleString("en-US", { minimumFractionDigits: 2 }) + " before VAT)" : "prices to be confirmed"}
 VALIDITY: ${Number(b.validDays) || 30} days
 
-BILL OF QUANTITIES (section | item | details | model | qty unit | unit price):
-${fmtLines(b.lines) || "none given"}
+BILL OF QUANTITIES (line number. section | item | details | model | qty unit | unit price):
+${part === "scope" ? lines.map(l => `${l._n}. ${[l.section && "[" + l.section + "]", l.sub ? "(sub-item)" : "", l.name, l.description, l.model && "model " + l.model, (l.qty || "") + " " + (l.unit || "")].filter(Boolean).join(" | ")}`).join("\n") : fmtLines(lines) || "none given"}
 
-SALESPERSON'S NOTES ABOUT THE CUSTOMER AND THE REQUIREMENT:
+SALESPERSON'S NOTES ABOUT THE CUSTOMER, THE SITE AND THE REQUIREMENT:
 ${clean(b.notes, 5000) || "none given"}
-${b.instructions ? "\nINSTRUCTIONS FOR THIS DRAFT: " + clean(b.instructions, 1500) + "\n" : ""}${part === "diagram" && b.diagram && (b.diagram.nodes || []).length ? "\nCURRENT DIAGRAM (improve it following the instructions):\n" + JSON.stringify({ nodes: b.diagram.nodes, edges: b.diagram.edges }).slice(0, 4000) + "\n" : ""}
+${b.instructions ? "\nINSTRUCTIONS FOR THIS DRAFT: " + clean(b.instructions, 1500) + "\n" : ""}${part === "diagram" && b.diagram && b.diagram.topology ? "\nCURRENT DIAGRAM (improve it following the instructions):\n" + JSON.stringify(b.diagram).slice(0, 6000) + "\n" : ""}${part === "diagram" && b.file && b.file.data ? "\nThe customer's site plan is attached. Trace it for the site layout.\n" : ""}
 COMPANY STANDARDS (start from these and adapt to the scope):
 ${co.defaults}
-
+${coKey === "techhub" && part === "story" ? "\n" + STYLE_TH + "\n" : ""}
 ${RULES}
 
-Reply with ONLY one JSON object of this shape (COMPANY means ${co.name.split(" ").slice(0, 2).join(" ")}):
-${SHAPES[part]}`;
+Reply with ONLY one JSON object of this shape (${short} is the company name to use):
+${shape}`;
+  return part === "diagram" && b.file && b.file.data ? [text] : text;
 }
 
 function parseJson(text) {
@@ -107,12 +129,12 @@ async function run(b, fail, clean) {
     content = [];
     if (b.file && b.file.data) {
       const kind = FILE_TYPES[b.file.type]; if (!kind) fail(400, "Upload the BoQ as Excel, CSV, PDF or a photo (PNG or JPG).");
-      if (String(b.file.data).length > 7_000_000) fail(413, "That file is too large for Claude to read here. Use a file under 5 MB, or export the BoQ to Excel.");
+      if (String(b.file.data).length > 7_000_000) fail(413, "That file is too large for Claude to read here. Use a file under 5 MB.");
       content.push({ type: kind, source: { type: "base64", media_type: b.file.type, data: String(b.file.data) } });
-    } else if (!b.text) fail(400, "Paste the BoQ or choose a file.");
+    } else if (b.part === "boqread" && !b.text) fail(400, "Paste the BoQ or choose a file.");
     content.push({ type: "text", text: p[0] });
   } else content = p;
-  const max = { boqmap: 400, boqread: 6000, story: 3500, commercial: 2600, diagram: 1800 }[b.part];
+  const max = { boqmap: 400, boqread: 6000, story: 3200, scope: 3500, specs: 3000, commercial: 2600, diagram: 3000 }[b.part];
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 43000);
   let r;
   try {

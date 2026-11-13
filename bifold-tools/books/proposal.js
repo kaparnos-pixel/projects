@@ -13,7 +13,7 @@ const BKPROP = (function () {
   const num = v => { const n = Number(String(v == null ? "" : v).replace(/[^0-9.\-]/g, "")); return Number.isFinite(n) ? n : 0; };
   const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const longDate = iso => { if (!iso) return ""; const [y, m, d] = iso.slice(0, 10).split("-").map(Number); return `${String(d).padStart(2, "0")} ${MONTHS[m - 1]} ${y}`; };
-  const DIA = () => (typeof PCRDIAGRAM !== "undefined" ? PCRDIAGRAM : window.PCRDIAGRAM) || null;
+  const DIA = () => (typeof PROPDIAG !== "undefined" ? PROPDIAG : null);
   const isTH = () => (B().brand() || {}).key === "techhub";
 
   /* ---------- text <-> fields (one paragraph per blank line, one bullet or row per line) ---------- */
@@ -33,79 +33,138 @@ const BKPROP = (function () {
   const whyOf = t => kvOf(t).map(([k, v]) => ({ title: k || v, body: k ? v : "" }));
 
   /* ---------- the panel inside the quotation editor ---------- */
-  let P = {}, CTX = null;
-  const FIELDS = [
-    ["Cover", [["title", "Proposal title (the solution name on the cover)", "input"], ["tagline", "Tagline (e.g. Wi-Fi 7  |  Core Switching  |  IP DECT)", "input"]]],
-    ["1. Executive summary", [["summary", "Paragraphs (leave a blank line between paragraphs). The first should state what we propose and the total.", 5]]],
-    ["2. Customer requirements", [["background", "Background (paragraphs)", 3], ["requirements", "Key requirements (one per line)", 4], ["assumptions", "Assumptions (paragraphs)", 3], ["exclusions", "Exclusions (one per line)", 4]]],
-    ["3. Proposed solution", [["overview", "Solution overview (paragraphs)", 4], ["products", "Product descriptions: one block per product; first line is the name with the part number in brackets, then a sentence, then \"Spec: value\" lines. Blank line between products.", 8]]],
-    ["4. Commercial", [["payment", "Payment terms (one per line, \"Label: value\")", 3], ["warranty", "Warranty and support (\"Label: value\")", 3], ["terms", "Terms and conditions (\"Label: value\" or a sentence per line)", 5]]],
-    ["5. Delivery", [["timeline", "Timeline: one phase per line as \"Activity | duration | responsible | weeks 1-2\"", 5], ["tlTotal", "Total duration (e.g. 6 Weeks)", "input"], ["responsibilities", "What our project team does (one per line)", 4]]],
-    ["6. Why us", [["why", "Cards, one per line as \"Title: one sentence\"", 4]]],
+  let P = {}, CTX = null, SITEPLAN = null;
+  const WHY_TH = [
+    { title: "Single-Source IT Partner", body: "Supply, installation, configuration, and maintenance - all under one roof, one contract, one point of contact." },
+    { title: "Certified Engineers", body: "Our team holds vendor certifications across Cisco, Fortinet, HPE, and more - ensuring every project meets enterprise standards." },
+    { title: "RAK-Wide Delivery", body: "Headquartered in Ras Al Khaimah with project delivery capability across all seven emirates." },
+    { title: "SLA-Backed Support", body: "Predictable costs and rapid response through our AMC programmes - keeping your business running with minimal disruption." }];
+  const FIELDS = () => [
+    ["Cover", [["title", "Proposal title (the solution name on the cover)", "input"], ["site", "Project or site (shown under the customer name, e.g. Vehicle Impound, Office Area)", "input"], ["tagline", "Tagline (e.g. Wi-Fi 7  |  Core Switching  |  PoE)", "input"]]],
+    ["1. Executive summary", [["summary", "Paragraphs (blank line between paragraphs). The first states what we propose and the total including VAT.", 7]]],
+    ["2. Client understanding and scope of work", [["background", "2.1 Background (paragraphs)", 4], ["requirements", "2.2 Key requirements (one per line)", 7], ["assumptions", "2.3 Assumptions and exclusions (paragraphs)", 6]].concat(isTH() ? [] : [["exclusions", "Exclusions (one per line)", 4]])],
+    ["3. Proposed solution", [["overview", "3.1 Solution overview (paragraphs)", 6], ["specs", "Technical specifications (one paragraph per category, e.g. \"Firewall: ...\")", 7]].concat(isTH() ? [] : [["products", "Product descriptions: one block per product; first line is the name with the part number in brackets, then a sentence, then \"Spec: value\" lines.", 8]])],
+    ["4. Commercial", [["payment", "Payment terms (one per line, \"Label: value\")", 3]]],
+    ["5. Delivery timeline", [["timeline", "One phase per line: \"Activity | duration | responsible | weeks 1-2\"", 6], ["tlTotal", "Estimated total duration (e.g. 3-4 Weeks)", "input"]].concat(isTH() ? [] : [["responsibilities", "What our project team does (one per line)", 4]])],
+    ["6. Warranty and after-sales support", [["warranty", "One per line, \"Label: value\"", 4]]],
+    ["7. Terms and conditions", [["terms", "One per line", 7]]],
+    ["8. Why us", [["why", "Cards, one per line as \"Title: one sentence\"", 4]]],
   ];
-  const toField = k => ({ summary: () => (P.summary || []).join("\n\n"), background: () => (P.background || []).join("\n\n"), assumptions: () => (P.assumptions || []).join("\n\n"), overview: () => (P.overview || []).join("\n\n"),
+  const toField = k => ({ summary: () => (P.summary || []).join("\n\n"), background: () => (P.background || []).join("\n\n"), assumptions: () => (P.assumptions || []).join("\n\n"), overview: () => (P.overview || []).join("\n\n"), specs: () => (P.specs || []).join("\n\n"),
     requirements: () => (P.requirements || []).join("\n"), exclusions: () => (P.exclusions || []).join("\n"), responsibilities: () => (P.responsibilities || []).join("\n"),
-    products: () => prodText(P.products), payment: () => kvText(P.payment), warranty: () => kvText(P.warranty), terms: () => kvText(P.terms), timeline: () => tlText(P.timeline), tlTotal: () => (P.timeline || {}).total || "",
-    why: () => whyText(P.why), title: () => P.title || "", tagline: () => P.tagline || "" }[k] || (() => ""))();
+    products: () => prodText(P.products), payment: () => kvText(P.payment), warranty: () => kvText(P.warranty), terms: () => kvText((P.terms || []).map(t => Array.isArray(t) ? t : ["", t])), timeline: () => tlText(P.timeline), tlTotal: () => (P.timeline || {}).total || "",
+    why: () => whyText(P.why && P.why.length ? P.why : isTH() ? WHY_TH : []), title: () => P.title || "", tagline: () => P.tagline || "", site: () => P.site || "" }[k] || (() => ""))();
   function fromFields(root) {
-    const v = k => (root.querySelector(`[data-pf="${k}"]`) || {}).value || "";
-    Object.assign(P, { title: v("title").trim(), tagline: v("tagline").trim(), summary: paras(v("summary")), background: paras(v("background")), requirements: linesOf(v("requirements")), assumptions: paras(v("assumptions")),
-      exclusions: linesOf(v("exclusions")), overview: paras(v("overview")), products: prodOf(v("products")), payment: kvOf(v("payment")), warranty: kvOf(v("warranty")), terms: kvOf(v("terms")),
-      timeline: tlOf(v("timeline"), v("tlTotal").trim(), (P.timeline || {}).weeks), responsibilities: linesOf(v("responsibilities")), why: whyOf(v("why")), notes: v("notes") });
+    const has = k => !!root.querySelector(`[data-pf="${k}"]`), v = k => (root.querySelector(`[data-pf="${k}"]`) || {}).value || "";
+    const set = (k, fn) => { if (has(k)) P[k] = fn(v(k)); };
+    set("title", x => x.trim()); set("site", x => x.trim()); set("tagline", x => x.trim()); set("summary", paras); set("background", paras); set("requirements", linesOf); set("assumptions", paras);
+    set("exclusions", linesOf); set("overview", paras); set("specs", paras); set("products", prodOf); set("payment", kvOf); set("warranty", kvOf); set("terms", kvOf); set("responsibilities", linesOf); set("why", whyOf); set("notes", x => x);
+    if (has("timeline")) P.timeline = tlOf(v("timeline"), v("tlTotal").trim(), (P.timeline || {}).weeks);
+    // per-line wording for the scope and pricing tables
+    const rows = root.querySelectorAll("[data-it]");
+    if (rows.length) { const items = []; rows.forEach(r => { const i = +r.dataset.it; const g = f => (r.querySelector(`[data-f="${f}"]`) || {}).value || ""; items[i] = { key: r.dataset.key, label: g("label").trim(), scope: g("scope").trim(), brand: g("brand").trim(), qtyUnit: g("qtyUnit").trim() }; }); P.items = items; }
     return P;
   }
+  const keyOf = l => String(l.name || "").slice(0, 60);
+  const itemFor = (items, l, i) => { items = items || []; const k = keyOf(l); return (items[i] && items[i].key === k ? items[i] : items.find(x => x && x.key === k)) || {}; };
 
   function panel(d) {
     P = JSON.parse(JSON.stringify(d.proposal || {}));
-    const ai = B().D.ai;
-    return `<section class="panel prop" id="propBox">
-      <div class="prophd"><div><b>Proposal</b><span class="hint" style="margin:0">Uses the customer, lines and totals above. Word file in the ${isTH() ? "Tech Hub" : "Bifold"} proposal format, with a solution diagram.</span></div></div>
+    const ai = B().D.ai, drafted = (P.summary || []).length > 0;
+    return { top: `<section class="panel prop" id="propTop">
+      <div class="prophd"><div><b>Proposal from the customer's BoQ</b><span class="hint" style="margin:0">Word file in the ${isTH() ? "Tech Hub" : "Bifold"} proposal format, with the solution figure. Uses the same customer, lines and totals as this quotation.</span></div></div>
       <div class="propai">
-        <label><span class="lbl">About the customer and the requirement (for Claude)</span><textarea data-pf="notes" rows="3" maxlength="5000" placeholder="e.g. 4-floor office in Al Hamra, 120 users, replacing old Wi-Fi 5, needs guest network and PoE for 30 IP phones, go-live before Ramadan">${esc(P.notes || "")}</textarea></label>
-        <div class="propbtns"><button type="button" class="primary" id="pDraft"${ai ? "" : " disabled title=\"Claude isn't set up on the tools site yet\""}>${(P.summary || []).length ? "Redraft all sections with Claude" : "Draft the proposal with Claude"}</button><span class="hint" id="pStat" style="margin:0">${ai ? "Import the customer's BoQ first (the button under the lines), then let Claude write the sections and draw the diagram. Prices stay exactly as in the lines." : "Claude drafting needs the ANTHROPIC_API_KEY setting on the tools site. You can still write the sections yourself."}</span></div>
-      </div>
+        <div class="propsteps"><span><b>1</b> Notes and site plan (optional)</span><span><b>2</b> Upload the customer's BoQ</span><span><b>3</b> Claude fills every section and draws the figure</span><span><b>4</b> Review, edit and save</span></div>
+        <label><span class="lbl">About the customer, the site and the requirement (helps Claude; optional)</span><textarea data-pf="notes" rows="3" maxlength="5000" placeholder="e.g. Vehicle Impound office area: main building with reception, manager office and IDF room; security block with MDF; servicing building; MDF to IDF about 100 m">${esc(P.notes || "")}</textarea></label>
+        <div class="propbtns">
+          <label class="btn" style="cursor:pointer">Site plan (optional)<input type="file" id="pSite" hidden accept=".png,.jpg,.jpeg,.webp,.pdf"></label><span class="hint" id="pSiteName" style="margin:0">${P.sitePlan ? "Traced from " + esc(P.sitePlan) : "Claude traces it into the site layout beside the topology"}</span>
+        </div>
+        <div class="propbtns"><button type="button" class="primary" id="pBoq"${ai ? "" : " disabled"}>Upload customer BoQ and draft the proposal</button><button type="button" id="pDraft"${ai ? "" : " disabled"}>${drafted ? "Redraft from the current lines" : "Draft from the current lines"}</button></div>
+        <div class="propstat" id="pStat">${ai ? (drafted ? "Drafted. Edit any section below, then save." : "Upload the BoQ (Excel, CSV, PDF or a photo). Claude reads it into the lines, then writes every section and draws the figure. Prices stay exactly as in the BoQ.") : "Claude drafting needs the ANTHROPIC_API_KEY setting on the tools site. You can still write the sections yourself."}</div>
+      </div></section>`, bottom: `<section class="panel prop" id="propBox">
+      <div class="prophd"><div><b>Proposal sections</b><span class="hint" style="margin:0">Filled by Claude from the BoQ. Open any section to review or edit it.</span></div></div>
       <div class="propdia" id="pDia"></div>
-      ${FIELDS.map(([g, fs]) => `<details class="propsec"${(P.summary || []).length ? "" : ""}><summary>${esc(g)}</summary><div class="propf">${fs.map(([k, l, r]) => r === "input" ? `<label><span class="lbl">${esc(l)}</span><input data-pf="${k}" maxlength="200" value="${esc(toField(k))}"></label>` : `<label><span class="lbl">${esc(l)}</span><textarea data-pf="${k}" rows="${r}">${esc(toField(k))}</textarea></label>`).join("")}</div></details>`).join("")}
-      <label class="chk"><input type="checkbox" id="pLetter"${P.letter === false ? "" : " checked"}> Include a covering letter${isTH() ? " (Bifold format only)" : ""}</label>
-    </section>`;
+      <details class="propsec" id="pItems"><summary>Scope and pricing table wording (per line)</summary><div class="propf" id="pItemsBody"></div></details>
+      ${FIELDS().map(([g, fs]) => `<details class="propsec"><summary>${esc(g)}</summary><div class="propf">${fs.map(([k, l, r]) => r === "input" ? `<label><span class="lbl">${esc(l)}</span><input data-pf="${k}" maxlength="200" value="${esc(toField(k))}"></label>` : `<label><span class="lbl">${esc(l)}</span><textarea data-pf="${k}" rows="${r}">${esc(toField(k))}</textarea></label>`).join("")}</div></details>`).join("")}
+      ${isTH() ? "" : `<label class="chk"><input type="checkbox" id="pLetter"${P.letter === false ? "" : " checked"}> Include a covering letter</label>`}
+    </section>` };
+  }
+  function drawItems() {
+    const box = document.getElementById("pItemsBody"); if (!box) return;
+    const lines = lineData();
+    box.innerHTML = lines.length ? `<p class="hint" style="margin:0">The scope table (3.2) uses the description and brand; the pricing table (4.1) uses the short label. Prices and quantities come from the lines.</p>` + lines.map((l, i) => { const it = itemFor(P.items, l, i);
+      return `<div class="propit" data-it="${i}" data-key="${esc(keyOf(l))}"><div class="pin">${i + 1}${l.sub ? " (sub)" : ""}</div><div><div class="pnm">${esc(l.name)}${l.model ? ` <span class="muted">${esc(l.model)}</span>` : ""}</div>
+        <div class="pgrid"><input data-f="label" maxlength="120" placeholder="Short label for the pricing table" value="${esc(it.label || "")}"><input data-f="brand" maxlength="60" placeholder="Brand" value="${esc(it.brand || "")}"><input data-f="qtyUnit" maxlength="30" placeholder="Qty / unit, e.g. 3 Nos" value="${esc(it.qtyUnit || "")}"></div>
+        <textarea data-f="scope" rows="2" maxlength="1000" placeholder="Scope table description">${esc(it.scope || "")}</textarea></div></div>`; }).join("") : `<p class="hint" style="margin:0">Add the lines or upload the BoQ first.</p>`;
+  }
+  function refill(root) {
+    root.querySelectorAll("[data-pf]").forEach(el => { if (el.dataset.pf !== "notes") el.value = toField(el.dataset.pf); });
+    drawItems(); drawDiagram();
   }
   function drawDiagram() {
     const box = document.getElementById("pDia"); if (!box) return;
-    const dg = P.diagram, has = dg && (dg.nodes || []).length && DIA();
-    const r = has ? DIA().svg(dg, colours()) : null;
-    box.innerHTML = `<div class="propdhd"><b>${esc(has ? dg.title || "Solution diagram" : "Solution diagram")}</b><span class="hint" style="margin:0">${has ? esc(dg.caption || "") : "Claude draws it from the BoQ and your notes."}</span></div>
+    const dg = P.diagram, r = dg && DIA() ? DIA().svg(dg, colours()) : null, has = !!r;
+    box.innerHTML = `<div class="propdhd"><b>${esc(has ? dg.title || "Solution figure" : "Solution figure")}</b><span class="hint" style="margin:0">${has ? esc(dg.caption || "") : "Claude draws the logical topology from the BoQ, and the site layout when a site plan is given."}</span></div>
       ${r ? `<div class="propsvg">${r.svg}</div>` : ""}
-      <div class="propbtns"><input id="pDiaInst" placeholder="${has ? "What to change, e.g. add the existing firewall above the core switch" : "Anything Claude should show (optional)"}" maxlength="500"><button type="button" id="pDiaGo"${B().D.ai ? "" : " disabled"}>${has ? "Redraw" : "Draw diagram"}</button>${has ? `<button type="button" class="danger" id="pDiaRm">Remove</button>` : ""}</div>`;
-    document.getElementById("pDiaGo").onclick = async e => { const b = e.target; b.disabled = true; b.textContent = "Drawing…"; try { const dgm = await ai("diagram", { instructions: document.getElementById("pDiaInst").value, diagram: P.diagram }); P.diagram = cleanDiagram(dgm); drawDiagram(); } catch (er) { B().toast(er.message, 1); b.disabled = false; b.textContent = has ? "Redraw" : "Draw diagram"; } };
+      <div class="propbtns"><input id="pDiaInst" placeholder="${has ? "What to change, e.g. move AP03 to the reception counters" : "Anything Claude should show (optional)"}" maxlength="500"><button type="button" id="pDiaGo"${B().D.ai ? "" : " disabled"}>${has ? "Redraw" : "Draw figure"}</button>${has ? `<button type="button" class="danger" id="pDiaRm">Remove</button>` : ""}</div>`;
+    document.getElementById("pDiaGo").onclick = async e => { const b = e.target; b.disabled = true; b.textContent = "Drawing…"; try { const dgm = await ai("diagram", { instructions: document.getElementById("pDiaInst").value, diagram: P.diagram, ...(SITEPLAN ? { file: SITEPLAN } : {}) }); P.diagram = cleanDiagram(dgm); drawDiagram(); } catch (er) { B().toast(er.message, 1); b.disabled = false; b.textContent = has ? "Redraw" : "Draw figure"; } };
     const rm = document.getElementById("pDiaRm"); if (rm) rm.onclick = () => { P.diagram = null; drawDiagram(); };
   }
-  const cleanDiagram = d => d && Array.isArray(d.nodes) ? { title: nd(d.title || ""), caption: nd(d.caption || ""), nodes: d.nodes.slice(0, 24), edges: (d.edges || []).slice(0, 60) } : null;
-  const colours = () => isTH() ? { primary: "#003C50", accent: "#28A08C", soft: "#E6F4F2", line: "#8FB5B9" } : { primary: "#1E5A8C", accent: "#D81F2A", soft: "#E8F0F7", line: "#8FA6BC" };
+  const cleanDiagram = d => { const n = DIA() && DIA().normalise(d); return n && n.topology ? { title: nd(n.title || ""), caption: nd(n.caption || ""), topology: { tiers: (n.topology.tiers || []).slice(0, 9).map(t => (t || []).slice(0, 3)), links: (n.topology.links || []).slice(0, 40) }, networks: (n.networks || []).slice(0, 5), site: n.site || null } : null; };
+  const colours = () => isTH() ? { primary: "#003C50", accent: "#28A08C", accent2: "#2A9D8F" } : { primary: "#1E5A8C", accent: "#D81F2A", accent2: "#2A9D8F" };
 
-  // ctx: { d, lines (live array), draw(), header() }
+  // Everything Claude writes, in parallel: summary and requirements, per-line wording (in parts of 20 lines),
+  // specifications, commercial terms and the figure. Prices are never touched.
+  async function draftAll(root, opts = {}) {
+    fromFields(root);
+    const lines = lineData(); if (!lines.length) { B().toast("Add the lines or upload the customer's BoQ first.", 1); return; }
+    if (!opts.auto && (P.summary || []).length && !confirm("Replace the written sections with a new draft from Claude? The lines and prices don't change.")) return;
+    const st = document.getElementById("pStat"), btns = [document.getElementById("pBoq"), document.getElementById("pDraft")];
+    btns.forEach(b => { if (b) b.disabled = true; });
+    st.className = "propstat busy"; st.textContent = `Claude is writing the proposal for ${lines.length} lines: summary, requirements, solution, scope wording, specifications, terms and the figure. About 30 to 45 seconds.`;
+    const chunks = []; for (let i = 0; i < lines.length; i += 20) chunks.push(lines.slice(i, i + 20).map((l, j) => ({ ...l, n: i + j + 1 })));
+    const jobs = [ai("story"), ai("specs"), ai("commercial"), ai("diagram", SITEPLAN ? { file: SITEPLAN } : {}), ...chunks.map(c => ai("scope", { lines: c.map(l => ({ n: l.n, section: l.section || "", sub: !!l.sub, name: l.name, description: l.description, model: l.model || "", qty: num(l.qty || 1), unit: l.unit || "" })) }))];
+    const res = await Promise.allSettled(jobs);
+    const val = i => res[i].status === "fulfilled" ? res[i].value : null;
+    const [s, sp, c, dg] = [val(0), val(1), val(2), val(3)];
+    const coName = isTH() ? "Tech Hub" : "Bifold";
+    if (s) Object.assign(P, { title: s.title || P.title, site: s.site || P.site || "", ref: s.ref || P.ref || "", tagline: s.tagline || P.tagline, summary: s.summary || [], background: s.background || [], requirements: s.requirements || [], assumptions: s.assumptions || [], overview: s.overview || [] });
+    if (sp) Object.assign(P, { specs: sp.specs || [], products: (sp.products || []).map(p => ({ ...p, description: Array.isArray(p.description) ? p.description.join(" ") : p.description })) });
+    if (c) Object.assign(P, { payment: c.payment || [], warranty: c.warranty || [], terms: (c.terms || []).map(t => Array.isArray(t) ? t : ["", t]), exclusions: c.exclusions || [], responsibilities: c.responsibilities || [],
+      timeline: { phases: ((c.timeline || {}).phases || []).map(p => ({ ...p, responsible: String(p.responsible || "").replace(/COMPANY/g, coName) })), total: (c.timeline || {}).total || "", weeks: (c.timeline || {}).weeks || 0 } });
+    if (isTH() && !(P.why || []).length) P.why = WHY_TH;
+    if (dg) P.diagram = cleanDiagram(dg);
+    const items = (P.items || []).slice();
+    res.slice(4).forEach(r => { if (r.status !== "fulfilled") return; (r.value.items || []).forEach(it => { const i = Number(it.n) - 1; const l = lines[i]; if (!l) return; items[i] = { key: keyOf(l), scope: nd(it.scope || ""), label: nd(it.label || ""), brand: nd(it.brand || "").replace(/COMPANY/g, coName), qtyUnit: nd(it.qtyUnit || "") }; }); });
+    P.items = items;
+    const failed = res.filter(r => r.status === "rejected");
+    refill(root);
+    const ti = document.getElementById("title"); if (ti && !ti.value && P.title) ti.value = P.title;
+    root.querySelectorAll("details.propsec").forEach(x => { x.open = false; });
+    btns.forEach(b => { if (b) b.disabled = false; }); const dr = document.getElementById("pDraft"); if (dr) dr.textContent = "Redraft from the current lines";
+    st.className = "propstat " + (failed.length ? "bad" : "ok");
+    st.textContent = failed.length ? `${res.length - failed.length} of ${res.length} parts drafted. ${failed[0].reason.message} Click Redraft to try the rest, or write them yourself.` : "Proposal drafted. Open any section below to review or edit it, preview, then save.";
+    if (failed.length) B().toast(failed[0].reason.message, 1);
+  }
+
+  // ctx: { d, lines (live array), draw(), header(), vat }
   function wire(ctx) {
-    CTX = ctx; const root = document.getElementById("propBox");
-    drawDiagram();
-    root.addEventListener("input", () => fromFields(root));
-    document.getElementById("pDraft").onclick = async e => {
-      fromFields(root);
-      if (!lineData().length) return B().toast("Add the lines or import the customer's BoQ first.", 1);
-      if ((P.summary || []).length && !confirm("Replace the written sections with a new draft from Claude? The lines and prices don't change.")) return;
-      const b = e.target, st = document.getElementById("pStat"); b.disabled = true; const t0 = b.textContent; b.textContent = "Claude is writing…"; st.textContent = "Drafting the summary, solution, terms and diagram in parallel. This takes about 30 seconds.";
-      const res = await Promise.allSettled([ai("story"), ai("commercial"), ai("diagram")]);
-      const [s, c, dg] = res.map(r => r.status === "fulfilled" ? r.value : null);
-      if (s) Object.assign(P, { title: s.title || P.title, tagline: s.tagline || P.tagline, summary: s.summary || [], background: s.background || [], requirements: s.requirements || [], assumptions: s.assumptions || [], overview: s.overview || [], products: (s.products || []).map(p => ({ ...p, description: Array.isArray(p.description) ? p.description.join(" ") : p.description })) });
-      if (c) Object.assign(P, { payment: c.payment || [], warranty: c.warranty || [], terms: c.terms || [], exclusions: c.exclusions || [], responsibilities: c.responsibilities || [], why: c.why || [],
-        timeline: { phases: ((c.timeline || {}).phases || []).map(p => ({ ...p, responsible: String(p.responsible || "").replace(/COMPANY/g, isTH() ? "Tech Hub" : "Bifold") })), total: (c.timeline || {}).total || "", weeks: (c.timeline || {}).weeks || 0 } });
-      if (dg) P.diagram = cleanDiagram(dg);
-      const failed = res.filter(r => r.status === "rejected");
-      root.querySelectorAll("[data-pf]").forEach(el => { if (el.dataset.pf !== "notes") el.value = toField(el.dataset.pf); });
-      if (!document.getElementById("ed").querySelector("#title").value && P.title) document.getElementById("ed").querySelector("#title").value = P.title;
-      drawDiagram(); root.querySelectorAll("details.propsec").forEach(x => { x.open = true; });
-      b.disabled = false; b.textContent = "Redraft all sections with Claude";
-      st.textContent = failed.length ? `Part of the draft failed (${failed[0].reason.message}). Try again for the rest, or write it yourself.` : "Draft ready. Read it through and edit anything below, then save.";
-      if (failed.length) B().toast(failed[0].reason.message, 1);
-    };
+    CTX = ctx; const root = document.getElementById("ed");
+    drawDiagram(); drawItems();
+    root.addEventListener("input", e => { if (e.target.closest("#propTop,#propBox")) fromFields(root); });
+    document.getElementById("pItems").addEventListener("toggle", e => { if (e.target.open) { fromFields(root); drawItems(); } });
+    document.getElementById("pSite").onchange = async e => { const f = e.target.files[0]; if (!f) return; if (f.size > 5 * 1024 * 1024) { B().toast("The site plan must be under 5 MB.", 1); return; }
+      SITEPLAN = { name: f.name, type: f.type || (/\.pdf$/i.test(f.name) ? "application/pdf" : "image/png"), data: await b64(f) }; P.sitePlan = f.name; document.getElementById("pSiteName").textContent = "Site plan: " + f.name; };
+    document.getElementById("pDraft").onclick = () => draftAll(root);
+    document.getElementById("pBoq").onclick = async () => { if (await importInto(ctx)) await draftAll(root, { auto: true }); };
+  }
+  // Imports the customer's BoQ into the editor's lines. Returns true when lines were added.
+  async function importInto(ctx) {
+    const r = await importBoq(); if (!r) return false;
+    if (r.replace) ctx.lines.splice(0, ctx.lines.length);
+    ctx.lines.push(...r.lines.map(l => ({ ...l, vat: ctx.vat ? "SR" : "OS" }))); ctx.draw();
+    B().toast(`${r.lines.length} line${r.lines.length === 1 ? "" : "s"} imported from the BoQ.`);
+    return true;
   }
   const lineData = () => (CTX ? CTX.lines : []).filter(l => l && (l.name || l.description));
   function totals(lines) {
@@ -118,7 +177,7 @@ const BKPROP = (function () {
     return B().api("POST", "ai", { part, customer: h.customer, attention: h.attention, title: h.title || P.title, notes: P.notes || "", validDays: h.validDays, subtotal: t.sub, total: t.total,
       lines: lines.map(l => ({ section: l.section || "", sub: !!l.sub, name: l.name, description: l.description, model: l.model || "", qty: num(l.qty || 1), unit: l.unit || "", rate: num(l.rate) })), ...(extra || {}) });
   }
-  const value = () => { const root = document.getElementById("propBox"); if (root) fromFields(root); const out = JSON.parse(JSON.stringify(P)); const lt = document.getElementById("pLetter"); out.letter = lt ? lt.checked : true; return out; };
+  const value = () => { const root = document.getElementById("ed"); if (root) fromFields(root); const out = JSON.parse(JSON.stringify(P)); const lt = document.getElementById("pLetter"); out.letter = lt ? lt.checked : P.letter !== false; return out; };
 
   /* ---------- customer BoQ import (Excel, CSV, PDF, photo, pasted text) ---------- */
   const SKIP = /^(sub[\s-]?total|total|grand total|vat|net total|total amount|amount in words|discount)\b/i;
@@ -215,19 +274,25 @@ const BKPROP = (function () {
     const client = d.contactName, title = nd(p.title || d.title || "Commercial Proposal");
     const docNo = d.number || "DRAFT";
     let img = null;
-    if (p.diagram && (p.diagram.nodes || []).length && DIA()) {
-      const pg = await DIA().png(p.diagram, colours(), 2);
-      if (pg) { const w = Math.min(640, pg.w), h = Math.round(pg.h * w / pg.w); img = { bytes: pg.bytes, w, h }; }
+    if (p.diagram && DIA()) {
+      const pg = await DIA().png(p.diagram, colours(), 2.5);
+      if (pg) { const w = Math.min(650, pg.w), h = Math.round(pg.h * w / pg.w); img = { bytes: pg.bytes, w, h }; }
     }
     const prose = (p.products || []).map(pr => [pr.title + (pr.code ? ` (${pr.code})` : "") + ".", pr.description, (pr.specs || []).map(s => `${s[0]}: ${s[1]}`).join(". ")].filter(Boolean).join(" ").replace(/\.\./g, ".") + (/[.]$/.test(pr.title) ? "" : ""));
     if (isTH()) {
+      const seq = (String(d.number || "").match(/(\d+)\s*$/) || [, "001"])[1].slice(-3).padStart(3, "0");
+      const ref = String(p.ref || "").toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const unitWord = l => { const u = String(l.unit || "").trim(); return u ? u : (Number(l.qty) === 1 ? "No" : "Nos"); };
+      const specs = (p.specs || []).length ? p.specs : prose;
       const cfg = {
-        meta: { title, client, proposalNo: docNo, date: longDate(d.date), validUntil: `${longDate(d.dueDate)} (${days} days from issue)`, preparedBy: d.salesperson ? `${d.salesperson}, Tech Hub Information Technology` : "Tech Hub Information Technology" },
+        meta: { title, client: client + (p.site ? ` (${nd(p.site)})` : ""), preparedFor: client, proposalNo: d.number ? `TH-PROP-${d.date.slice(0, 4)}-${ref ? ref + "-" : ""}${seq}` : "DRAFT", date: longDate(d.date), validUntil: `${longDate(d.dueDate)} (${days} days from issue)`, preparedBy: "Tech Hub Information Technology" },
         executiveSummary: p.summary || [],
         clientUnderstanding: { background: p.background || [], scope: p.requirements || [], assumptions: p.assumptions || [], exclusions: p.exclusions || [] },
-        solution: { overview: p.overview || [], specs: prose, boq: { vatRate: 5, sections: sections(lines).map(s => ({ title: s.title, items: s.items.map(l => ({ description: [l.name, l.description].filter(Boolean).join(" "), model: l.model || "", qtyUnit: `${l.qty}${l.unit ? " " + l.unit : ""}`, priceLabel: l.name, qty: l.qty, unit: l.rate, total: l.net, italic: !!l.sub })) })), subTotal: t.sub, vat: t.vat, total: t.total } },
+        solution: { overview: p.overview || [], specs, boq: { vatRate: 5, sections: sections(lines).map(s => ({ title: s.title, items: s.items.map(l => { const it = itemFor(p.items, l, lines.indexOf(l));
+          return { description: it.scope || [l.name, l.description].filter(Boolean).join(" "), model: [it.brand, l.model].filter(Boolean).join(" / ") || (l.model || ""), partNo: l.model || it.brand || "", qtyUnit: it.qtyUnit || `${l.qty} ${unitWord(l)}`, priceLabel: it.label || l.name, qty: l.qty, unit: l.rate, total: l.net, italic: !!l.sub }; }) })), subTotal: t.sub, vat: t.vat, total: t.total } },
         commercial: { paymentTerms: p.payment || [] }, timeline: { phases: (p.timeline || {}).phases || [], total: (p.timeline || {}).total || "" }, warranty: p.warranty || [],
-        terms: (p.terms || []).map(r => r[0] ? `${r[0]}: ${r[1]}` : r[1]), whyTechHub: (p.why || []).filter(c => c.title), diagram: p.diagram || {},
+        terms: (p.terms || []).map(r => Array.isArray(r) ? (r[0] ? `${r[0]}: ${r[1]}` : r[1]) : r), whyTechHub: ((p.why || []).length ? p.why : WHY_TH).filter(c => c.title), diagram: p.diagram || {},
+        closing: `Thank you for considering Tech Hub for your IT procurement needs. We look forward to a successful partnership with ${client}${p.site ? ` (${nd(p.site)})` : ""}.`,
       };
       return BKPROPDOCX.techhub(cfg, img);
     }
@@ -244,7 +309,7 @@ const BKPROP = (function () {
       overview: [...(p.summary || []), ...(p.background || [])],
       solutionBrief: (p.overview || []).length || (p.requirements || []).length ? { intro: (p.overview || []).join(" "), pillars: p.requirements || [] } : null,
       products: p.products || [], diagram: p.diagram || {},
-      boq: { sections: sections(lines).map((s, si) => { let sub = 0; return { title: s.title ? `${String(si + 1).padStart(2, "0")}.  ${s.title}` : "", items: s.items.map(l => { if (!l.sub) { ref++; sub = 0; } else sub++; return { ref: l.sub ? `${ref}.${sub}` : String(ref), description: [l.name, l.description, l.model ? `(${l.model})` : ""].filter(Boolean).join(" "), qty: String(l.qty), unit: l.rate ? fmt(l.rate) : "TBD", total: l.rate ? fmt(l.net) : "TBD", italic: !!l.sub }; }) }; }),
+      boq: { sections: sections(lines).map((s, si) => { let sub = 0; return { title: s.title ? `${String(si + 1).padStart(2, "0")}.  ${s.title}` : "", items: s.items.map(l => { if (!l.sub) { ref++; sub = 0; } else sub++; const it = itemFor(p.items, l, lines.indexOf(l)); return { ref: l.sub ? `${ref}.${sub}` : String(ref), description: (it.scope || [l.name, l.description].filter(Boolean).join(" ")) + (l.model ? ` (${l.model})` : ""), qty: String(l.qty), unit: l.rate ? fmt(l.rate) : "TBD", total: l.rate ? fmt(l.net) : "TBD", italic: !!l.sub }; }) }; }),
         totals: { exVat: "AED " + fmt(t.sub), vat: "AED " + fmt(t.vat), vatRate: "5%", incVat: "AED " + fmt(t.total) } },
       payment: p.payment || [], terms: [...(p.warranty || []), ...(p.terms || [])].map(r => [r[0] || "Note", r[1]]),
       projectManagement: { intro: "BIFOLD TECHNOLOGIES LLC will assign a dedicated Project Manager and certified engineers for the deployment, responsible for:", responsibilities: p.responsibilities || [] },
@@ -272,7 +337,7 @@ const BKPROP = (function () {
   function save(blob, name) { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); }
   async function download(d) { save(await build(d), fileName(d)); }
 
-  return { panel, wire, value, importBoq, preview, download, build, fileName, lineFrom };
+  return { panel, wire, value, importBoq, importInto, preview, download, build, fileName, lineFrom };
 })();
 // docx-preview exposes window.docx (clashing with docx.js); render through whichever global it registered.
 window.docx_preview_render = async (blob, el) => {

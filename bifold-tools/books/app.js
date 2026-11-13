@@ -699,6 +699,7 @@ function lineEditor(d) {
   const kind = side === "sales" ? "customer" : "vendor";
   const [title, tag] = headerFor(d, isNew);
   const fmt0 = t === "quote" ? (d.format || params().format || "quote") : "";
+  const PROP = t === "quote" ? BKPROP.panel(d) : null;
   const vatOpts = Object.entries(D.vat).filter(([, v]) => side === "sales" ? v.sales : v.purch);
   const defAcct = side === "sales" ? "4000" : t === "expense" ? "6950" : "5000";
   const lines = (d.lines && d.lines.length ? d.lines : [{ qty: 1, vat: "SR", account: defAcct }]).map(l => ({ ...l }));
@@ -729,12 +730,13 @@ function lineEditor(d) {
       ${vat && side === "sales" ? `<div class="note warn" id="drBox" hidden><b>Domestic reverse charge on electronic devices (Cabinet Decision No. 91 of 2023)</b>Only for phones, computers, tablets and their parts sold to a VAT-registered customer who will resell them or use them to make electronic devices. No VAT is charged; the customer accounts for it. Get their written declaration before the supply.<label class="chk" style="margin-top:6px"><input type="checkbox" id="drDeclaration"${d.drDeclaration ? " checked" : ""}> The customer's signed declaration (VAT registered, buying to resell or manufacture) is on file</label></div>` : ""}
       ${vat && side === "purch" ? `<div class="hint">Buying phones, computers, tablets or parts to resell? Use <b>Domestic reverse charge</b>: the supplier shouldn't charge VAT, and you give them your written declaration.</div>` : ""}
       <div class="hint" id="cinfo"></div></section>
+      ${PROP ? PROP.top : ""}
       <section class="panel" style="padding:0;overflow:hidden"><div class="tblwrap"><table class="lines"><thead><tr><th class="h">#</th><th>Item / description</th><th class="n">Qty</th><th class="p">Rate</th><th class="d">Disc %</th>${vat ? `<th class="v">VAT</th>` : ""}<th class="a">Account</th><th class="amt">Amount</th><th class="rm"></th></tr></thead><tbody id="lines"></tbody></table></div>
         <div style="padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="addLine">+ Add line</button>${t === "quote" ? `<button type="button" id="impBoq">Import customer BoQ</button>` : ""}${D.perms.items ? `<a class="btn" href="#/items" target="_blank">Manage items</a>` : ""}</div>
         <div style="padding:0 16px 14px"><div class="totals" id="totals"></div></div></section>
       <section class="panel"><div class="row"><label><span class="lbl">Notes${side === "sales" ? " (shown on the document)" : ""}</span><textarea id="notes" rows="3" maxlength="3000">${esc(d.notes || "")}</textarea></label>
         ${["quote", "invoice", "po"].includes(t) ? `<label><span class="lbl">Terms and conditions</span><textarea id="terms" rows="3" maxlength="4000">${esc(d.terms != null && !d._fresh ? d.terms : d.terms || (t === "quote" ? s.quoteTerms : t === "po" ? s.poTerms : s.invoiceTerms))}</textarea></label>` : ""}</div></section>
-      ${t === "quote" ? BKPROP.panel(d) : ""}
+      ${PROP ? PROP.bottom : ""}
       ${editorFiles(d)}
       <div class="err" id="err"></div>
       <div class="edfoot">${saveBtns}</div>
@@ -777,8 +779,9 @@ function lineEditor(d) {
     const setFmt = f => { $("ed").classList.toggle("prop", f === "proposal"); $("fmtSeg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.f === f));
       $("fmtHint").textContent = f === "proposal" ? "A detailed proposal: summary, requirements, solution diagram, product descriptions, timeline, terms." : "A one-page quotation PDF with the lines and terms."; };
     $("fmtSeg").querySelectorAll("button").forEach(x => x.onclick = () => setFmt(x.dataset.f));
-    BKPROP.wire({ d, lines, draw, header: () => { const c = CUS.get($("contact").value) || {}; return { customer: c.name || "", attention: $("attention") ? $("attention").value : "", title: $("title") ? $("title").value : "", validDays: Math.max(1, daysBetween($("date").value, $("dueDate").value)) }; } });
-    $("impBoq").onclick = async () => { const r = await BKPROP.importBoq(); if (!r) return; if (r.replace) lines.splice(0, lines.length); lines.push(...r.lines.map(l => ({ ...l, vat: vat ? "SR" : "OS" }))); draw(); toast(`${r.lines.length} line${r.lines.length === 1 ? "" : "s"} imported. Check the prices before saving.`); };
+    BKPROP.wire({ d, lines, draw, vat, header: () => { const c = CUS.get($("contact").value) || {}; return { customer: c.name || "", attention: $("attention") ? $("attention").value : "", title: $("title") ? $("title").value : "", validDays: Math.max(1, daysBetween($("date").value, $("dueDate").value)) }; } });
+    // In proposal mode an imported BoQ goes straight on to Claude drafting every section.
+    $("impBoq").onclick = () => $("ed").classList.contains("prop") ? $("pBoq").click() : BKPROP.importInto({ lines, draw, vat });
   }
   $("app").querySelectorAll("[data-s]").forEach(b => b.onclick = async () => {
     $("err").textContent = "";

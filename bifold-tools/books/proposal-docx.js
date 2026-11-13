@@ -72,15 +72,15 @@ const BKPROPDOCX = (function () {
     return table(g, rows);
   }
   function secPricing(boq) {
-    const g = [520, 4406, 1100, 1860, 1860]; const rows = [row([H("#", g[0], "center"), H("Item / Service", g[1]), H("Qty", g[2], "center"), H("Unit Price (AED)", g[3], "right"), H("Total (AED)", g[4], "right")], true)]; let n = 0;
+    const g = [480, 2150, 3216, 600, 1500, 1800]; const rows = [row([H("#", g[0], "center"), H("Part No.", g[1]), H("Item / Service", g[2]), H("Qty", g[3], "center"), H("Unit (AED)", g[4], "right"), H("Total (AED)", g[5], "right")], true)]; let n = 0;
     boq.sections.forEach(sec => {
-      if (sec.title) rows.push(row([cell(sec.title, CW, { span: 5, fill: SUB, bold: true, color: NAVY })]));
+      if (sec.title) rows.push(row([cell(sec.title, CW, { span: 6, fill: SUB, bold: true, color: NAVY })]));
       sec.items.forEach(it => { const sub = it.italic; if (!sub) n++; const f = sub ? SUB : null, c = sub ? GREY : TEXT;
-        rows.push(row([cell(sub ? "" : String(n), g[0], { align: "center", fill: f }), cell(it.priceLabel || it.description, g[1], { italic: sub, color: c, fill: f }), cell(String(it.qty), g[2], { align: "center", italic: sub, color: c, fill: f }),
-          cell(money(it.unit), g[3], { align: "right", italic: sub, color: c, fill: f }), cell(money(it.total), g[4], { align: "right", bold: !sub, italic: sub, color: sub ? GREY : NAVY, fill: f })])); });
+        rows.push(row([cell(sub ? "" : String(n), g[0], { align: "center", fill: f }), cell(it.partNo || "", g[1], { bold: !sub, sz: 16, color: c, fill: f }), cell(it.priceLabel || it.description, g[2], { italic: sub, color: c, fill: f }), cell(String(it.qty), g[3], { align: "center", italic: sub, color: c, fill: f }),
+          cell(money(it.unit), g[4], { align: "right", italic: sub, color: c, fill: f }), cell(money(it.total), g[5], { align: "right", bold: !sub, italic: sub, color: sub ? GREY : NAVY, fill: f })])); });
     });
-    const span = g[0] + g[1] + g[2] + g[3];
-    const tr = (l, v, navy) => row([cell(l, span, { span: 4, fill: navy ? NAVY : SUB, bold: true, color: navy ? WHITE : NAVY, align: "right" }), cell(v, g[4], { fill: navy ? NAVY : SUB, bold: true, color: navy ? WHITE : NAVY, align: "right" })]);
+    const span = g[0] + g[1] + g[2] + g[3] + g[4];
+    const tr = (l, v, navy) => row([cell(l, span, { span: 5, fill: navy ? NAVY : SUB, bold: true, color: navy ? WHITE : NAVY, align: "right" }), cell(v, g[5], { fill: navy ? NAVY : SUB, bold: true, color: navy ? WHITE : NAVY, align: "right" })]);
     rows.push(tr("Sub-Total (Excl. VAT)", "AED " + money(boq.subTotal)), tr(`VAT (${boq.vatRate}%)`, "AED " + money(boq.vat)));
     if (boq.discount) rows.splice(rows.length - 2, 0, tr("Discount", "AED " + money(-boq.discount)));
     rows.push(tr("TOTAL INVESTMENT (INCL. VAT)", "AED " + money(boq.total), true));
@@ -119,8 +119,8 @@ const BKPROPDOCX = (function () {
       if (cu.assumptions.length || cu.exclusions.length) { sh("Assumptions & Exclusions"); cu.assumptions.forEach(t => P.push(bodyP(t, true))); cu.exclusions.forEach(t => P.push(bullet(t))); }
     }
     sec("PROPOSED SOLUTION"); sub = 0;
-    if (sol.overview.length) { sh("Solution Overview"); sol.overview.forEach(t => P.push(bodyP(t))); }
-    if (img) { sh(c.diagram.title || "Solution Architecture"); P.push(para(image("rIdDiag1", img.w, img.h, "Solution diagram"), { align: "center", after: 60 })); if (c.diagram.caption) P.push(para(run(c.diagram.caption, { color: GREY, italic: true, sz: 18 }), { align: "center", after: 160 })); }
+    if (sol.overview.length || img) { sh("Solution Overview"); sol.overview.forEach(t => P.push(bodyP(t))); }
+    if (img) { P.push(para(image("rIdDiag1", img.w, img.h, "Solution figure"), { align: "center", before: 80, after: 60, keepNext: true })); P.push(para(run(c.diagram.caption || "Figure 1 - Logical network topology.", { color: GREY, italic: true, sz: 18 }), { align: "center", after: 160 })); }
     sh("Scope of Supply & Services"); P.push(secScope(sol.boq));
     if (sol.specs.length) { sh("Technical Specifications"); sol.specs.forEach(t => P.push(bodyP(t, true))); }
     sec("COMMERCIAL OFFER"); sub = 0;
@@ -140,7 +140,7 @@ const BKPROPDOCX = (function () {
     const zip = await window.JSZip.loadAsync(await r.arrayBuffer());
     let doc = await zip.file("word/document.xml").async("string");
     const m = c.meta;
-    const tok = { "{{TITLE}}": m.title || "Commercial Proposal", "{{CLIENT}}": m.client, "{{PROPOSAL_NO}}": m.proposalNo, "{{DATE}}": m.date, "{{PREPARED_FOR}}": m.client, "{{PREPARED_BY}}": m.preparedBy || "Tech Hub Information Technology", "{{VALID_UNTIL}}": m.validUntil };
+    const tok = { "{{TITLE}}": m.title || "Commercial Proposal", "{{CLIENT}}": m.client, "{{PROPOSAL_NO}}": m.proposalNo, "{{DATE}}": m.date, "{{PREPARED_FOR}}": m.preparedFor || m.client, "{{PREPARED_BY}}": m.preparedBy || "Tech Hub Information Technology", "{{VALID_UNTIL}}": m.validUntil };
     Object.entries(tok).forEach(([k, v]) => { doc = doc.split(k).join(x(v || "")); });
     const at = doc.lastIndexOf("<w:sectPr"); if (at < 0) throw new Error("The proposal template is damaged.");
     doc = doc.slice(0, at) + thBody(c, img) + "\n" + doc.slice(at);

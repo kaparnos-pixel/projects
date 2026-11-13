@@ -345,7 +345,7 @@ const STAGE_NAMES = { lead: "Lead", survey: "Site survey", proposal: "Proposal s
 const STAGE_PROB = { lead: 10, survey: 20, proposal: 40, negotiation: 60, po: 90, won: 100, lost: 0 };
 const COMPANIES = ["Bifold Technologies", "Tech Hub IT"];
 const DEAL_COLS = ["RowKey", "co", "title", "company", "customerId", "customerName", "value", "stage", "probability", "expectedClose",
-  "source", "nextAction", "nextActionDate", "lostReason", "notes", "owner", "closedAt", "stageAt", "createdBy", "createdAt", "updatedAt", "updatedBy"];
+  "source", "nextAction", "nextActionDate", "lostReason", "notes", "owner", "closedAt", "stageAt", "createdBy", "createdAt", "updatedAt", "updatedBy", "files"];
 const LOG_MAX = 200;
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s));
 
@@ -356,6 +356,7 @@ function dealOut(e) {
     source: e.source || "", nextAction: e.nextAction || "", nextActionDate: e.nextActionDate || "", lostReason: e.lostReason || "",
     notes: e.notes || "", owner: e.owner, closedAt: e.closedAt || "", stageAt: e.stageAt || "",
     createdBy: e.createdBy, createdAt: e.createdAt, updatedAt: e.updatedAt, updatedBy: e.updatedBy,
+    fileCount: dealFiles(e).length,
   };
 }
 const dealVisible = (e, user) => inCo(e, user) && (user.isManager || e.owner === user.email);
@@ -406,7 +407,7 @@ async function loadDeal(user, id) {
   if (!e || !dealVisible(e, user)) fail(404, "This deal doesn't exist, was deleted, or isn't assigned to you.");
   return e;
 }
-const dealFull = e => ({ ...dealOut(e), log: unpackJson(e).log || [], etag: e.etag });
+const dealFull = e => ({ ...dealOut(e), log: unpackJson(e).log || [], files: dealFiles(e), etag: e.etag });
 async function getDeal(user, id) { return dealFull(await loadDeal(user, id)); }
 
 function describeChanges(cur, f) {
@@ -452,6 +453,7 @@ async function updateDeal(user, id, b) {
     closedAt: closed ? (stageChanged || !cur.closedAt ? now : cur.closedAt) : "",
     stageAt: stageChanged ? now : (cur.stageAt || cur.createdAt),
     createdBy: cur.createdBy, createdAt: cur.createdAt, updatedAt: now, updatedBy: user.email, ...packJson({ log }),
+    files: cur.files || "[]",
   };
   if (user.aud) { user.aud.changes = audit().diff(cur, next); user.aud.name = cur.title || cur.customerName; }
   try {
@@ -481,6 +483,98 @@ async function deleteDeal(user, id) {
   writeCo(user);
   if (!user.isManager && cur.owner !== user.email) fail(403, "Only the owner or a manager can delete this deal.");
   await (await table(DEALS)).deleteEntity(DPK, id);
+  const files = dealFiles(cur);
+  if (files.length) { const c = await dealBlobs(); await Promise.all(files.map(f => c.deleteBlob(f.id).catch(() => {}))); }
+}
+
+// ---------- deal files: proposals, quotes, estimations, survey photos (Blob Storage "deal-files") ----------
+// The list lives in the deal row's "files" column. Anyone who can see the deal (its owner and managers) can
+// add, view, retype and remove files. Each file remembers the stage the deal was at when it was added.
+const DEAL_FILE_MAX = 10 * 1048576, DEAL_FILES_MAX = 100;
+const DEAL_FILE_KINDS = { proposal: "Proposal", quote: "Quotation", estimation: "Estimation / costing", photo: "Site survey photo",
+  survey: "Survey report", drawing: "BoQ / drawing", po: "Customer PO", customer: "Customer document", other: "Other" };
+function dealFiles(e) { try { const a = JSON.parse(e.files || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } }
+let dealContainer;
+async function dealBlobs() {
+  if (!dealContainer) {
+    const cs = process.env.STORAGE_CONNECTION; if (!cs) fail(500, "Storage is not set up yet. Add the STORAGE_CONNECTION setting to the Static Web App.");
+    const c = BlobServiceClient.fromConnectionString(cs).getContainerClient("deal-files");
+    await c.createIfNotExists();
+    dealContainer = c;
+  }
+  return dealContainer;
+}
+// Change the file list (and note it in the deal's activity) with a retry, in case two people change files at once.
+async function changeDealFiles(user, id, fn) {
+  const t = await table(DEALS);
+  for (let i = 0; i < 4; i++) {
+    const e = await loadDeal(user, id);
+    const r = fn(dealFiles(e), e);
+    let log = unpackJson(e).log || [];
+    if (r.log) log = addLog(log, logEntry(user, "file", r.log));
+    try {
+      await t.updateEntity({ partitionKey: DPK, rowKey: id, files: JSON.stringify(r.files), ...packJson({ log }), updatedAt: new Date().toISOString(), updatedBy: user.email }, "Merge", { etag: e.etag });
+      return getDeal(user, id);
+    } catch (err) { if (err.statusCode !== 412) throw err; }
+  }
+  fail(409, "The files were changed by someone else at the same time. Try again.");
+}
+async function addDealFile(user, id, b) {
+  const e = await loadDeal(user, id);
+  writeCo(user);
+  if (dealFiles(e).length >= DEAL_FILES_MAX) fail(400, `A deal can hold at most ${DEAL_FILES_MAX} files. Remove some old ones first.`);
+  const kind = DEAL_FILE_KINDS[b.kind] ? b.kind : "other";
+  const name = clean(b.name, 200).replace(/[\\/\u0000-\u001f]/g, "_") || "file"; const type = clean(b.type, 120) || "application/octet-stream";
+  const buf = Buffer.from(String(b.data || ""), "base64");
+  if (!buf.length) fail(400, `${name} is empty.`);
+  if (buf.length > DEAL_FILE_MAX) fail(413, `${name} is larger than 10 MB.`);
+  const fid = crypto.randomUUID();
+  await (await dealBlobs()).getBlockBlobClient(fid).uploadData(buf, { blobHTTPHeaders: { blobContentType: type }, metadata: { name: encodeURIComponent(name), deal: id, co: rowCo(e) } });
+  const f = { id: fid, kind, name, type, size: buf.length, stage: e.stage, by: user.email, at: new Date().toISOString() };
+  if (user.aud) user.aud.name = e.title || e.customerName;
+  try {
+    const out = await changeDealFiles(user, id, l => {
+      if (l.length >= DEAL_FILES_MAX) fail(400, `A deal can hold at most ${DEAL_FILES_MAX} files. Remove some old ones first.`);
+      return { files: l.concat(f), log: `Added ${DEAL_FILE_KINDS[kind]}: ${name}` };
+    });
+    return { ...out, file: f };
+  } catch (err) { await (await dealBlobs()).deleteBlob(fid).catch(() => {}); throw err; }
+}
+async function editDealFile(user, id, fid, b) {
+  writeCo(user);
+  if (!DEAL_FILE_KINDS[b.kind]) fail(400, "Choose what kind of file this is.");
+  let found = false;
+  const out = await changeDealFiles(user, id, (l, e) => {
+    if (user.aud) user.aud.name = e.title || e.customerName;
+    let log = "";
+    const files = l.map(f => { if (f.id !== fid) return f; found = true; if (f.kind !== b.kind) log = `Marked ${f.name} as ${DEAL_FILE_KINDS[b.kind]}`; if (user.aud) user.aud.changes = [`${f.name}: ${DEAL_FILE_KINDS[f.kind] || f.kind} to ${DEAL_FILE_KINDS[b.kind]}`]; return { ...f, kind: b.kind }; });
+    if (!found) fail(404, "That file is no longer attached.");
+    return { files, log };
+  });
+  return out;
+}
+async function removeDealFile(user, id, fid) {
+  writeCo(user);
+  let gone = null;
+  const out = await changeDealFiles(user, id, (l, e) => {
+    gone = l.find(f => f.id === fid);
+    if (!gone) fail(404, "That file is no longer attached.");
+    if (user.aud) { user.aud.name = gone.name; user.aud.changes = [`Deal: ${e.title || e.customerName}`]; }
+    return { files: l.filter(f => f.id !== fid), log: `Removed ${DEAL_FILE_KINDS[gone.kind] || "file"}: ${gone.name}` };
+  });
+  await (await dealBlobs()).deleteBlob(fid).catch(() => {});
+  return out;
+}
+async function getDealFile(user, id, fid, download) {
+  const e = await loadDeal(user, id);
+  const f = dealFiles(e).find(x => x.id === fid);
+  if (!f) fail(404, "That file is no longer attached.");
+  if (user.aud) { user.aud.name = f.name; user.aud.changes = [`Deal: ${e.title || e.customerName}`]; }
+  let buf;
+  try { buf = await (await dealBlobs()).getBlockBlobClient(fid).downloadToBuffer(); } catch (err) { if (err.statusCode === 404) fail(404, "That file is no longer available."); throw err; }
+  // Only images and PDFs open in the browser; anything else always downloads (never rendered as a web page).
+  const inline = !download && /^(image\/(png|jpeg|gif|webp)|application\/pdf)$/.test(f.type);
+  return { __binary: buf, headers: { "Content-Type": inline ? f.type : "application/octet-stream", "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(f.name)}`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } };
 }
 
 // ---------- PDC log: post-dated cheques, security deposits and advance payment guarantees ----------
@@ -756,6 +850,13 @@ async function route(method, seg, user, body) {
     if (!id && method === "GET") return listDeals(user);
     if (!id && method === "POST") return createDeal(user, body);
     if (id && sub === "notes" && method === "POST") return addDealNote(user, id, body);
+    if (id && sub === "files") {
+      const fid = seg[3];
+      if (!fid && method === "POST") return addDealFile(user, id, body);
+      if (fid && method === "GET") return getDealFile(user, id, fid, seg[4] === "download");
+      if (fid && method === "PUT") return editDealFile(user, id, fid, body);
+      if (fid && method === "DELETE") return removeDealFile(user, id, fid);
+    }
     if (id && !sub && method === "GET") return getDeal(user, id);
     if (id && !sub && method === "PUT") return updateDeal(user, id, body);
     if (id && !sub && method === "DELETE") return deleteDeal(user, id);
@@ -777,7 +878,7 @@ function shouldRecord(method, seg, status, user, body) {
   if (a === "audit") return false;
   if (a === "mk" && (b === "audience" || b === "render.js")) return false;
   if (a === "me") return !!(user && user.aud && user.aud.signin);
-  const fileGet = method === "GET" && ((a === "pnl" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c));
+  const fileGet = method === "GET" && ((a === "pnl" && c === "files" && seg[3]) || (a === "deals" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c));
   // Photos and signatures shown in the report editor are not logged one by one; downloads are.
   if (a === "pcr" && b === "files" && method === "GET") return seg[3] === "download" || status === 403;
   // Refused reads are logged for people who have some access (trying beyond it); people with none are logged at sign-in.

@@ -62,6 +62,13 @@ module.exports = function makeAudit(H) {
     }
     if (a === "deals") {
       if (c === "notes") return ["Sales Pipeline", "Added a note", out.title || name || b, clean(body.text, 120)];
+      if (c === "files") {
+        const DK = { proposal: "proposal", quote: "quotation", estimation: "estimation", photo: "site survey photo", survey: "survey report", drawing: "BoQ / drawing", po: "customer PO", customer: "customer document" };
+        if (method === "POST") return ["Sales Pipeline", "Uploaded " + (DK[body.kind] || "file"), clean(body.name, 200), `Deal ${out.title || name || b}`];
+        if (method === "GET") return ["Sales Pipeline", e === "download" ? "Downloaded file" : "Opened file", name, ch || `Deal ${b}`];
+        if (method === "PUT") return ["Sales Pipeline", "Changed file type", out.title || name || b, ch];
+        if (method === "DELETE") return ["Sales Pipeline", "Deleted file", name, ch];
+      }
       if (method === "POST") return ["Sales Pipeline", "Created deal", out.title || out.customerName, [out.customerName, out.value ? "AED " + short(out.value) : ""].filter(Boolean).join(", ")];
       if (method === "PUT") return ["Sales Pipeline", "Edited deal", out.title || name || b, ch];
       if (method === "DELETE") return ["Sales Pipeline", "Deleted deal", name || b, ""];

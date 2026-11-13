@@ -94,6 +94,52 @@ textarea{resize:vertical;min-height:64px}
 .log li.stage{border-left-color:var(--red)}
 .log .w{font-size:11px;color:var(--muted)}
 .lostbox{background:var(--sunk);border-radius:8px;padding:10px}
+
+/* files */
+.files{border-top:1px solid var(--line);padding-top:12px;display:grid;gap:10px}
+.files.over{outline:2px dashed var(--accent);outline-offset:4px;border-radius:8px}
+.fhd{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.fhd h4{margin:0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.fhd h4 .n{font-weight:400;letter-spacing:0;text-transform:none}
+.facts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.facts select{width:auto;padding:6px 8px;font-size:13px}
+.facts button{padding:6px 10px;font-size:13px}
+#fList{display:grid;gap:14px}
+.fgrp{display:grid;gap:6px}
+.fgrp>b{font-size:12px;color:var(--muted);font-weight:700}
+.frow{display:flex;gap:10px;align-items:center;padding:7px 9px;border:1px solid var(--line);border-radius:8px;min-width:0}
+.frow.pending{border-style:dashed}
+.frow .ic{flex:0 0 34px;height:34px;border-radius:7px;display:grid;place-items:center;font-size:10px;font-weight:800;background:var(--accent-soft);color:var(--accent)}
+.frow .ic.pdf{background:var(--bad-soft);color:var(--bad)}
+.frow .ic.xls{background:var(--good-soft);color:var(--good)}
+.frow .bd{flex:1;min-width:0}
+.frow .nm{font-weight:600;font-size:13px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:none;border:0;padding:0;color:var(--fg);text-align:left;max-width:100%;cursor:pointer}
+.frow .nm:hover{color:var(--accent);text-decoration:underline}
+.frow .mt{font-size:11px;color:var(--muted)}
+.fa{display:flex;gap:4px;align-items:center;flex-shrink:0}
+.fa select{width:auto;font-size:12px;padding:4px 6px;max-width:150px}
+.fa button{padding:4px 8px;font-size:13px}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.ph{border:1px solid var(--line);border-radius:8px;overflow:hidden;display:grid;min-width:0;background:var(--surface)}
+.ph .im{aspect-ratio:4/3;background:var(--sunk);border:0;padding:0;border-radius:0;cursor:zoom-in;display:block;width:100%}
+.ph .im img{width:100%;height:100%;object-fit:cover;display:block}
+.ph .pf{display:flex;gap:4px;align-items:center;padding:4px 5px}
+.ph .pf select{flex:1;min-width:0;font-size:11px;padding:3px 4px}
+.ph .pf button{padding:3px 6px;font-size:12px}
+.ph.pending{border-style:dashed;opacity:.8}
+.fstatus{font-size:12px;font-weight:700;color:var(--accent)}
+.fempty{font-size:13px;color:var(--muted);padding:10px;border:1px dashed var(--line);border-radius:8px;text-align:center}
+.clip{display:inline-flex;align-items:center;gap:3px}
+.clip svg{width:12px;height:12px}
+@media (max-width:560px){.frow{flex-wrap:wrap}.frow .bd{flex:1 1 calc(100% - 50px)}.fa{flex:1 1 100%;justify-content:flex-end}.fa select{flex:1;max-width:none}}
+#viewer{width:min(1100px,calc(100% - 24px));max-height:calc(100% - 24px);background:#0d1218;border-color:#0d1218;color:#fff}
+#viewer .vb{display:grid;grid-template-rows:auto 1fr auto;height:min(86vh,900px)}
+#viewer .vh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;font-size:13px}
+#viewer .vh span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#viewer .vi{display:grid;place-items:center;min-height:0;padding:0 8px}
+#viewer img{max-width:100%;max-height:100%;object-fit:contain}
+#viewer .vf{display:flex;justify-content:space-between;gap:8px;padding:10px 12px}
+#viewer button{background:#1b2530;border-color:#2c3a48;color:#fff}
 </style>
 <script src="/assets/access.js" data-section="pipeline"></script>
 </head>
@@ -192,12 +238,36 @@ textarea{resize:vertical;min-height:64px}
       <button type="button" class="danger" id="dDel" hidden style="margin-right:auto">Delete</button>
       <button type="button" id="dCancel">Cancel</button><button class="primary" type="submit" id="dSave">Save</button>
     </div>
+    <section class="files" id="filesBox" aria-label="Files">
+      <div class="fhd">
+        <h4>Files <span class="n" id="fCount"></span></h4>
+        <div class="facts" id="fActs">
+          <select id="upKind" aria-label="Type of the files you upload"><option value="">Type: automatic</option></select>
+          <button type="button" id="upBtn">Upload files</button>
+          <button type="button" id="camBtn" hidden>Take photo</button>
+        </div>
+      </div>
+      <div id="fList"></div>
+      <div class="fstatus" id="fStatus" role="status"></div>
+      <p class="hint" id="fHint" style="margin:0">Proposals, quotes, estimations, survey photos and other customer files, up to 10 MB each. You can also drop files here. Large photos are reduced automatically.</p>
+      <input type="file" id="upFile" hidden multiple accept=".pdf,.png,.jpg,.jpeg,.heic,.heif,.webp,.gif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.msg,.eml,.zip,.dwg,.dxf,.vsd,.vsdx">
+      <input type="file" id="camFile" hidden accept="image/*" capture="environment">
+    </section>
     <section class="activity" id="activity" hidden>
       <h4>Activity</h4>
       <div class="noteadd"><input id="noteIn" maxlength="1000" placeholder="Add a note, e.g. called the FM, survey on Tuesday" aria-label="New note"><button type="button" id="noteBtn">Add note</button></div>
       <ul class="log" id="log"></ul>
     </section>
   </form>
+</dialog>
+
+<!-- photo viewer -->
+<dialog id="viewer" aria-label="Photo">
+  <div class="vb">
+    <div class="vh"><span id="vName"></span><span style="display:flex;gap:6px;flex-shrink:0"><button type="button" id="vDl">Download</button><button type="button" id="vX" aria-label="Close">✕</button></span></div>
+    <div class="vi"><img id="vImg" alt=""></div>
+    <div class="vf"><button type="button" id="vPrev">‹ Previous</button><span id="vPos" style="align-self:center;font-size:12px;color:#aab6c2"></span><button type="button" id="vNext">Next ›</button></div>
+  </div>
 </dialog>
 
 <!-- lost reason when dragging to Lost -->
@@ -296,6 +366,7 @@ function cardHtml(d){
   if(d.expectedClose&&OPEN.has(d.stage))meta.push(`<span>Close ${esc(dayShort(d.expectedClose))}</span>`);
   if(d.stage==="lost"&&d.lostReason)meta.push(`<span>${esc(d.lostReason.slice(0,60))}</span>`);
   if(d.stage==="won"&&d.closedAt)meta.push(`<span>Won ${esc(day(d.closedAt))}</span>`);
+  if(d.fileCount)meta.push(`<span class="clip" title="${d.fileCount} file${d.fileCount>1?"s":""} attached">${CLIP}${d.fileCount}</span>`);
   return `<div class="card" role="button" tabindex="0" draggable="true" data-id="${esc(d.id)}" aria-label="${esc(d.title+", "+d.customerName+", "+aed(d.value))}">
     <span class="t">${esc(d.title)}</span>
     <span class="c">${esc(d.customerName)}</span>
@@ -332,7 +403,7 @@ function renderList(rows){
   $("lhead").querySelectorAll("th").forEach(th=>{th.onclick=()=>{if(F.sort===th.dataset.k)F.dir*=-1;else{F.sort=th.dataset.k;F.dir=["value","probability","weighted","updatedAt"].includes(th.dataset.k)?-1:1}render()};th.onkeydown=e=>{if(e.key==="Enter")th.onclick()}});
   $("lrows").innerHTML=rows.map(d=>{const dc=dueClass(d);return `<tr data-id="${esc(d.id)}" tabindex="0">
     <td><span class="st ${d.stage}">${esc(SNAME[d.stage])}</span></td>
-    <td><div class="t">${esc(d.title)}</div><div class="s">${esc(d.customerName)}</div></td>
+    <td><div class="t">${esc(d.title)}</div><div class="s">${esc(d.customerName)}${d.fileCount?` · <span class="clip">${CLIP}${d.fileCount}</span>`:""}</div></td>
     <td>${d.company==="Tech Hub IT"?"Tech Hub":"Bifold"}</td>
     <td class="r mono">${esc(aed(d.value))}</td><td class="r mono">${d.probability}%</td><td class="r mono">${esc(aed(d.value*d.probability/100))}</td>
     <td class="mono">${esc(dayShort(d.expectedClose))}</td>
@@ -356,7 +427,7 @@ function renderCustomerSel(){
   if(CUR&&CUR.customerId&&!CUSTOMERS.some(c=>c.id===CUR.customerId))opts+=`<option value="${esc(CUR.customerId)}">${esc(CUR.customerName||"Removed customer")} (removed)</option>`;
   sel.innerHTML=opts;sel.value=v;
 }
-function upsert(d){const s={...d};delete s.log;delete s.etag;DEALS=DEALS.filter(x=>x.id!==d.id).concat(s)}
+function upsert(d){const s={...d};if(d.files)s.fileCount=d.files.length;delete s.log;delete s.etag;delete s.files;delete s.file;DEALS=DEALS.filter(x=>x.id!==d.id).concat(s)}
 
 /* ---------- moving by drag ---------- */
 async function moveDeal(id,stage){
@@ -409,7 +480,7 @@ async function openDeal(id){
   probTouched=d?d.probability!==SPROB[d.stage]:false;
   setStage(v.stage,false);
   $("dDel").hidden=!d;$("dDel").textContent="Delete";$("dDel").dataset.armed="";
-  $("activity").hidden=!d;renderLog(d);
+  $("activity").hidden=!d;renderLog(d);PENDING=[];$("fStatus").textContent="";renderFiles();
   $("dealDlg").showModal();if(!d)$("fTitle").focus();
 }
 function renderLog(d){
@@ -430,8 +501,17 @@ $("dealForm").onsubmit=async e=>{
   if(dStage==="lost"&&!$("fLost").value.trim()){$("dErr").textContent="Say why the deal was lost.";$("fLost").focus();return}
   $("dSave").disabled=true;
   try{
+    const isNew=!CUR, queued=PENDING.slice();
     const d=CUR?await api("PUT","deals/"+encodeURIComponent(CUR.id),body()):await api("POST","deals",body());
-    upsert(d);renderOwners();render();$("dealDlg").close();
+    upsert(d);renderOwners();render();
+    if(isNew&&queued.length){
+      // Files picked before the deal existed: upload them now, with the dialog showing the new deal.
+      CUR=d;PENDING=[];$("dTitle").textContent=d.title;$("dId").textContent=`${d.id} · created by ${d.createdBy} on ${day(d.createdAt)}`;$("dSave").textContent="Save changes";$("dDel").hidden=false;$("activity").hidden=false;renderLog(d);
+      toast(`${d.title} added to ${SNAME[d.stage]}. Uploading ${queued.length} file${queued.length>1?"s":""}…`);
+      await uploadAll(queued);
+      return;
+    }
+    $("dealDlg").close();
     toast(CUR?"Deal saved":`${d.title} added to ${SNAME[d.stage]}`+(d.owner!==ME.email?` for ${d.owner}`:""));
   }catch(err){$("dErr").textContent=err.message}finally{$("dSave").disabled=false}
 };
@@ -446,7 +526,160 @@ async function addNote(){
   try{const d=await api("POST","deals/"+encodeURIComponent(CUR.id)+"/notes",{text:t});CUR.log=d.log;CUR.etag=d.etag;$("noteIn").value="";renderLog(d);upsert(d);render()}
   catch(e){$("dErr").textContent=e.message}finally{$("noteBtn").disabled=false}
 }
-$("noteBtn").onclick=addNote;$("noteIn").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();addNote()}};
+$("noteBtn").onclick=addNote;
+
+/* ---------- files: proposals, quotes, estimations, survey photos ---------- */
+const CLIP='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.9-8.9a3.7 3.7 0 0 1 5.2 5.2l-8.9 8.9a1.8 1.8 0 0 1-2.6-2.6L15.4 6.8"/></svg>';
+const FKINDS=[["proposal","Proposal"],["quote","Quotation"],["estimation","Estimation / costing"],["photo","Site survey photo"],["survey","Survey report"],["drawing","BoQ / drawing"],["po","Customer PO"],["customer","Customer document"],["other","Other"]];
+const FKNAME=Object.fromEntries(FKINDS);
+const FILE_MAX=10*1048576;
+let PENDING=[],PHOTOS=[],vAt=0;
+$("upKind").innerHTML+=FKINDS.map(([k,n])=>`<option value="${k}">${esc(n)}</option>`).join("");
+if(matchMedia("(pointer:coarse)").matches)$("camBtn").hidden=false;
+const isImg=f=>/^image\/(png|jpeg|gif|webp)$/.test(f.type||"");
+const fsize=n=>n>1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024))+" KB";
+const fext=n=>{const e=String(n).includes(".")?String(n).split(".").pop().slice(0,4).toUpperCase():"";return e||"FILE"};
+const icCls=n=>{const e=fext(n);return e==="PDF"?"pdf":/^(XLS|XLSX|CSV)$/.test(e)?"xls":""};
+const kindSel=(id,k,cls)=>`<select data-kind="${esc(id)}" aria-label="File type" ${cls?`class="${cls}"`:""}>${FKINDS.map(([v,n])=>`<option value="${v}"${v===k?" selected":""}>${esc(n)}</option>`).join("")}</select>`;
+const readOnly=()=>ME&&ME.co==="all";
+// Best guess at what a file is, from its name, its type and the deal's stage. The person can change it.
+function guessKind(file,stage){
+  const n=file.name.toLowerCase();
+  if(/quot|\bqt\b|offer/.test(n))return "quote";
+  if(/propos/.test(n))return "proposal";
+  if(/estimat|costing|cost sheet|\bpnl\b/.test(n))return "estimation";
+  if(/\bboq\b|bill of quant|drawing|layout|\.dwg$|\.dxf$/.test(n))return "drawing";
+  if(/\blpo\b|\bpo\b|purchase order/.test(n))return "po";
+  if(/survey/.test(n))return /^image\//.test(file.type)?"photo":"survey";
+  if(/^image\//.test(file.type)||/\.(heic|heif)$/.test(n))return "photo";
+  return {lead:"customer",survey:"survey",proposal:"proposal",negotiation:"quote",po:"po"}[stage]||"other";
+}
+function fileApi(f,dl){return "deals/"+encodeURIComponent(CUR.id)+"/files/"+f.id+(dl?"/download":"")}
+async function fetchBlob(f,dl){
+  let r;try{r=await fetch("/api/"+fileApi(f,dl),{cache:"no-store"})}catch{throw new Error("Can't reach the server. Check your connection and try again.")}
+  if(!r.ok){let m="That file couldn't be opened.";try{m=(await r.json()).error||m}catch{}throw new Error(m)}
+  if(r.redirected||(r.headers.get("content-type")||"").includes("text/html"))throw new Error("Your session has ended. Reload the page to sign in again.");
+  return r.blob();
+}
+const thumbs=new Map();
+async function thumb(f){if(!thumbs.has(f.id))thumbs.set(f.id,fetchBlob(f).then(b=>URL.createObjectURL(b)).catch(()=>""));return thumbs.get(f.id)}
+function renderFiles(){
+  const d=CUR, files=d?(d.files||[]).slice().sort((a,b)=>String(b.at).localeCompare(String(a.at))):[];
+  const ro=readOnly(), n=files.length+PENDING.length;
+  $("fActs").hidden=ro;$("fHint").hidden=ro;
+  $("fCount").textContent=n?`(${n})`:"";
+  PHOTOS=files.filter(isImg);
+  const groups=FKINDS.map(([k,name])=>[k,name,files.filter(f=>f.kind===k)]).filter(g=>g[2].length);
+  let html=groups.map(([k,name,fs])=>{
+    const imgs=fs.filter(isImg),docs=fs.filter(f=>!isImg(f));
+    return `<div class="fgrp"><b>${esc(name)} · ${fs.length}</b>
+      ${imgs.length?`<div class="photos">${imgs.map(f=>`<div class="ph"><button type="button" class="im" data-photo="${esc(f.id)}" aria-label="Open ${esc(f.name)}" title="${esc(f.name)} · ${esc(fsize(f.size))} · ${esc(f.by)}, ${esc(when(f.at))}"><img data-src="${esc(f.id)}" alt=""></button>
+        <div class="pf">${ro?`<span class="mt" style="flex:1;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name)}</span>`:kindSel(f.id,f.kind)}<button type="button" data-dl="${esc(f.id)}" title="Download" aria-label="Download ${esc(f.name)}">⤓</button>${ro?"":`<button type="button" data-rm="${esc(f.id)}" title="Remove" aria-label="Remove ${esc(f.name)}">✕</button>`}</div></div>`).join("")}</div>`:""}
+      ${docs.map(f=>`<div class="frow"><span class="ic ${icCls(f.name)}">${esc(fext(f.name))}</span><div class="bd">
+        <button type="button" class="nm" data-open="${esc(f.id)}" title="${esc(f.name)}">${esc(f.name)}</button>
+        <div class="mt">${esc(fsize(f.size))} · ${esc(f.by)}, ${esc(when(f.at))}${f.stage?` · added at ${esc(SNAME[f.stage]||f.stage)}`:""}</div></div>
+        <div class="fa">${ro?"":kindSel(f.id,f.kind)}<button type="button" data-dl="${esc(f.id)}" title="Download" aria-label="Download ${esc(f.name)}">⤓</button>${ro?"":`<button type="button" data-rm="${esc(f.id)}" title="Remove" aria-label="Remove ${esc(f.name)}">✕</button>`}</div></div>`).join("")}
+    </div>`}).join("");
+  if(PENDING.length)html+=`<div class="fgrp"><b>Uploads when you create the deal · ${PENDING.length}</b>${PENDING.map((p,i)=>`<div class="frow pending"><span class="ic ${icCls(p.file.name)}">${esc(fext(p.file.name))}</span><div class="bd"><span class="nm" style="cursor:default">${esc(p.file.name)}</span><div class="mt">${esc(fsize(p.file.size))}</div></div>
+    <div class="fa"><select data-pk="${i}" aria-label="File type">${FKINDS.map(([v,nm])=>`<option value="${v}"${v===p.kind?" selected":""}>${esc(nm)}</option>`).join("")}</select><button type="button" data-prm="${i}" aria-label="Don't upload ${esc(p.file.name)}">✕</button></div></div>`).join("")}</div>`;
+  if(!n)html=`<div class="fempty">${ro?"No files on this deal.":d?"No files yet. Upload the proposal, quotation, estimation or survey photos.":"Add files now and they upload when you create the deal."}</div>`;
+  $("fList").innerHTML=html;
+  $("fList").querySelectorAll("img[data-src]").forEach(async img=>{const f=files.find(x=>x.id===img.dataset.src);const u=f&&await thumb(f);if(u)img.src=u});
+  $("fList").querySelectorAll("[data-photo]").forEach(b=>b.onclick=()=>openViewer(PHOTOS.findIndex(f=>f.id===b.dataset.photo)));
+  $("fList").querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>openFile(files.find(f=>f.id===b.dataset.open)));
+  $("fList").querySelectorAll("[data-dl]").forEach(b=>b.onclick=()=>downloadFile(files.find(f=>f.id===b.dataset.dl)));
+  $("fList").querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>removeFile(b,files.find(f=>f.id===b.dataset.rm)));
+  $("fList").querySelectorAll("select[data-kind]").forEach(s=>s.onchange=()=>retype(s.dataset.kind,s.value,s));
+  $("fList").querySelectorAll("select[data-pk]").forEach(s=>s.onchange=()=>{PENDING[+s.dataset.pk].kind=s.value});
+  $("fList").querySelectorAll("[data-prm]").forEach(b=>b.onclick=()=>{PENDING.splice(+b.dataset.prm,1);renderFiles()});
+}
+function applyDeal(d){
+  if(!CUR||CUR.id!==d.id){upsert(d);render();return}
+  CUR.files=d.files;CUR.log=d.log;CUR.etag=d.etag;CUR.updatedAt=d.updatedAt;
+  upsert(d);render();renderFiles();renderLog(d);
+}
+// Large photos are reduced to 2560 px JPEG before upload, so phone pictures stay well under the 10 MB limit.
+async function shrink(file){
+  if(!/^image\/(jpeg|png|webp)$/.test(file.type)||file.size<2.5*1048576)return file;
+  try{
+    const bmp=await createImageBitmap(file);const k=Math.min(1,2560/Math.max(bmp.width,bmp.height));
+    const c=document.createElement("canvas");c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);
+    const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(bmp,0,0,c.width,c.height);
+    const b=await new Promise(r=>c.toBlob(r,"image/jpeg",.85));
+    return b&&b.size<file.size?new File([b],file.name.replace(/\.(png|webp|jpe?g)$/i,"")+".jpg",{type:"image/jpeg"}):file;
+  }catch{return file}
+}
+function b64(file){return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(",")[1]||"");r.onerror=()=>no(new Error(`${file.name} couldn't be read.`));r.readAsDataURL(file)})}
+let busyUp=false;
+async function uploadAll(items){
+  if(!CUR)return;
+  const id=CUR.id;busyUp=true;let ok=0;const errs=[];
+  for(let i=0;i<items.length;i++){
+    const it=items[i];
+    $("fStatus").textContent=`Uploading ${i+1} of ${items.length}: ${it.file.name}…`;
+    try{
+      const file=await shrink(it.file);
+      if(!file.size)throw new Error(`${file.name} is empty.`);
+      if(file.size>FILE_MAX)throw new Error(`${file.name} is larger than 10 MB.`);
+      const d=await api("POST","deals/"+encodeURIComponent(id)+"/files",{kind:it.kind,name:file.name,type:file.type||"application/octet-stream",data:await b64(file)});
+      applyDeal(d);ok++;
+    }catch(e){errs.push(e.message)}
+  }
+  busyUp=false;$("fStatus").textContent="";
+  if(errs.length)toast(errs.join(" "),true);
+  else if(ok)toast(ok===1?"File uploaded":`${ok} files uploaded`);
+}
+function addFiles(list){
+  let fs=[...list];if(!fs.length||readOnly())return;
+  // Photos are reduced before upload; anything else over 10 MB can't be attached.
+  const big=fs.filter(f=>f.size>FILE_MAX&&!/^image\/(jpeg|png|webp)$/.test(f.type));
+  if(big.length){toast(`${big.map(f=>f.name).join(", ")} ${big.length>1?"are":"is"} larger than 10 MB. Compress or split ${big.length>1?"them":"it"} first.`,true);fs=fs.filter(f=>!big.includes(f));if(!fs.length)return}
+  const stage=CUR?CUR.stage:dStage;
+  const items=fs.map(file=>({file,kind:$("upKind").value||guessKind(file,stage)}));
+  if(!CUR){PENDING=PENDING.concat(items);renderFiles();return}
+  uploadAll(items);
+}
+$("upBtn").onclick=()=>{$("upFile").value="";$("upFile").click()};
+$("camBtn").onclick=()=>{$("camFile").value="";$("camFile").click()};
+$("upFile").onchange=e=>addFiles(e.target.files);
+$("camFile").onchange=e=>{const f=e.target.files[0];if(!f)return;const n=new File([f],`Site photo ${new Date().toISOString().slice(0,16).replace("T"," ").replace(":","-")}.${(f.type.split("/")[1]||"jpg").replace("jpeg","jpg")}`,{type:f.type});addFiles([n])};
+(()=>{const box=$("filesBox");
+  box.ondragover=e=>{if(readOnly()||![...e.dataTransfer.types].includes("Files"))return;e.preventDefault();box.classList.add("over")};
+  box.ondragleave=e=>{if(!box.contains(e.relatedTarget))box.classList.remove("over")};
+  box.ondrop=e=>{box.classList.remove("over");if(readOnly())return;e.preventDefault();addFiles(e.dataTransfer.files)};
+})();
+async function retype(fid,kind,sel){
+  sel.disabled=true;
+  try{const d=await api("PUT",fileApi({id:fid}),{kind});applyDeal(d);toast(`Marked as ${FKNAME[kind]}`)}
+  catch(e){toast(e.message,true);renderFiles()}finally{sel.disabled=false}
+}
+async function removeFile(b,f){
+  if(!f)return;
+  if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Remove?";b.classList.add("danger");setTimeout(()=>{if(b.isConnected){b.dataset.armed="";b.textContent="✕"}},4000);return}
+  b.disabled=true;
+  try{const d=await api("DELETE",fileApi(f));thumbs.delete(f.id);applyDeal(d);toast(`${f.name} removed`)}catch(e){toast(e.message,true);b.disabled=false}
+}
+function saveBlob(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+async function downloadFile(f){if(!f)return;try{toast("Downloading "+f.name+"…");saveBlob(await fetchBlob(f,true),f.name)}catch(e){toast(e.message,true)}}
+async function openFile(f){
+  if(!f)return;
+  if(isImg(f)){openViewer(PHOTOS.findIndex(x=>x.id===f.id));return}
+  if(f.type==="application/pdf"&&window.BXPdf){window.BXPdf.preview(()=>fetchBlob(f),f.name);return}
+  downloadFile(f);
+}
+async function openViewer(i){
+  if(i<0||!PHOTOS.length)return;vAt=i;const f=PHOTOS[i];
+  $("vName").textContent=`${f.name} · ${FKNAME[f.kind]||""}`;$("vPos").textContent=PHOTOS.length>1?`${i+1} of ${PHOTOS.length}`:"";
+  $("vPrev").disabled=i===0;$("vNext").disabled=i===PHOTOS.length-1;
+  $("vImg").removeAttribute("src");$("vImg").alt=f.name;
+  if(!$("viewer").open)$("viewer").showModal();
+  const u=await thumb(f);if(vAt===i&&u)$("vImg").src=u;
+}
+$("vPrev").onclick=()=>openViewer(vAt-1);$("vNext").onclick=()=>openViewer(vAt+1);$("vX").onclick=()=>$("viewer").close();
+$("vDl").onclick=()=>downloadFile(PHOTOS[vAt]);
+$("viewer").onkeydown=e=>{if(e.key==="ArrowLeft"&&vAt>0)openViewer(vAt-1);if(e.key==="ArrowRight"&&vAt<PHOTOS.length-1)openViewer(vAt+1)};
+$("viewer").onclick=e=>{if(e.target===$("viewer"))$("viewer").close()};
+$("dealDlg").addEventListener("close",()=>{if(!busyUp){thumbs.forEach(p=>p.then(u=>u&&URL.revokeObjectURL(u)));thumbs.clear()}});$("noteIn").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();addNote()}};
 
 /* ---------- new customer ---------- */
 $("newCustBtn").onclick=()=>{$("custForm").reset();$("cErr").textContent="";$("custDlg").showModal();$("cName").focus()};

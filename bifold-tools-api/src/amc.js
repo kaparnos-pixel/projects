@@ -2,8 +2,9 @@
 // optional Claude drafting and email to customers.
 //
 // Who sees what:
-//   - An AMC (proposal + commercial value) is visible to the person who created it and to managers
-//     (BIFOLD_MANAGERS, default ranjan@bifoldtech.com). Only they can change it.
+//   - An AMC (proposal + commercial value) is shared with the whole team: everyone in the company who has
+//     the AMC Tracker section can see and edit every AMC, whoever created it. Managers (BIFOLD_MANAGERS,
+//     default ranjan@bifoldtech.com) always can. Deleting stays with the creator and managers.
 //   - Awarded contracts (no money) and maintenance visits are visible to everyone signed in, so engineers
 //     can plan and report visits.
 //   - Customers come from the shared customer list (lib.js).
@@ -36,7 +37,7 @@ module.exports = function makeAmc(H) {
   const etagFail = what => err => { if (err.statusCode === 412) fail(409, `Someone else changed this ${what} after you opened it. Reload to see their changes, then make yours again.`); throw err; };
 
   /* ---------------- AMCs ---------------- */
-  const visible = (e, user) => inCo(e, user) && (user.isManager || e.owner === user.email);
+  const visible = (e, user) => inCo(e, user) && (user.isManager || e.owner === user.email || (user.sections || []).includes("amc"));
   function amcSummary(e) {
     return {
       id: e.rowKey, co: rowCo(e), ref: e.ref, customerId: e.customerId, customerName: e.customerName, systems: e.systems || "", value: num(e.value),
@@ -52,7 +53,7 @@ module.exports = function makeAmc(H) {
   }
   async function loadAmc(user, id) {
     const e = await getOrNull(await table(AMC), APK, id);
-    if (!e || !visible(e, user)) fail(404, "This AMC doesn't exist, was deleted, or belongs to someone else.");
+    if (!e || !visible(e, user)) fail(404, "This AMC doesn't exist, was deleted, or you don't have access to the AMC Tracker.");
     return e;
   }
   const log = (user, text) => ({ at: now(), by: user.email, text: clean(text, 300) });
@@ -163,6 +164,7 @@ module.exports = function makeAmc(H) {
     const e = await loadAmc(user, id);
     if (user.aud) user.aud.name = [e.ref, e.customerName].filter(Boolean).join(", ");
     writeCo(user);
+    if (!user.isManager && e.owner !== user.email) fail(403, "Only the person who created this AMC or a manager can delete it.");
     if (e.status === "awarded" && !user.isManager) fail(403, "Only a manager can delete an awarded AMC.");
     await (await table(AMC)).deleteEntity(APK, id);
     try { await (await table(CON)).deleteEntity(KPK, id); } catch (err) { if (err.statusCode !== 404) throw err; }

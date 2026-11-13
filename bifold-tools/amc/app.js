@@ -622,7 +622,7 @@ function renderAmcSheet() {
   body.push(`<div class="sec"><h3>Proposal</h3>${proposalBlock(a)}</div>`);
   body.push(`<div class="sec"><h3>Files</h3><div class="files" id="x_files">${filesHTML(a.files, true)}</div><label class="drop" id="x_drop">Drop files here or click to upload (up to 10 MB each)<input type="file" id="x_fileInput" multiple></label></div>`);
   body.push(`<div class="sec"><h3>Activity</h3><div class="log">${(a.history || []).slice().reverse().map(h => `<div><time>${esc(fmt(h.at))}</time><span>${esc(h.text)} · ${esc(nameOf(h.by))}</span></div>`).join("") || '<span class="muted">No activity yet.</span>'}</div></div>`);
-  if (a.status !== "awarded" || S.isAdmin) body.push(`<div class="sec"><h3>Remove</h3><div><button type="button" class="danger sm" id="x_delete">Delete this AMC</button> <span class="muted small">Removes the record and its proposal. Files stay in storage.</span></div></div>`);
+  if (S.isAdmin || (a.status !== "awarded" && String(a.owner || "").toLowerCase() === String(S.meId || "").toLowerCase())) body.push(`<div class="sec"><h3>Remove</h3><div><button type="button" class="danger sm" id="x_delete">Delete this AMC</button> <span class="muted small">Removes the record and its proposal. Files stay in storage.</span></div></div>`);
   $("s_body").innerHTML = body.join("");
   wireAmcSheet(a, c);
 }

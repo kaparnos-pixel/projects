@@ -106,6 +106,24 @@ aside{position:sticky;top:16px}
 .menu .pop{position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px;display:grid;gap:2px;min-width:190px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.15)}
 .menu .pop button{border:none;justify-content:flex-start;width:100%}
 .menu .pop button:hover{background:var(--accent-soft)}
+/* pull from Books */
+.pullbtn{font-size:12px;padding:5px 10px}
+.srcnote{font-size:12px;color:var(--muted);background:var(--accent-soft);border-radius:6px;padding:6px 10px;margin:-4px 0 10px}
+.srcnote a{color:var(--accent);font-weight:700;text-decoration:none}
+dialog.pull{width:min(720px,calc(100% - 32px))}
+.pseg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:max-content}
+.pseg button{border:0;border-radius:0;background:none;padding:7px 14px;color:var(--muted)}
+.pseg button+button{border-left:1px solid var(--line)}
+.pseg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.plist{border:1px solid var(--line);border-radius:8px;max-height:260px;overflow:auto}
+.plist.small{max-height:180px;margin-top:6px}
+.plist label{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:center;padding:8px 12px;border-top:1px solid var(--line);cursor:pointer}
+.plist label:first-child{border-top:0}
+.plist label:hover{background:var(--sunk)}
+.plist input{width:auto}
+.plist b{font-size:13px}.plist .m{font-size:12px;color:var(--muted)}.plist .v{font-family:var(--f-num);font-size:13px;text-align:right;white-space:nowrap}
+.plist .em{padding:16px;text-align:center;color:var(--muted);font-size:13px}
+.pchk{display:flex;align-items:center;gap:8px;font-size:13px}.pchk input{width:auto}
 /* share dialog */
 .people{display:grid;gap:6px}
 .person{display:grid;grid-template-columns:minmax(0,1fr) 110px 32px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
@@ -194,7 +212,8 @@ aside{position:sticky;top:16px}
     <div class="grid">
       <fieldset id="editFs">
         <section class="panel">
-          <h2>Purchase order</h2>
+          <h2>Purchase order <button type="button" id="pullBtn" class="pullbtn" hidden title="Fill this PnL from a quotation or invoice in Books">⇣ Pull from Books</button></h2>
+          <div class="srcnote" id="srcNote" hidden></div>
           <div class="fields">
             <label><span class="lbl">Company</span>
               <select id="company"><option>Bifold Technologies</option><option>Tech Hub IT</option></select></label>
@@ -350,6 +369,23 @@ aside{position:sticky;top:16px}
   </form>
 </dialog>
 
+<dialog id="pullDlg" class="pull">
+  <form id="pullForm" method="dialog">
+    <h3>Pull from Books</h3>
+    <p class="hint" style="margin:0">Fill this PnL from a quotation (to check the margin before you quote or commit) or an invoice (to see what you made). Selling prices come from the document; cost lines use each item's purchase price, which you can adjust.</p>
+    <div class="pseg" id="pullSeg" role="tablist"><button type="button" data-t="quote" aria-pressed="true">Quotations</button><button type="button" data-t="invoice" aria-pressed="false">Invoices</button></div>
+    <input id="pullQ" type="search" placeholder="Search number, customer, reference or amount" aria-label="Search">
+    <div class="plist" id="pullList"></div>
+    <div id="pullBillsWrap" hidden>
+      <label class="pchk"><input type="checkbox" id="pullBillsOn"> Add supplier bills as actual costs</label>
+      <div id="pullBillsBox" hidden><input id="pullBQ" type="search" placeholder="Search supplier, bill or supplier invoice number" aria-label="Search bills"><div class="plist small" id="pullBills"></div></div>
+    </div>
+    <label class="pchk"><input type="checkbox" id="pullReplace" checked> Replace the current cost lines (untick to add to them)</label>
+    <div class="err" id="pullErr"></div>
+    <div class="foot"><button type="button" id="pullCancel">Cancel</button><button class="primary" type="submit" id="pullGo" disabled>Pull into PnL</button></div>
+  </form>
+</dialog>
+
 <dialog id="confirmDlg">
   <form method="dialog">
     <h3 id="cfTitle"></h3>
@@ -483,7 +519,7 @@ $("newBtn").onclick=()=>location.hash="new";
 /* ---------- editor ---------- */
 function showEditor(){$("listView").hidden=true;$("editView").hidden=false;window.scrollTo(0,0)}
 function openNew(){
-  DOC=null;S=BLANK();dirty=false;showEditor();renderDocMeta();renderCustomers();renderFields();renderLines();update();
+  DOC=null;S=BLANK();dirty=false;showEditor();renderDocMeta();renderCustomers();renderFields();renderLines();renderSource();update();
   document.title="New PnL · Instant PnL Calculator";
 }
 async function openDoc(id){
@@ -491,7 +527,7 @@ async function openDoc(id){
   try{
     const d=await api("GET","pnl/"+encodeURIComponent(id));
     DOC=d;S=Object.assign(BLANK(),d.data||{});if(!S.lines||!S.lines.length)S.lines=BLANK().lines;
-    dirty=false;renderDocMeta();renderCustomers();renderFields();renderLines();update();
+    dirty=false;renderDocMeta();renderCustomers();renderFields();renderLines();renderSource();update();
     document.title=id+" · Instant PnL Calculator";
   }catch(e){toast(e.message,true);location.hash="list"}
 }
@@ -531,6 +567,57 @@ const FIELDS=["company","poNo","title","poValue","contPct","commPct","ohPct","cr
 function renderFields(){FIELDS.forEach(f=>{const el=$(f);if(el.classList.contains("num")){el.value=S[f]?fmtIn(S[f]):(f==="poValue"?"":"0")}else{el.value=S[f]||""}})}
 FIELDS.forEach(f=>{const el=$(f);el.addEventListener(el.tagName==="SELECT"?"change":"input",e=>{S[f]=el.classList.contains("num")?num(e.target.value):e.target.value;touch()})});
 $("poValue").addEventListener("blur",e=>{e.target.value=fmtIn(S.poValue)});
+
+// ---------- Pull from Books: a quotation or invoice fills the PnL; supplier bills add actual costs ----------
+const canBooks=()=>ME&&(ME.isManager||(ME.sections||[]).some(k=>k==="books"||k==="quotes"));
+const canBills=()=>ME&&(ME.isManager||(ME.sections||[]).includes("books"));
+let PULL={type:"quote",docs:null,bills:null,pick:null,billPick:new Set()};
+const fdate=d=>d?new Date(d+"T00:00:00Z").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"}):"";
+function renderSource(){const n=$("srcNote");const s=S.source;if(!s){n.hidden=true;return}n.hidden=false;
+  n.innerHTML=`Pulled from ${s.type==="invoice"?"invoice":"quotation"} <a href="/books/#/doc/${encodeURIComponent(s.id)}" target="_blank" rel="noopener">${esc(s.number)}</a>${(s.bills||[]).length?` with ${s.bills.length} supplier bill${s.bills.length===1?"":"s"} (${s.bills.map(esc).join(", ")})`:""} on ${esc(fdate(s.at))}.`}
+function pullRows(){
+  const q=$("pullQ").value.trim().toLowerCase();
+  const rows=(PULL.docs||[]).filter(d=>d.type===PULL.type&&(!q||[d.number,d.contactName,d.ref,d.title,String(d.subtotal)].join(" ").toLowerCase().includes(q)));
+  $("pullList").innerHTML=PULL.docs===null?`<div class="em">Loading…</div>`:rows.map(d=>`<label><input type="radio" name="pullDoc" value="${esc(d.id)}"${PULL.pick===d.id?" checked":""}><span><b>${esc(d.number)}</b> · ${esc(d.contactName)}<div class="m">${esc(fdate(d.date))}${d.title?" · "+esc(d.title):""}${d.ref?" · ref "+esc(d.ref):""} · ${esc(d.status)}</div></span><span class="v">AED ${Number(d.subtotal).toLocaleString("en-US",{maximumFractionDigits:0})}<div class="m">before VAT</div></span></label>`).join("")||`<div class="em">No ${PULL.type==="quote"?"quotations":"issued invoices"}${q?" match":" yet"}.</div>`;
+  $("pullList").querySelectorAll("input").forEach(i=>i.onchange=()=>{PULL.pick=i.value;$("pullGo").disabled=false});
+}
+function billRows(){
+  const q=$("pullBQ").value.trim().toLowerCase();
+  const rows=(PULL.bills||[]).filter(d=>!q||[d.number,d.contactName,d.ref,String(d.subtotal)].join(" ").toLowerCase().includes(q));
+  $("pullBills").innerHTML=PULL.bills===null?`<div class="em">Loading…</div>`:rows.map(d=>`<label><input type="checkbox" value="${esc(d.id)}"${PULL.billPick.has(d.id)?" checked":""}><span><b>${esc(d.contactName)}</b><div class="m">${esc(d.number)} · supplier inv. ${esc(d.ref||"-")} · ${esc(fdate(d.date))}</div></span><span class="v">AED ${Number(d.subtotal).toLocaleString("en-US",{maximumFractionDigits:0})}</span></label>`).join("")||`<div class="em">No bills${q?" match":" yet"}.</div>`;
+  $("pullBills").querySelectorAll("input").forEach(i=>i.onchange=()=>{if(i.checked)PULL.billPick.add(i.value);else PULL.billPick.delete(i.value)});
+}
+function setPullType(t){PULL.type=t;PULL.pick=null;$("pullGo").disabled=true;document.querySelectorAll("#pullSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.t===t));$("pullBillsWrap").hidden=!canBills();pullRows()}
+$("pullBtn").onclick=async()=>{
+  $("pullErr").textContent="";PULL.pick=null;PULL.billPick=new Set();$("pullQ").value="";$("pullBillsOn").checked=false;$("pullBillsBox").hidden=true;
+  $("pullSeg").querySelector('[data-t="invoice"]').hidden=!canBills();
+  setPullType("quote");$("pullDlg").showModal();
+  if(PULL.docs===null||true){PULL.docs=null;pullRows();try{PULL.docs=await api("GET","books/pnl-sources")}catch(e){PULL.docs=[];$("pullErr").textContent=e.message}pullRows()}
+};
+document.querySelectorAll("#pullSeg button").forEach(b=>b.onclick=()=>setPullType(b.dataset.t));
+$("pullQ").oninput=pullRows;$("pullBQ").oninput=billRows;
+$("pullBillsOn").onchange=async e=>{$("pullBillsBox").hidden=!e.target.checked;if(e.target.checked&&PULL.bills===null){billRows();try{PULL.bills=await api("GET","books/pnl-bills")}catch(err){PULL.bills=[];$("pullErr").textContent=err.message}billRows()}};
+$("pullCancel").onclick=()=>$("pullDlg").close();
+$("pullForm").onsubmit=async e=>{
+  e.preventDefault();if(!PULL.pick)return;const btn=$("pullGo");btn.disabled=true;btn.textContent="Pulling…";$("pullErr").textContent="";
+  try{
+    const src=await api("GET","books/pnl-sources/"+encodeURIComponent(PULL.pick));
+    const bills=$("pullBillsOn").checked?await Promise.all([...PULL.billPick].map(id=>api("GET","books/pnl-sources/"+encodeURIComponent(id)))):[];
+    const lines=src.lines.map(l=>({d:l.d,c:l.c,q:l.q,u:l.u})).concat(...bills.map(b=>b.lines.map(l=>({d:l.d,c:l.c,q:l.q,u:l.u}))));
+    S.customerId=src.contactId;S.customer=src.contactName;
+    if(!CUSTOMERS.some(c=>c.id===src.contactId))CUSTOMERS.push({id:src.contactId,name:src.contactName});
+    S.poNo=src.type==="invoice"?(src.ref||src.poRef||src.number):(src.ref?src.ref+" (quote "+src.number+")":"Quote "+src.number);
+    S.title=src.title||S.title||(src.lines[0]?src.lines[0].d:"");
+    S.poValue=src.subtotal;
+    S.lines=$("pullReplace").checked||!S.lines.some(l=>l.d||num(l.u))?lines:S.lines.filter(l=>l.d||num(l.u)).concat(lines);
+    if(!S.lines.length)S.lines=BLANK().lines;
+    S.source={type:src.type,id:src.id,number:src.number,bills:bills.map(b=>b.number),at:new Date(Date.now()+4*3600e3).toISOString().slice(0,10)};
+    renderCustomers();renderFields();renderLines();renderSource();touch();$("pullDlg").close();
+    const unknown=src.lines.filter(l=>!l.known).length;
+    toast(`Pulled ${src.number}${bills.length?` and ${bills.length} bill${bills.length===1?"":"s"}`:""}.${unknown?` ${unknown} line${unknown===1?" has":"s have"} no purchase price yet: enter the unit cost.`:""}`,false);
+  }catch(err){$("pullErr").textContent=err.message}
+  finally{btn.disabled=!PULL.pick;btn.textContent="Pull into PnL"}
+};
 
 function renderLines(){
   const tb=$("lines");tb.innerHTML="";
@@ -806,6 +893,7 @@ async function pnlPdf(){
 (async()=>{
   try{
     [ME,CUSTOMERS]=await Promise.all([api("GET","me"),api("GET","customers")]);
+    $("pullBtn").hidden=!canBooks();
     $("who").textContent=ME.email;
   }catch(e){$("boot").innerHTML=`<div class="panel" style="max-width:560px;margin:40px auto;text-align:left"><h2>Can't open the PnL tool</h2><p>${esc(e.message)}</p></div>`;return}
   route();

@@ -931,6 +931,43 @@ module.exports = function makeBooks(H) {
       .sort((a, b) => a.date.localeCompare(b.date));
   }
 
+  // ---------- PnL Calculator: pull a quotation or invoice (and supplier bills as actual costs) ----------
+  // Cost categories match the PnL Calculator's list.
+  const PNL_CAT = acct => ({ "4010": "Software / licences", "4020": "Labour", "4030": "Labour", "5000": "Hardware", "5010": "Software / licences", "5020": "Subcontractor", "5030": "Logistics", "6300": "Logistics" })[acct];
+  function catFor(l, item, side) {
+    const byAcct = PNL_CAT(l.account) || (item && PNL_CAT(item.purchaseAcct));
+    if (byAcct) return byAcct;
+    const t = `${l.name} ${l.description || ""}`.toLowerCase();
+    if (/licen[cs]e|subscription|software|microsoft 365|office 365|antivirus|cloud/.test(t)) return "Software / licences";
+    if (/cabl|cat ?6|fiber|fibre|conduit|patch|rack|material/.test(t)) return "Cabling & materials";
+    if (/install|config|labou?r|commission|programm|support|amc|service|manpower|technician|engineer/.test(t)) return item && item.kind === "goods" ? "Hardware" : "Labour";
+    if (/freight|shipping|delivery|courier|clearing|customs/.test(t)) return "Logistics";
+    if (/subcontract/.test(t)) return "Subcontractor";
+    return item ? (item.kind === "service" ? "Labour" : "Hardware") : side === "purch" ? "Other" : "Hardware";
+  }
+  async function pnlSources(user, type) {
+    const co = coOf(user);
+    const want = type === "bill" ? ["bill"] : ["quote", "invoice"];
+    const docs = decorate(await allDocs(co)).filter(d => want.includes(d.type) && typeAllowed(user, d.type) && !["void", "cancelled"].includes(d.status) && (d.type !== "invoice" || d.status === "posted"));
+    return docs.map(d => ({ id: d.id, type: d.type, number: d.number, date: d.date, contactId: d.contactId, contactName: d.contactName, ref: d.ref, title: d.title, subtotal: d.subtotal, total: d.total, status: d.view }))
+      .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 1000);
+  }
+  async function pnlSource(user, id) {
+    const co = coOf(user);
+    const e = await getOrNull(await table(T), dPK(co), id);
+    if (!e || !["quote", "invoice", "bill"].includes(e.type)) fail(404, "That quotation, invoice or bill doesn't exist.");
+    if (!typeAllowed(user, e.type)) needAcct(user);
+    const body = unpackJson(e), items = new Map((await listItems(co)).map(i => [i.id, i]));
+    const side = e.type === "bill" ? "purch" : "sales";
+    const lines = (body.lines || []).map(l => {
+      const it = items.get(l.itemId) || [...items.values()].find(x => x.name === l.name) || null;
+      const cost = side === "purch" ? r2(num(l.net) / (num(l.qty) || 1)) : it ? num(it.purchasePrice) : 0;
+      return { d: side === "purch" ? `${e.contactName}: ${l.name}` : l.name, c: catFor(l, it, side), q: num(l.qty) || 1, u: cost, sell: side === "sales" ? r2(num(l.net) / (num(l.qty) || 1)) : 0, known: side === "purch" || cost > 0 };
+    });
+    if (user.aud) user.aud.name = `${TYPES[e.type].label} ${e.number}`;
+    return { id: e.rowKey, type: e.type, number: e.number, date: e.date, contactId: e.contactId, contactName: e.contactName, ref: e.ref || "", poRef: body.poRef || "", title: e.title || "", subtotal: num(e.subtotal), total: num(e.total), lines };
+  }
+
   async function markSent(user, id) {
     const co = coOf(user);
     const t = await table(T);
@@ -1033,6 +1070,9 @@ module.exports = function makeBooks(H) {
       if (id && method === "PUT") return saveItem(user, id, body);
       if (id && method === "DELETE") return deleteItem(user, id);
     }
+    if (a === "pnl-sources" && !id && method === "GET") return pnlSources(user, "sales");
+    if (a === "pnl-bills" && !id && method === "GET") return pnlSources(user, "bill");
+    if (a === "pnl-sources" && id && method === "GET") return pnlSource(user, id);
     if (a === "vendors" && !id && method === "POST") return addVendor(user, body);
     if (a === "vendors" && id && sub === "verify" && method === "PUT") return verifyVendor(user, id, body);
     if (a === "customers" && method === "POST") return addCustomer(user, body);

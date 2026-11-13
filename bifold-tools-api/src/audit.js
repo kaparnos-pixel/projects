@@ -10,7 +10,7 @@
 const crypto = require("crypto");
 
 const SKIP_KEYS = new Set(["partitionKey", "rowKey", "etag", "timestamp", "odata.etag", "updatedAt", "updatedBy", "createdAt", "createdBy", "dataChunks", "acl", "files", "contacts",
-  "reminderSentAt", "linkExpires", "signedAt", "alertsSent", "lastAlertAt", "proposalStatus", "proposalAt", "proposalStale", "proposalSource", "sentAt", "stageAt", "closedAt", "directCost", "netPct", "co", "company"]);
+  "reminderSentAt", "linkExpires", "signedAt", "alertsSent", "lastAlertAt", "proposalStatus", "proposalAt", "proposalStale", "proposalSource", "sentAt", "stageAt", "closedAt", "directCost", "netPct", "co", "company", "gl", "tax", "allocs", "counters", "fromId", "toId", "ctData"]);
 const LABELS = { contactName: "contact", poNo: "PO no.", poValue: "PO value", netProfit: "net profit", customerName: "customer", customerId: null, scheduledDate: "date",
   engineers: "engineer", trn: "TRN", amount: "amount", chequeNo: "cheque no.", clearanceDate: "clearance date", value: "value", status: "status", stage: "stage", title: "title", poRef: "PO ref", projectTitle: "project", completionDate: "completion date", preparedBy: "prepared by", docNo: "doc no." };
 
@@ -153,11 +153,38 @@ module.exports = function makeAudit(H) {
       if (method === "PUT") return [A, "Edited supplier", out.name || name, ch];
       if (method === "DELETE") return [A, "Deleted supplier", name || b, ""];
     }
+    if (a === "books") {
+      const A = "Books";
+      const LBL = { quote: "quotation", invoice: "tax invoice", creditnote: "tax credit note", receipt: "payment received", po: "purchase order", bill: "bill", vendorcredit: "vendor credit", payment: "payment made", expense: "expense", journal: "manual journal", transfer: "transfer" };
+      const money = v => v ? "AED " + short(v) : "";
+      if (b === "settings") return [A, aud.lock ? "Changed settings and lock date" : "Changed company and VAT settings", "", [aud.lock && "lock date: " + aud.lock, ch].filter(Boolean).join("; ")];
+      if (b === "ct") return [A, "Saved corporate tax inputs", name, [body.sbr ? "Small Business Relief elected" : "", body.lossBf ? "losses b/f AED " + short(body.lossBf) : "", (body.adj || []).length ? (body.adj || []).length + " adjustments" : ""].filter(Boolean).join(", ")];
+      if (b === "accounts") return [A, method === "POST" ? "Added account" : method === "DELETE" ? "Deleted account" : "Edited account", name || (out.code ? out.code + " " + out.name : c), ch];
+      if (b === "items") {
+        if (c === "import") return [A, "Imported items", "", `${out.added || 0} added, ${out.updated || 0} updated, ${(out.invalid || []).length} skipped`];
+        return [A, method === "POST" ? "Added item" : method === "DELETE" ? "Deleted item" : "Edited item", name || out.name || c, ch];
+      }
+      if (b === "vendors" && d === "verify") return [A, "Recorded supplier VAT verification", name, ch];
+      if (b === "vendors") return [A, "Added supplier", out.name, ""];
+      if (b === "customers") return [A, "Added customer", out.name, ""];
+      if (b === "docs") {
+        const lbl = LBL[out.type || body.type] || "document";
+        const who = [out.contactName, money(out.total || out.amount)].filter(Boolean).join(", ");
+        if (d === "void") return [A, out.type === "quote" || out.type === "po" ? "Cancelled " + lbl : "Voided " + lbl, name || out.number || c, clean(body.reason, 200)];
+        if (d === "apply") return [A, "Applied " + lbl, name || out.number, ch];
+        if (d === "sent") return [A, "Marked " + lbl + " as sent", name || out.number, out.contactName || ""];
+        if (d === "convert") return [A, "Converted to a new document", name || c, ""];
+        if (method === "POST") return [A, (out.status === "draft" ? "Saved draft " : out.status === "posted" && (out.type === "invoice" || out.type === "creditnote") ? "Issued " : "Created ") + lbl, out.number || "draft", who];
+        if (method === "PUT") return [A, aud.issued ? "Issued " + lbl : "Edited " + lbl, out.number || name || c, [who, ch].filter(Boolean).join("; ")];
+        if (method === "DELETE") return [A, "Deleted " + lbl, name || c, ""];
+        if (method === "GET") return [A, "Opened " + lbl, out.number || c, ""];
+      }
+    }
     if (a === "access") {
       if (b === "users" && method === "PUT") return ["Team access", "Changed access", c, (out.sections || []).join(", ") || "No sections"];
       if (b === "users" && method === "DELETE") return ["Team access", "Removed access", c, ""];
     }
-    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", access: "Team access", alerts: "Alerts" };
+    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", books: "Books", access: "Team access", alerts: "Alerts" };
     if (method === "GET") return [AREA[a] || "Other", b ? "Opened a record" : "Opened the list", b || "", ""];
     return [AREA[a] || "Other", method + " /" + seg.join("/"), "", ""];
   }

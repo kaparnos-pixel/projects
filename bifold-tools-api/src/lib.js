@@ -688,6 +688,10 @@ const pcr = () => pcrMod || (pcrMod = require("./pcr")({ table, getOrNull, all, 
 let supMod;
 const sup = () => supMod || (supMod = require("./suppliers")({ table, getOrNull, all, fail, clean, num, CO, rowCo, inCo, writeCo, diff: (a, b) => audit().diff(a, b) }));
 
+// ---------- Books: accounting, VAT and quotations (src/books.js) ----------
+let booksMod;
+const books = () => booksMod || (booksMod = require("./books")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, rowCo, listCustomers, createCustomer, sup, diff: (a, b) => audit().diff(a, b) }));
+
 // ---------- team access (src/access.js) ----------
 let accessMod;
 let auditMod;
@@ -729,6 +733,7 @@ async function alerts(user) {
           text: vs.length > 1 ? `Oldest planned ${fd(v.scheduledDate)} · ${v.ref}` : `Planned ${fd(v.scheduledDate)} · ${v.engineers || "no engineer assigned"}` }); });
     }
   }).catch(() => {}));
+  if (has("books")) jobs.push(books().alerts(user).then(l => out.push(...l)).catch(() => {}));
   await Promise.all(jobs);
   const rank = { high: 0, medium: 1, low: 2 };
   out.sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.when).localeCompare(String(b.when)));
@@ -818,6 +823,7 @@ async function route(method, seg, user, body) {
   if (a === "mk") return mk().route(method, seg.slice(1), user, body);
   if (a === "pcr") return pcr().route(method, seg.slice(1), user, body);
   if (a === "suppliers") return sup().route(method, seg.slice(1), user, body);
+  if (a === "books") return books().route(method, seg.slice(1), user, body);
   if (a === "alerts" && method === "GET") return alerts(user);
   if (a === "audit" && method === "GET") return audit().list(user, id);
   if (a === "me" && method === "GET") { if (access().touch(user.email) && user.aud) { user.aud.signin = true; user.aud.noAccess = !user.isManager && !user.sections.length; }
@@ -876,6 +882,7 @@ const outsiderSeen = new Map();
 function shouldRecord(method, seg, status, user, body) {
   const [a, b, c] = seg;
   if (a === "audit") return false;
+  if (a === "books" && method === "GET" && b === "bootstrap") return status === 403;
   if (a === "mk" && (b === "audience" || b === "render.js")) return false;
   if (a === "me") return !!(user && user.aud && user.aud.signin);
   const fileGet = method === "GET" && ((a === "pnl" && c === "files" && seg[3]) || (a === "deals" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c));

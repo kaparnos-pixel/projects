@@ -85,6 +85,7 @@
     function setZoom(z) { if (!pdf) return; zoom = Math.max(0.5, Math.min(3, z)); layout(); }
     // Sizes every page for the current zoom, then draws pages as they scroll into view.
     async function layout() {
+      if (!pdf) return;
       const me = run, box = dlg.querySelector(".pages"), bd = dlg.querySelector(".bd");
       if (obs) obs.disconnect();
       box.innerHTML = "";
@@ -148,6 +149,7 @@
     log: I('<path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/>'),
     completion: I('<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8.5 14.5l2.5 2.5 4.5-5"/>'),
     campaigns: I('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
+    books: I('<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3M8 7h7M8 10.5h4M14.5 12.5l1.5 1.5 3-3.5"/>'),
     bell: I('<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/>'),
     search: I('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>'),
     menu: I('<path d="M4 6h16M4 12h16M4 18h16"/>'),
@@ -161,11 +163,12 @@
     { group: "Service", items: [{ href: "/amc/", label: "AMC Tracker", icon: "amc", need: ["amc", "visits"], subs: [["#overview", "Overview", []], ["#amcs", "Contracts & proposals", ["amc"]], ["#visits", "Maintenance visits", ["amc", "visits"]]] },
       { href: "/completion/", label: "Completion Reports", icon: "completion", need: ["completion"] }] },
     { group: "Marketing", items: [{ href: "/campaigns/", label: "Email Campaigns", icon: "campaigns", need: ["campaigns"], subs: [["#campaigns", "Campaigns", ["campaigns"]], ["#contacts", "Contacts & lists", ["campaigns"]], ["#media", "Image library", ["campaigns"]]] }] },
-    { group: "Finance", items: [{ href: "/pdc/", label: "PDC & Guarantees", icon: "pdc", need: ["pdc"] }] },
+    { group: "Finance", items: [{ href: "/books/", label: "Books & VAT", icon: "books", need: ["books", "quotes"], subs: [["#/dashboard", "Dashboard", ["books"]], ["#/quotes", "Quotations", ["books", "quotes"]], ["#/invoices", "Invoices", ["books"]], ["#/bills", "Bills", ["books"]], ["#/banking", "Banking", ["books"]], ["#/reports", "Reports", ["books"]], ["#/vat", "VAT return", ["books"]]] },
+      { href: "/pdc/", label: "PDC & Guarantees", icon: "pdc", need: ["pdc"] }] },
     { group: "Master data", items: [{ href: "/customers/", label: "Customers", icon: "customers", need: ["customers"] }, { href: "/suppliers/", label: "Suppliers & Vendors", icon: "suppliers", need: ["suppliers", "pdc"], subs: [["#dir", "Directory", []], ["#what", "Who supplies what", []], ["#people", "All contacts", []]] }] },
     { group: "Administration", items: [{ href: "/access/", label: "Team access", icon: "access", need: ["manager"] }, { href: "/activity/", label: "Activity log", icon: "log", need: ["manager"] }] },
   ];
-  const SECTION_NAMES = { pnl: "PnL", pipeline: "Pipeline", pdc: "PDC", customers: "Customers", suppliers: "Suppliers", amc: "AMC proposals", visits: "Visits", campaigns: "Campaigns", completion: "Completion" };
+  const SECTION_NAMES = { books: "Books", quotes: "Quotations", pnl: "PnL", pipeline: "Pipeline", pdc: "PDC", customers: "Customers", suppliers: "Suppliers", amc: "AMC proposals", visits: "Visits", campaigns: "Campaigns", completion: "Completion" };
   const allowed = (m, keys) => !keys.length || keys.some(k => k === "manager" ? m.isManager : m.isManager || (m.sections || []).includes(k));
   const path = location.pathname.replace(/index\.html$/, "");
   const initials = e => { const p = String(e).split("@")[0].split(/[._-]+/).filter(Boolean); return ((p[0] || "?")[0] + (p[1] ? p[1][0] : (p[0] || "")[1] || "")).toUpperCase(); };
@@ -228,7 +231,7 @@
     if (coSel) coSel.onchange = () => { store.set("bx-co", coSel.value); location.reload(); };
 
     // sub-links for the AMC tracker follow the hash
-    const syncSub = () => side.querySelectorAll("a.sub").forEach(a => { const h = (location.hash || (path.startsWith("/campaigns/") ? "#campaigns" : path.startsWith("/suppliers/") ? "#dir" : "#overview")).replace(/^#(edit|report)\/.*$/, "#campaigns"); a.classList.toggle("on", h === a.dataset.hash); });
+    const syncSub = () => side.querySelectorAll("a.sub").forEach(a => { const h = (location.hash || (path.startsWith("/campaigns/") ? "#campaigns" : path.startsWith("/suppliers/") ? "#dir" : path.startsWith("/books/") ? "#/dashboard" : "#overview")).replace(/^#(edit|report)\/.*$/, "#campaigns").replace(/^(#\/[a-z]+).*$/, "$1"); a.classList.toggle("on", h === a.dataset.hash); });
     syncSub(); addEventListener("hashchange", syncSub);
     top.querySelector(".bx-burger").onclick = () => document.body.classList.toggle("bx-open");
     side.addEventListener("click", e => { if (e.target.closest("a")) document.body.classList.remove("bx-open"); });
@@ -250,7 +253,7 @@
 
     // alerts
     let ALERTS = null;
-    const TOOL = { pdc: "pdc", pipeline: "pipeline", amc: "amc", visits: "visits" };
+    const TOOL = { pdc: "pdc", pipeline: "pipeline", amc: "amc", visits: "visits", books: "books" };
     const loadAlerts = () => fetch("/api/alerts", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(a => {
       if (!a) return; ALERTS = a; window.BIFOLD_ALERTS = a; document.dispatchEvent(new CustomEvent("bifold:alerts", { detail: a }));
       const dot = top.querySelector(".bx-bell .dot"); dot.hidden = !a.count; dot.textContent = a.count > 99 ? "99+" : a.count;
@@ -320,7 +323,7 @@
       brandPage(m);
       build(m);
       if (!m.isManager) document.querySelectorAll("[data-manager]").forEach(el => { el.hidden = true; });
-      const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/suppliers/": ["suppliers", "pdc"], "/amc/": ["amc", "visits"], "/campaigns/": ["campaigns"], "/completion/": ["completion"], "/access/": ["manager"], "/activity/": ["manager"] };
+      const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/suppliers/": ["suppliers", "pdc"], "/amc/": ["amc", "visits"], "/campaigns/": ["campaigns"], "/completion/": ["completion"], "/books/": ["books", "quotes"], "/access/": ["manager"], "/activity/": ["manager"] };
       document.querySelectorAll("body > :not(.bx-side) a[href]").forEach(a => { const k = LINK[a.getAttribute("href")]; if (k && !allowed(m, k)) a.hidden = true; });
       if (m.noAccess) block(m, "You don't have access yet");
       else if (pageNeeds.length && !allowed(m, pageNeeds)) block(m, "You don't have access to this tool");

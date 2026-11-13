@@ -21,6 +21,17 @@ header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:spac
 .ptabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--red)}
 .ptabs .n{display:inline-block;min-width:22px;padding:0 7px;margin-left:6px;border-radius:99px;background:var(--sunk);color:var(--muted);font-size:12px;line-height:20px;text-align:center}
 .ptabs button[aria-selected="true"] .n{background:var(--accent-soft);color:var(--accent)}
+.psum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:6px}
+@media (max-width:760px){.psum{grid-template-columns:minmax(0,1fr)}}
+.psum .tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.psum .tile.net{border-top:3px solid var(--good)}
+.psum .tile.net.loss{border-top-color:var(--bad)}
+.psum .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.psum .v{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:clamp(20px,2.4vw,26px);font-weight:600;margin:4px 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.psum .v small{font-size:.55em;color:var(--muted);font-weight:500}
+.psum .s{font-size:12px;color:var(--muted)}
+.psum .s b{color:var(--fg);font-family:var(--f-num);font-weight:600}
+.psum-cap{font-size:12px;color:var(--muted);margin:0 0 14px}
 .chip.closed{background:var(--sunk);color:var(--fg)}
 .closed-note{background:var(--sunk);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:10px 14px;margin-bottom:14px}
 .closed-note b{font-weight:700}
@@ -126,6 +137,12 @@ aside{position:sticky;top:16px}
       <button type="button" role="tab" id="tabOpen" data-tab="open" aria-selected="true">Open projects<span class="n" id="nOpen">0</span></button>
       <button type="button" role="tab" id="tabClosed" data-tab="closed" aria-selected="false">Closed projects<span class="n" id="nClosed">0</span></button>
     </div>
+    <div class="psum" id="psum" aria-live="polite">
+      <div class="tile"><div class="k" id="sumValK">Open project value</div><div class="v" id="sumVal"><small>AED</small>0</div><div class="s" id="sumValS">PO value, excluding VAT</div></div>
+      <div class="tile"><div class="k">Estimated cost</div><div class="v" id="sumCost"><small>AED</small>0</div><div class="s" id="sumCostS"></div></div>
+      <div class="tile net" id="sumNetT"><div class="k">Net profit</div><div class="v" id="sumNet"><small>AED</small>0</div><div class="s" id="sumNetS"></div></div>
+    </div>
+    <p class="psum-cap" id="psumCap"></p>
     <div class="filters">
       <input id="q" type="search" placeholder="Search customer, PO no. or doc no." aria-label="Search">
       <select id="scope" aria-label="Show">
@@ -412,6 +429,23 @@ async function showList(tab){
   $("docRows").innerHTML="";$("listEmpty").hidden=false;$("listEmpty").textContent="Loading saved PnLs…";
   try{DOCS=await api("GET","pnl");renderList()}catch(e){$("listEmpty").textContent=e.message}
 }
+// Totals for the projects listed in the current tab, after search and filter.
+// Estimated cost = everything taken off the PO value: direct cost, contingency, commission, overhead and finance.
+function renderSummary(rows,closedTab){
+  const n=rows.length, val=rows.reduce((a,d)=>a+d.poValue,0), net=rows.reduce((a,d)=>a+d.netProfit,0);
+  const direct=rows.reduce((a,d)=>a+d.directCost,0), cost=val-net, allow=cost-direct;
+  const money=v=>`<small>AED</small> ${(v<0?"−":"")+Math.abs(Math.round(v)).toLocaleString("en-US")}`;
+  $("sumValK").textContent=closedTab?"Closed project value":"Open project value";
+  $("sumVal").innerHTML=money(val);
+  $("sumValS").textContent=`${n} project${n===1?"":"s"}, PO value excluding VAT`;
+  $("sumCost").innerHTML=money(cost);
+  $("sumCostS").innerHTML=n?`Direct <b>${aed(direct)}</b> + allowances <b>${aed(allow)}</b>`:"No projects listed";
+  $("sumNet").innerHTML=money(net);$("sumNet").className="v"+(net<0?" neg":"");
+  $("sumNetT").classList.toggle("loss",net<0);
+  $("sumNetS").innerHTML=val?`Net margin <b class="${net<0?"neg":""}">${pct(net/val*100)}</b> of PO value`:"Net margin -";
+  const q=$("q").value.trim(), sc=$("scope").value;
+  $("psumCap").textContent=(q||sc!=="all")?`Totals for the ${n} project${n===1?"":"s"} matching your search and filter.`:`Totals for all ${closedTab?"closed":"open"} projects you can see.`;
+}
 function renderList(){
   const q=$("q").value.trim().toLowerCase(), sc=$("scope").value;
   const closedTab=TAB==="closed";
@@ -422,6 +456,7 @@ function renderList(){
   $("lastCol").textContent=closedTab?"Closed":"Updated";
   const rows=DOCS.filter(d=>(d.status==="closed")===closedTab&&inScope(d)&&
     (!q||[d.id,d.customerName,d.poNo,d.title,d.owner].join(" ").toLowerCase().includes(q)));
+  renderSummary(rows,closedTab);
   $("docRows").innerHTML=rows.map(d=>`<tr data-id="${esc(d.id)}" tabindex="0">
     <td class="mono">${esc(d.id)}</td>
     <td><div class="t">${esc(d.customerName||"No customer")}${d.docs&&(d.docs.po||d.docs.invoices)?`<span class="att" title="Attached documents">${[d.docs.po?"PO":"",d.docs.invoices?d.docs.invoices+" inv.":""].filter(Boolean).join(" · ")}</span>`:""}</div><div class="s">${esc([d.poNo,d.title&&d.title!==[d.customerName,d.poNo].filter(Boolean).join(" · ")?d.title:""].filter(Boolean).join(" · "))}</div></td>

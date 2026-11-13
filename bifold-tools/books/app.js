@@ -450,7 +450,7 @@ async function docView(id) {
   let d; try { d = await api("GET", "docs/" + id); } catch (e) { $("app").innerHTML = `<div class="empty"><strong>Can't open this document</strong>${esc(e.message)}</div>`; return; }
   const P = D.perms, tp = d.type, posted = d.status === "posted";
   const A = []; // [label, action, primary?, danger?]
-  const canEdit = (tp === "quote" || tp === "po") ? !["converted", "cancelled"].includes(d.status) : d.status === "draft" || (posted && ["bill", "receipt", "payment", "expense", "journal", "transfer"].includes(tp));
+  const canEdit = (tp === "quote" || tp === "po") ? d.status !== "cancelled" : d.status === "draft" || (posted && ["bill", "receipt", "payment", "expense", "journal", "transfer"].includes(tp));
   if (d.status === "draft" && ["invoice", "creditnote", "bill"].includes(tp)) A.push([tp === "bill" ? "Post bill" : "Issue " + docTitle(d).toLowerCase(), "issue", true]);
   if (tp === "invoice" && posted && d.balance > 0.004) A.push(["Record payment", "pay", true]);
   if (tp === "bill" && posted && d.balance > 0.004) A.push(["Pay bill", "pay", true]);
@@ -458,6 +458,7 @@ async function docView(id) {
   if (tp === "po" && ["draft", "sent", "accepted"].includes(d.status)) A.push(["Convert to bill", "convert", true]);
   if (["creditnote", "vendorcredit", "receipt", "payment"].includes(tp) && posted && d.balance > 0.004) A.push(["Apply to " + (SALES.has(tp) ? "invoices" : "bills"), "apply", true]);
   if (canEdit) A.push(["Edit", "edit"]);
+  A.push(["Upload files", "upload"]);
   if (["quote", "invoice", "creditnote", "po", "receipt"].includes(tp)) A.push(["Preview PDF", "preview"], ["Download PDF", "pdf"]);
   if (["quote", "invoice", "creditnote", "po"].includes(tp) && d.status !== "draft" || (tp === "quote" || tp === "po")) A.push(["Email", "email"]);
   if (tp === "quote" && ["draft", "sent"].includes(d.status)) A.push(["Mark accepted", "accept"], ["Mark declined", "decline"]);
@@ -499,6 +500,7 @@ async function docView(id) {
     if (d.applied && d.applied.length) body += `<h4 style="margin:18px 0 6px">Applied to</h4><table><thead><tr><th>Document</th><th>Date</th><th style="text-align:right">Document total</th><th style="text-align:right">Applied</th></tr></thead><tbody>${d.applied.map(a => `<tr><td><a href="#/doc/${a.id}">${esc(a.number)}</a></td><td>${fd(a.date)}</td><td style="text-align:right">${aed(a.total)}</td><td style="text-align:right">${aed(a.amt)}</td></tr>`).join("")}</tbody></table>`;
   }
   if (["creditnote", "vendorcredit"].includes(tp) && d.applied && d.applied.length) body += `<h4 style="margin:18px 0 6px">Applied to</h4><table><tbody>${d.applied.map(a => `<tr><td><a href="#/doc/${a.id}">${esc(a.number)}</a></td><td>${fd(a.date)}</td><td style="text-align:right">${aed(a.amt)}</td></tr>`).join("")}</tbody></table>`;
+  if (["invoice", "creditnote"].includes(tp) && posted && vatOn()) body += `<div class="hint" style="margin-top:14px">An issued ${docTitle(d).toLowerCase()} can't be edited under UAE VAT rules. You can still upload files and keep internal notes. To change amounts, issue a credit note (or void and reissue).</div>`;
   if (tp === "receipt" && posted && d.balance > 0.004 && vatOn()) body += `<div class="note warn" style="margin-top:14px"><b>Advance payment: VAT may be due now</b>AED ${aed(d.balance)} isn't applied to an invoice. If it is an advance for a taxable supply, the date of supply is the date it was received: issue a tax invoice for it within 14 days and report the VAT in this period. A fully refundable security deposit is different and isn't taxed on receipt.</div>`;
   if (["bill", "expense"].includes(tp) && posted && vatOn() && d.contactId && BK.domesticInput(d) && !supplierVerified(d.contactId)) body += `<div class="note warn" style="margin-top:14px"><b>Supplier not verified yet</b>From 1 Oct 2026 input VAT may be denied unless the supplier and the supply were verified before the VAT is claimed (FTA Decision No. 13 of 2026). <a href="#/contact/vendor/${esc(d.contactId)}">Record the verification</a>.</div>`;
   const glRows = d.gl || [];
@@ -515,6 +517,8 @@ async function docView(id) {
     `<div class="dv">${showPaper}<aside class="side">
       <section class="card"><header><h2>${st(d.view)}</h2><span class="muted" style="font-size:12px">${d.sentAt ? "Sent " + fd(d.sentAt) : ""}</span></header><div class="bd acts2">${A.map(([l, k, p, x]) => `<button type="button" data-a="${k}" class="${p ? "primary" : x ? "danger" : ""}">${esc(l)}</button>`).join("")}</div></section>
       ${attachCard(d)}
+      <section class="card"><header><h2>Internal notes<span>team only, never printed</span></h2></header><div class="bd" style="display:grid;gap:8px"><textarea id="inote" rows="3" maxlength="3000" placeholder="e.g. Customer asked for delivery on Sunday; PO copy received by email">${esc(d.internalNote || "")}</textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="hint" style="margin:0">${d.internalBy ? `Last edited by ${esc(String(d.internalBy).split("@")[0])} on ${fd(d.internalAt)}` : "Editable at any time, even after issue."}</span><button type="button" id="inoteSave">Save note</button></div></div></section>
       ${["invoice", "bill", "creditnote", "vendorcredit", "receipt", "payment"].includes(tp) && posted ? `<section class="card"><header><h2>Balance</h2></header><div class="bd kv"><span>Total</span><b>${aed(d.total || d.amount)}</b><span>${["invoice", "bill"].includes(tp) ? "Paid / credited" : "Applied"}</span><b>${aed(["invoice", "bill"].includes(tp) ? d.paid : (d.total || d.amount) - d.balance)}</b><span>${["invoice", "bill"].includes(tp) ? "Balance due" : "Unapplied"}</span><b>${aed(d.balance)}</b></div></section>` : ""}
       ${linked.length ? `<section class="card"><header><h2>Linked</h2></header>${linked.join("")}</section>` : ""}
       ${P.acct && glRows.length ? `<section class="card"><header><h2>Journal entry</h2></header><div class="tblwrap"><table class="list compact nohover gltbl"><thead><tr><th>Account</th><th class="r">Debit</th><th class="r">Credit</th></tr></thead><tbody>${glRows.map(g => `<tr><td>${esc(acctName(g[0]))}${g[3] ? `<div class="s">${esc(contactName(g[3]))}</div>` : ""}</td><td class="r mono">${g[1] ? aed(g[1]) : ""}</td><td class="r mono">${g[2] ? aed(g[2]) : ""}</td></tr>`).join("")}</tbody></table></div></section>` : ""}
@@ -522,6 +526,7 @@ async function docView(id) {
       <section class="card"><header><h2>History</h2></header><div class="bd" style="font-size:12px;color:var(--muted)">Created by ${esc(d.createdBy)} on ${fd(d.createdAt)}${d.issuedAt ? `<br>Issued by ${esc(d.issuedBy)} on ${fd(d.issuedAt)}` : ""}<br>Last changed by ${esc(d.updatedBy)} on ${fd(d.updatedAt)}${d.voidedBy ? `<br>Voided by ${esc(d.voidedBy)}` : ""}<br><span>Every change is in the Activity log.</span></div></section>
     </aside></div>`, ROUTE_OF[tp]);
   wireAttach(d, async () => { await load(); docView(id); });
+  $("inoteSave").onclick = async e => { busy(e.target, true); try { await api("PUT", `docs/${id}/internal`, { internalNote: $("inote").value }); await load(); toast("Note saved."); docView(id); } catch (err) { toast(err.message, 1); busy(e.target, false); } };
   const pdfName = `${docTitle(d)} ${d.number || "draft"} ${d.contactName || ""}.pdf`;
   const build = () => BKPDF.doc(d);
   const act = {
@@ -532,6 +537,8 @@ async function docView(id) {
     credit: async () => { const r = await api("POST", `docs/${id}/convert`, {}); sessionStorage.setItem("bk-draft", JSON.stringify(r.draft)); go(`#/new/${r.draft.type}?draft=1`); return "nav"; },
     apply: async () => { await applyDialog(d); return "stay"; },
     edit: () => { go("#/edit/" + id); return "nav"; },
+    upload: () => { $("attCard").scrollIntoView({ behavior: "smooth", block: "center" }); $("attIn").click(); return "stay"; },
+    note: () => "stay",
     dup: () => { const x = { type: tp, contactId: d.contactId, lines: d.lines, notes: d.notes, terms: d.terms, ref: "", emirate: d.emirate, account: d.account, payee: d.contactName }; sessionStorage.setItem("bk-draft", JSON.stringify(x)); go(`#/new/${tp}?draft=1`); return "nav"; },
     preview: () => { window.BXPdf.preview(build, pdfName); return "stay"; },
     pdf: async () => { saveBlob(await build(), pdfName); return "stay"; },
@@ -618,7 +625,8 @@ function lineEditor(d) {
   const salesExtra = t === "invoice" || t === "quote" ? `<label><span class="lbl">Salesperson</span><input id="salesperson" maxlength="100" value="${esc(d.salesperson || (isNew ? (D.me.split("@")[0].split(/[._-]/).map(w => w[0].toUpperCase() + w.slice(1)).join(" ")) : ""))}"></label>` : "";
   const emSel = side === "sales" && vat ? `<label><span class="lbl">Emirate for VAT return (box 1)</span><select id="emirate">${D.emirates.map(e => `<option${e === (d.emirate || s.emirate) ? " selected" : ""}>${e}</option>`).join("")}</select></label>` : "";
   const draftable = ["quote", "invoice", "creditnote", "po", "bill"].includes(t);
-  const saveBtns = t === "quote" || t === "po" ? `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="sent">Save as sent</button>`
+  const saveBtns = (t === "quote" || t === "po") && d.status === "converted" ? `<span class="hint" style="margin:0 auto 0 0">Already ${t === "quote" ? "invoiced" : "billed"}: changes here don't change the ${t === "quote" ? "invoice" : "bill"}.</span><button type="button" class="primary" data-s="converted">Save changes</button>`
+    : t === "quote" || t === "po" ? `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="sent">Save as sent</button>`
     : draftable && (isNew || d.status === "draft") ? `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="posted">${t === "bill" ? "Save and post" : "Save and issue"}</button>` : `<button type="button" class="primary" data-s="posted">Save</button>`;
   page(title, tag, `<a class="btn" href="${d.id ? "#/doc/" + d.id : "#/" + ROUTE_OF[t]}">Cancel</a>`,
     `<form class="ed" id="ed" novalidate>

@@ -353,13 +353,13 @@ module.exports = function makeBooks(H) {
   // ---------- documents ----------
   const dPK = co => "doc-" + co;
   const HEAD = ["RowKey", "type", "number", "status", "date", "dueDate", "contactId", "contactName", "contactTrn", "ref", "subtotal", "vatAmt", "total", "amount", "account",
-    "emirate", "allocs", "gl", "tax", "fromId", "toId", "sentAt", "voidReason", "createdBy", "createdAt", "updatedBy", "updatedAt", "title", "invoiceRef", "files"];
+    "emirate", "allocs", "gl", "tax", "fromId", "toId", "sentAt", "voidReason", "createdBy", "createdAt", "updatedBy", "updatedAt", "title", "invoiceRef", "files", "internalNote", "internalBy", "internalAt"];
   function headOut(e) {
     return {
       id: e.rowKey || e.RowKey, type: e.type, number: e.number || "", status: e.status, date: e.date, dueDate: e.dueDate || "", contactId: e.contactId || "", contactName: e.contactName || "",
       contactTrn: e.contactTrn || "", ref: e.ref || "", subtotal: num(e.subtotal), vatAmt: num(e.vatAmt), total: num(e.total), amount: num(e.amount), account: e.account || "",
       emirate: e.emirate || "", allocs: j(e.allocs, []), gl: j(e.gl, []), tax: j(e.tax, []), fromId: e.fromId || "", toId: e.toId || "", sentAt: e.sentAt || "",
-      voidReason: e.voidReason || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, title: e.title || "", invoiceRef: e.invoiceRef || "", fileCount: docFiles(e).length,
+      voidReason: e.voidReason || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, title: e.title || "", invoiceRef: e.invoiceRef || "", fileCount: docFiles(e).length, internalNote: e.internalNote || "", internalBy: e.internalBy || "", internalAt: e.internalAt || "",
     };
   }
   async function allDocs(co) { return (await all(await table(T), dPK(co), HEAD)).map(headOut); }
@@ -669,11 +669,11 @@ module.exports = function makeBooks(H) {
     if (!typeAllowed(user, cur.type)) needAcct(user);
     if (cur.status === "void") fail(400, "This document is void and can't be changed.");
     if (tp.taxDoc && cur.status === "posted") fail(400, `An issued ${tp.label.toLowerCase()} can't be changed. Issue a credit note for the difference, or void it and issue a new one.`);
-    if (cur.status === "converted") fail(400, "This has already been converted. Change the document it became instead.");
     if (cur.type === "creditnote" || cur.type === "vendorcredit") { if (cur.status === "posted") fail(400, "An issued credit can't be changed. Use Apply credit, or void it."); }
     const { f, body } = await docIn(user, b, cur, ctx);
     let status = cur.status;
     if (tp.ledger) { if (cur.status === "draft" && b.status === "posted") status = "posted"; }
+    else if (cur.status === "converted") status = "converted"; // a converted quotation / PO stays linked to what it became
     else if (OFFER_STATUS.includes(b.status)) status = b.status;
     if ((status === "posted" && locked(ctx.settings, f.date)) || (cur.status === "posted" && locked(ctx.settings, cur.date))) fail(400, lockMsg(ctx.settings));
     if (f.contactId !== cur.contactId && j(cur.allocs, []).length) fail(400, "Remove the invoices this is applied to before changing the customer or supplier.");
@@ -688,7 +688,7 @@ module.exports = function makeBooks(H) {
     if (status === "posted") postInto(f, body, ctx.settings); else { f.gl = "[]"; f.tax = "[]"; }
     f.number = cur.number || (tp.taxDoc && status !== "posted" ? "" : await nextNumber(ctx.co, cur.type));
     if (status === "posted" && cur.status !== "posted") { body.issuedAt = new Date().toISOString(); body.issuedBy = user.email; } else { body.issuedAt = old.issuedAt; body.issuedBy = old.issuedBy; }
-    const next = { partitionKey: dPK(ctx.co), rowKey: id, ...f, files: cur.files || "[]", fromId: cur.fromId || "", toId: cur.toId || "", sentAt: cur.sentAt || (status === "sent" ? new Date().toISOString() : ""), voidReason: "", createdBy: cur.createdBy, createdAt: cur.createdAt,
+    const next = { partitionKey: dPK(ctx.co), rowKey: id, ...f, files: cur.files || "[]", internalNote: cur.internalNote || "", internalBy: cur.internalBy || "", internalAt: cur.internalAt || "", fromId: cur.fromId || "", toId: cur.toId || "", sentAt: cur.sentAt || (status === "sent" ? new Date().toISOString() : ""), voidReason: "", createdBy: cur.createdBy, createdAt: cur.createdAt,
       updatedBy: user.email, updatedAt: new Date().toISOString(), ...packJson(body) };
     if (user.aud) { user.aud.name = `${tp.label} ${f.number || "draft"}`; user.aud.changes = diff(cur, next); if (status === "posted" && cur.status !== "posted") user.aud.issued = true; }
     try { await t.updateEntity(next, "Replace", { etag: b.etag || cur.etag }); }
@@ -834,6 +834,20 @@ module.exports = function makeBooks(H) {
     return { files };
   }
 
+  // Internal notes: for the team only, never printed, editable on any document in any status (issued, paid,
+  // converted, void, locked period), because they don't change the document or the ledger.
+  async function saveInternal(user, id, b) {
+    const co = coOf(user);
+    const t = await table(T);
+    const cur = await getOrNull(t, dPK(co), id);
+    if (!cur) fail(404, "This document doesn't exist.");
+    if (!typeAllowed(user, cur.type)) needAcct(user);
+    const note = clean(b.internalNote, 3000);
+    if (user.aud) { user.aud.name = `${TYPES[cur.type].label} ${cur.number || "draft"}`; user.aud.changes = [note ? "internal note: " + note.slice(0, 80) : "internal note cleared"]; }
+    await t.updateEntity({ partitionKey: dPK(co), rowKey: id, internalNote: note, internalBy: user.email, internalAt: new Date().toISOString() }, "Merge");
+    return getDoc(user, id);
+  }
+
   async function markSent(user, id) {
     const co = coOf(user);
     const t = await table(T);
@@ -947,6 +961,7 @@ module.exports = function makeBooks(H) {
       if (id && sub === "void" && method === "POST") return voidDoc(user, id, body);
       if (id && sub === "apply" && method === "PUT") return applyCredit(user, id, body);
       if (id && sub === "sent" && method === "POST") return markSent(user, id);
+      if (id && sub === "internal" && method === "PUT") return saveInternal(user, id, body);
       if (id && sub === "convert" && method === "POST") return convert(user, id, body);
       if (id && sub === "files") {
         const fid = seg[3];

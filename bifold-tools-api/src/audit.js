@@ -179,6 +179,7 @@ module.exports = function makeAudit(H) {
         const who = [out.contactName, money(out.total || out.amount)].filter(Boolean).join(", ");
         if (d === "void") return [A, out.type === "quote" || out.type === "po" ? "Cancelled " + lbl : "Voided " + lbl, name || out.number || c, clean(body.reason, 200)];
         if (d === "apply") return [A, "Applied " + lbl, name || out.number, ch];
+        if (d === "deal") return [A, "Added quotation to the Sales Pipeline", name, out.dealId || ""];
         if (d === "internal") return [A, "Edited internal note", name || out.number, ch];
         if (d === "sent") return [A, "Marked " + lbl + " as sent", name || out.number, out.contactName || ""];
         if (d === "convert") return [A, "Converted to a new document", name || c, ""];

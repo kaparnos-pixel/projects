@@ -690,7 +690,8 @@ const sup = () => supMod || (supMod = require("./suppliers")({ table, getOrNull,
 
 // ---------- Books: accounting, VAT and quotations (src/books.js) ----------
 let booksMod;
-const books = () => booksMod || (booksMod = require("./books")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, rowCo, listCustomers, createCustomer, sup, diff: (a, b) => audit().diff(a, b) }));
+const books = () => booksMod || (booksMod = require("./books")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, rowCo, listCustomers, createCustomer, sup, diff: (a, b) => audit().diff(a, b),
+  deals: { create: createDeal, update: updateDeal, get: getDeal, note: addDealNote } }));
 
 // ---------- team access (src/access.js) ----------
 let accessMod;

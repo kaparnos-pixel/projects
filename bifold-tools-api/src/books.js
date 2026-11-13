@@ -103,7 +103,7 @@ const DEFAULT_ORG = {
 const MAX_LINES = 300;
 
 module.exports = function makeBooks(H) {
-  const { table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, rowCo, listCustomers, createCustomer, sup, diff } = H;
+  const { table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, rowCo, listCustomers, createCustomer, sup, diff, deals } = H;
   const T = "books";
   const r2 = x => Math.round((Number(x) + Number.EPSILON) * 100) / 100;
   const j = (s, d) => { try { const v = JSON.parse(s || ""); return v == null ? d : v; } catch { return d; } };
@@ -353,13 +353,13 @@ module.exports = function makeBooks(H) {
   // ---------- documents ----------
   const dPK = co => "doc-" + co;
   const HEAD = ["RowKey", "type", "number", "status", "date", "dueDate", "contactId", "contactName", "contactTrn", "ref", "subtotal", "vatAmt", "total", "amount", "account",
-    "emirate", "allocs", "gl", "tax", "fromId", "toId", "sentAt", "voidReason", "createdBy", "createdAt", "updatedBy", "updatedAt", "title", "invoiceRef", "files", "internalNote", "internalBy", "internalAt"];
+    "emirate", "allocs", "gl", "tax", "fromId", "toId", "sentAt", "voidReason", "createdBy", "createdAt", "updatedBy", "updatedAt", "title", "invoiceRef", "files", "internalNote", "internalBy", "internalAt", "dealId"];
   function headOut(e) {
     return {
       id: e.rowKey || e.RowKey, type: e.type, number: e.number || "", status: e.status, date: e.date, dueDate: e.dueDate || "", contactId: e.contactId || "", contactName: e.contactName || "",
       contactTrn: e.contactTrn || "", ref: e.ref || "", subtotal: num(e.subtotal), vatAmt: num(e.vatAmt), total: num(e.total), amount: num(e.amount), account: e.account || "",
       emirate: e.emirate || "", allocs: j(e.allocs, []), gl: j(e.gl, []), tax: j(e.tax, []), fromId: e.fromId || "", toId: e.toId || "", sentAt: e.sentAt || "",
-      voidReason: e.voidReason || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, title: e.title || "", invoiceRef: e.invoiceRef || "", fileCount: docFiles(e).length, internalNote: e.internalNote || "", internalBy: e.internalBy || "", internalAt: e.internalAt || "",
+      voidReason: e.voidReason || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, title: e.title || "", invoiceRef: e.invoiceRef || "", fileCount: docFiles(e).length, internalNote: e.internalNote || "", internalBy: e.internalBy || "", internalAt: e.internalAt || "", dealId: e.dealId || "",
     };
   }
   async function allDocs(co) { return (await all(await table(T), dPK(co), HEAD)).map(headOut); }
@@ -656,7 +656,9 @@ module.exports = function makeBooks(H) {
     const t = await table(T);
     await t.createEntity(e);
     // A converted quotation / PO points to what it became.
-    if (fromId) { const src = ctx.docs.find(x => x.id === fromId); if (src && (src.type === "quote" || src.type === "po")) await t.updateEntity({ partitionKey: dPK(ctx.co), rowKey: fromId, status: "converted", toId: e.rowKey }, "Merge").catch(() => {}); }
+    if (fromId) { const src = ctx.docs.find(x => x.id === fromId); if (src && (src.type === "quote" || src.type === "po")) {
+      await t.updateEntity({ partitionKey: dPK(ctx.co), rowKey: fromId, status: "converted", toId: e.rowKey }, "Merge").catch(() => {});
+      if (src.type === "quote") { const q = await getOrNull(t, dPK(ctx.co), fromId); if (q && q.dealId) await syncDeal(user, q, `converted to invoice ${f.number || "(draft)"}`); } } }
     if (user.aud) user.aud.name = `${TYPES[type].label} ${f.number || "draft"}`;
     return getDoc(user, e.rowKey);
   }
@@ -688,11 +690,12 @@ module.exports = function makeBooks(H) {
     if (status === "posted") postInto(f, body, ctx.settings); else { f.gl = "[]"; f.tax = "[]"; }
     f.number = cur.number || (tp.taxDoc && status !== "posted" ? "" : await nextNumber(ctx.co, cur.type));
     if (status === "posted" && cur.status !== "posted") { body.issuedAt = new Date().toISOString(); body.issuedBy = user.email; } else { body.issuedAt = old.issuedAt; body.issuedBy = old.issuedBy; }
-    const next = { partitionKey: dPK(ctx.co), rowKey: id, ...f, files: cur.files || "[]", internalNote: cur.internalNote || "", internalBy: cur.internalBy || "", internalAt: cur.internalAt || "", fromId: cur.fromId || "", toId: cur.toId || "", sentAt: cur.sentAt || (status === "sent" ? new Date().toISOString() : ""), voidReason: "", createdBy: cur.createdBy, createdAt: cur.createdAt,
+    const next = { partitionKey: dPK(ctx.co), rowKey: id, ...f, files: cur.files || "[]", internalNote: cur.internalNote || "", internalBy: cur.internalBy || "", internalAt: cur.internalAt || "", dealId: cur.dealId || "", fromId: cur.fromId || "", toId: cur.toId || "", sentAt: cur.sentAt || (status === "sent" ? new Date().toISOString() : ""), voidReason: "", createdBy: cur.createdBy, createdAt: cur.createdAt,
       updatedBy: user.email, updatedAt: new Date().toISOString(), ...packJson(body) };
     if (user.aud) { user.aud.name = `${tp.label} ${f.number || "draft"}`; user.aud.changes = diff(cur, next); if (status === "posted" && cur.status !== "posted") user.aud.issued = true; }
     try { await t.updateEntity(next, "Replace", { etag: b.etag || cur.etag }); }
     catch (err) { if (err.statusCode === 412) fail(409, "Someone else changed this document after you opened it. Reload it and make your change again."); throw err; }
+    if (cur.type === "quote" && cur.dealId) await syncDeal(user, next, status !== cur.status ? `marked ${status}` : `revised to AED ${num(next.subtotal).toLocaleString("en-US", { minimumFractionDigits: 2 })} before VAT`);
     return getDoc(user, id);
   }
 
@@ -732,6 +735,7 @@ module.exports = function makeBooks(H) {
     if (!tp.ledger) {
       if (cur.status === "converted") fail(400, "This has been converted. Void the document it became instead.");
       await t.updateEntity({ partitionKey: dPK(ctx.co), rowKey: id, status: "cancelled", voidReason: clean(b.reason, 300), updatedBy: user.email, updatedAt: new Date().toISOString() }, "Merge");
+      if (cur.type === "quote" && cur.dealId) await syncDeal(user, { ...cur, status: "cancelled" }, `cancelled (${clean(b.reason, 120)})`);
       return getDoc(user, id);
     }
     if (cur.status !== "posted") fail(400, "Only posted documents can be voided. Delete a draft instead.");
@@ -848,6 +852,56 @@ module.exports = function makeBooks(H) {
     return getDoc(user, id);
   }
 
+  // ---------- Sales Pipeline link: a quotation becomes a deal, and the deal follows the quotation ----------
+  const canPipeline = user => user.isManager || (user.sections || []).includes("pipeline");
+  const DEAL_STAGE = { draft: "proposal", sent: "proposal", accepted: "negotiation", converted: "won", declined: "lost", cancelled: "lost" };
+  const STAGE_ORDER = ["lead", "survey", "proposal", "negotiation", "po", "won", "lost"];
+  // Runs a pipeline call without letting it overwrite this request's activity-log entry.
+  async function quietly(user, fn) { const keep = user.aud; user.aud = {}; try { return await fn(); } finally { user.aud = keep; } }
+  async function addToPipeline(user, id, b) {
+    const co = coOf(user);
+    if (!canPipeline(user)) fail(403, "You don't have access to the Sales Pipeline. Ask a manager to give you access.");
+    const t = await table(T);
+    const q = await getOrNull(t, dPK(co), id);
+    if (!q || q.type !== "quote") fail(404, "This quotation doesn't exist.");
+    if (!typeAllowed(user, q.type)) needAcct(user);
+    if (q.dealId) { const existing = await quietly(user, () => deals.get(user, q.dealId)).catch(() => null); if (existing) fail(409, "This quotation is already in the Sales Pipeline.", { dealId: q.dealId }); }
+    if (!q.contactId) fail(400, "Choose the customer on the quotation first.");
+    const t0 = today();
+    const stage = DEAL_STAGE[q.status] || "proposal";
+    const body = unpackJson(q);
+    const first = (body.lines || [])[0];
+    const deal = await quietly(user, () => deals.create(user, {
+      title: clean(q.title || (first ? first.name : "") || `Quotation ${q.number}`, 150), customerId: q.contactId, value: r2(num(q.subtotal)), stage,
+      expectedClose: q.dueDate && q.dueDate >= t0 ? q.dueDate : addDays(t0, 14), source: "Quotation",
+      nextAction: stage === "proposal" ? `Follow up on quotation ${q.number}` : "", nextActionDate: stage === "proposal" ? addDays(t0, 3) : "",
+      lostReason: stage === "lost" ? (q.status === "declined" ? "Quotation declined" : "Quotation cancelled") : "",
+      notes: clean(`From quotation ${q.number} in Books (AED ${num(q.subtotal).toLocaleString("en-US", { minimumFractionDigits: 2 })} before VAT, AED ${num(q.total).toLocaleString("en-US", { minimumFractionDigits: 2 })} with VAT).${b.notes ? "\n" + b.notes : ""}`, 4000),
+    }));
+    await t.updateEntity({ partitionKey: dPK(co), rowKey: id, dealId: deal.id }, "Merge");
+    if (user.aud) { user.aud.name = `Quotation ${q.number}`; user.aud.changes = [`deal ${deal.id}`]; }
+    return { dealId: deal.id, deal };
+  }
+  // Keeps a linked deal in step when its quotation changes. Never blocks the quotation change itself.
+  async function syncDeal(user, q, why) {
+    if (!q || q.type !== "quote" || !q.dealId) return;
+    try {
+      await quietly(user, async () => {
+        const d = await deals.get(user, q.dealId);
+        const want = DEAL_STAGE[q.status] || d.stage;
+        let stage = d.stage;
+        if (want === "won" || want === "lost") stage = want;
+        else if (!["won", "lost"].includes(d.stage) && STAGE_ORDER.indexOf(want) > STAGE_ORDER.indexOf(d.stage)) stage = want;
+        const value = r2(num(q.subtotal));
+        if (stage === d.stage && Math.abs(value - d.value) < 0.005) return;
+        await deals.update(user, d.id, { title: d.title, customerId: d.customerId, value, stage, probability: stage === d.stage ? d.probability : "", expectedClose: d.expectedClose, source: d.source,
+          nextAction: ["won", "lost"].includes(stage) ? "" : d.nextAction, nextActionDate: ["won", "lost"].includes(stage) ? "" : d.nextActionDate,
+          lostReason: stage === "lost" ? (d.lostReason || (q.status === "declined" ? "Quotation declined" : "Quotation cancelled")) : "", notes: d.notes, owner: d.owner, etag: d.etag });
+        await deals.note(user, d.id, { text: `Quotation ${q.number}: ${why}` }).catch(() => {});
+      });
+    } catch { /* the deal may be deleted or belong to someone else: the quotation change still stands */ }
+  }
+
   async function markSent(user, id) {
     const co = coOf(user);
     const t = await table(T);
@@ -891,7 +945,7 @@ module.exports = function makeBooks(H) {
     const s = { ...settings }; delete s.counters;
     return {
       company: { key: co, name: CO[co].name }, settings: s, accounts: accts, items, docs: list, customers, vendors, vver,
-      perms: { acct, manager: !!user.isManager, quotesOnly: !acct }, vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
+      perms: { acct, manager: !!user.isManager, quotesOnly: !acct, pipeline: canPipeline(user) }, vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
       acctTypes: ACCT_TYPES, sys: SYS, fileKinds: FILE_KINDS, emirates: EMIRATES, today: today(), me: user.email,
     };
   }
@@ -962,6 +1016,7 @@ module.exports = function makeBooks(H) {
       if (id && sub === "apply" && method === "PUT") return applyCredit(user, id, body);
       if (id && sub === "sent" && method === "POST") return markSent(user, id);
       if (id && sub === "internal" && method === "PUT") return saveInternal(user, id, body);
+      if (id && sub === "deal" && method === "POST") return addToPipeline(user, id, body);
       if (id && sub === "convert" && method === "POST") return convert(user, id, body);
       if (id && sub === "files") {
         const fid = seg[3];

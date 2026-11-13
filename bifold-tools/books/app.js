@@ -264,7 +264,7 @@ function listView(type) {
     journal: [["Date", d => fd(d.date)], ["Journal", d => `<span class="t">${esc(d.number)}</span>`], ["Accounts", d => esc([...new Set(d.gl.map(g => (ACC.get(g[0]) || {}).name))].slice(0, 3).join(", "))], ["Status", d => st(d.view)], ["Amount", d => aed(d.total), "r mono"]],
     transfer: [["Date", d => fd(d.date)], ["Transfer", d => `<span class="t">${esc(d.number)}</span>`], ["From", d => esc(acctName(d.account))], ["To", d => esc(acctName((d.gl.find(g => g[1] > 0) || [])[0]))], ["Status", d => st(d.view)], ["Amount", d => aed(d.amount), "r mono"]],
   }[type];
-  cols[1] = [cols[1][0], (f => d => f(d) + clipCount(d))(cols[1][1]), cols[1][2]];
+  cols[1] = [cols[1][0], (f => d => f(d) + clipCount(d) + (d.dealId ? ` <span class="clip" title="In the Sales Pipeline">● pipeline</span>` : ""))(cols[1][1]), cols[1][2]];
   const views = VIEWS[type] || [["", "All"], ["posted", "Posted"], ["void", "Void"]];
   page(PLURAL[type], SALES.has(type) ? "Sales" : type === "journal" || type === "transfer" ? "Accountant" : "Purchases",
     `<button id="xl">Export to Excel</button><button class="primary" id="newBtn">+ New ${NAME[type].toLowerCase()}</button>`,
@@ -439,6 +439,17 @@ function wireEditorFiles(queue) {
   ["dragleave", "drop"].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove("on"); }));
   z.addEventListener("drop", e => add(e.dataTransfer.files));
 }
+// Creates a Sales Pipeline deal from a quotation and attaches the quotation PDF to it.
+async function sendToPipeline(q) {
+  const r = await api("POST", `docs/${q.id}/deal`, {});
+  try {
+    const full = q.lines ? q : await api("GET", "docs/" + q.id);
+    const blob = await BKPDF.doc(full);
+    const data = await readB64(new File([blob], "q.pdf", { type: "application/pdf" }));
+    await fetch(`/api/deals/${encodeURIComponent(r.dealId)}/files`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "quote", name: `Quotation ${full.number} ${full.contactName}.pdf`, type: "application/pdf", data }) });
+  } catch { /* the deal exists even if the PDF couldn't be attached */ }
+  return r.dealId;
+}
 async function afterSave(r, queue, type) { if (queue.length) await uploadFiles(r.id, queue, DEF_KIND[type] || "other"); }
 function saveBlob(blob, name) { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); }
 BK.saveBlob = saveBlob;
@@ -457,6 +468,8 @@ async function docView(id) {
   if ((tp === "quote") && P.acct && ["draft", "sent", "accepted"].includes(d.status)) A.push(["Convert to invoice", "convert", true]);
   if (tp === "po" && ["draft", "sent", "accepted"].includes(d.status)) A.push(["Convert to bill", "convert", true]);
   if (["creditnote", "vendorcredit", "receipt", "payment"].includes(tp) && posted && d.balance > 0.004) A.push(["Apply to " + (SALES.has(tp) ? "invoices" : "bills"), "apply", true]);
+  if (tp === "quote" && d.dealId) A.push(["Open in Sales Pipeline", "pipe"]);
+  else if (tp === "quote" && P.pipeline && d.status !== "cancelled") A.push(["Add to Sales Pipeline", "addpipe"]);
   if (canEdit) A.push(["Edit", "edit"]);
   A.push(["Upload files", "upload"]);
   if (["quote", "invoice", "creditnote", "po", "receipt"].includes(tp)) A.push(["Preview PDF", "preview"], ["Download PDF", "pdf"]);
@@ -537,6 +550,8 @@ async function docView(id) {
     credit: async () => { const r = await api("POST", `docs/${id}/convert`, {}); sessionStorage.setItem("bk-draft", JSON.stringify(r.draft)); go(`#/new/${r.draft.type}?draft=1`); return "nav"; },
     apply: async () => { await applyDialog(d); return "stay"; },
     edit: () => { go("#/edit/" + id); return "nav"; },
+    pipe: () => { location.href = "/pipeline/#" + encodeURIComponent(d.dealId); return "stay"; },
+    addpipe: async () => { const dealId = await sendToPipeline(d); toast("Added to the Sales Pipeline with the quotation PDF attached."); return dealId; },
     upload: () => { $("attCard").scrollIntoView({ behavior: "smooth", block: "center" }); $("attIn").click(); return "stay"; },
     note: () => "stay",
     dup: () => { const x = { type: tp, contactId: d.contactId, lines: d.lines, notes: d.notes, terms: d.terms, ref: "", emirate: d.emirate, account: d.account, payee: d.contactName }; sessionStorage.setItem("bk-draft", JSON.stringify(x)); go(`#/new/${tp}?draft=1`); return "nav"; },
@@ -625,9 +640,10 @@ function lineEditor(d) {
   const salesExtra = t === "invoice" || t === "quote" ? `<label><span class="lbl">Salesperson</span><input id="salesperson" maxlength="100" value="${esc(d.salesperson || (isNew ? (D.me.split("@")[0].split(/[._-]/).map(w => w[0].toUpperCase() + w.slice(1)).join(" ")) : ""))}"></label>` : "";
   const emSel = side === "sales" && vat ? `<label><span class="lbl">Emirate for VAT return (box 1)</span><select id="emirate">${D.emirates.map(e => `<option${e === (d.emirate || s.emirate) ? " selected" : ""}>${e}</option>`).join("")}</select></label>` : "";
   const draftable = ["quote", "invoice", "creditnote", "po", "bill"].includes(t);
-  const saveBtns = (t === "quote" || t === "po") && d.status === "converted" ? `<span class="hint" style="margin:0 auto 0 0">Already ${t === "quote" ? "invoiced" : "billed"}: changes here don't change the ${t === "quote" ? "invoice" : "bill"}.</span><button type="button" class="primary" data-s="converted">Save changes</button>`
+  const pipeChk = t === "quote" && !d.dealId && D.perms.pipeline ? `<label class="chk" style="margin-right:auto"><input type="checkbox" id="toPipe"${isNew ? " checked" : ""}> Also add to the Sales Pipeline</label>` : "";
+  const saveBtns = pipeChk + ((t === "quote" || t === "po") && d.status === "converted" ? `<span class="hint" style="margin:0 auto 0 0">Already ${t === "quote" ? "invoiced" : "billed"}: changes here don't change the ${t === "quote" ? "invoice" : "bill"}.</span><button type="button" class="primary" data-s="converted">Save changes</button>`
     : t === "quote" || t === "po" ? `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="sent">Save as sent</button>`
-    : draftable && (isNew || d.status === "draft") ? `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="posted">${t === "bill" ? "Save and post" : "Save and issue"}</button>` : `<button type="button" class="primary" data-s="posted">Save</button>`;
+    : draftable && (isNew || d.status === "draft") ? `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="posted">${t === "bill" ? "Save and post" : "Save and issue"}</button>` : `<button type="button" class="primary" data-s="posted">Save</button>`);
   page(title, tag, `<a class="btn" href="${d.id ? "#/doc/" + d.id : "#/" + ROUTE_OF[t]}">Cancel</a>`,
     `<form class="ed" id="ed" novalidate>
       <section class="panel"><div class="row wide">
@@ -692,7 +708,10 @@ function lineEditor(d) {
     if (b.dataset.s === "posted" && t === "invoice" && payload.supplyDate && daysBetween(payload.supplyDate, payload.date) > 14 && !await ask("Issued more than 14 days after the supply", `The date of supply is ${fd(payload.supplyDate)}. A tax invoice must be issued within 14 days of the date of supply (Art. 67 of the VAT Decree-Law), and the VAT is due for the period of the supply date. Issue it anyway?`, { okText: "Continue" })) return;
     if (b.dataset.s === "posted" && ["invoice", "creditnote"].includes(t) && !await ask(`Issue this ${docTitle({ type: t }).toLowerCase()}?`, "It gets the next number in the sequence and can't be changed afterwards.", { okText: "Issue" })) return;
     busy(b, true);
-    try { const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await afterSave(r, queue, t); await load(); toast(`${NAME[t]} ${r.number || "draft"} saved.`); go("#/doc/" + r.id); }
+    try { const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await afterSave(r, queue, t);
+      let msg = `${NAME[t]} ${r.number || "draft"} saved.`;
+      if ($("toPipe") && $("toPipe").checked) { try { await sendToPipeline(r); msg += " Added to the Sales Pipeline."; } catch (pe) { msg += " Couldn't add it to the Sales Pipeline: " + pe.message; } }
+      await load(); toast(msg); go("#/doc/" + r.id); }
     catch (e) { $("err").textContent = e.message; busy(b, false); }
   });
 }

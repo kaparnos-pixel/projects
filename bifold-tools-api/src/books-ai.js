@@ -182,7 +182,7 @@ async function streamText(body, deadlineMs, fail) {
   } catch { clearTimeout(hard); fail(504, "Claude didn't respond in time. Try again."); }
   if (!r.ok) { clearTimeout(hard); const j = await r.json().catch(() => ({})); const m = (j.error && j.error.message) || "";
     const why = /credit balance/i.test(m) ? "the Claude API account is out of credit. Add credit in the Claude Console under Billing" : /model/i.test(m) && r.status === 404 ? "the Claude model name isn't recognised (" + m.slice(0, 120) + ")" : r.status === 401 ? "the API key was refused. Check ANTHROPIC_API_KEY in Azure" : r.status === 429 ? "too many requests at once. Wait a minute and try again" : r.status === 529 || r.status >= 500 ? "Claude is busy right now. Try again in a minute" : (m || (j.error && j.error.type) || "HTTP " + r.status).slice(0, 200);
-    const e = new Error("Claude couldn't draft this: " + why + "."); e.status = r.status; e.detail = m; throw e; }
+    fail(r.status === 400 ? 400 : 502, "Claude couldn't draft this: " + why + "."); }
   const reader = r.body.getReader(), dec = new TextDecoder(); let buf = "";
   try {
     for (;;) {
@@ -194,7 +194,7 @@ async function streamText(body, deadlineMs, fail) {
         if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") text += ev.delta.text;
         if (ev.type === "message_delta" && ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason;
         if (ev.type === "message_stop") done = true;
-        if (ev.type === "error") { const e = new Error("Claude stopped with an error (" + ((ev.error && ev.error.type) || "unknown") + ")."); e.status = 502; throw e; } }
+        if (ev.type === "error") fail(502, ev.error && /overloaded/i.test(ev.error.type || "") ? "Claude is busy right now. Try again in a minute." : "Claude stopped with an error (" + ((ev.error && ev.error.type) || "unknown") + "). Try again."); }
     }
   } catch (e) { if (e.status) throw e; }
   finally { clearTimeout(hard); }

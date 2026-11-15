@@ -16,6 +16,14 @@ const BKPROP = (function () {
   const DIA = () => (typeof PROPDIAG !== "undefined" ? PROPDIAG : null);
   const isTH = () => (B().brand() || {}).key === "techhub";
 
+  // Claude drafting requests. Long answers come back in parts (each request stays inside the hosting time
+  // limit); this keeps asking until the answer is complete.
+  async function aiCall(body) {
+    let r = await B().api("POST", "ai", body), n = 0;
+    while (r && r.partial != null && n < 6) { n++; r = await B().api("POST", "ai", { ...body, partial: r.partial, round: r.round }); }
+    return r;
+  }
+
   /* ---------- text <-> fields (one paragraph per blank line, one bullet or row per line) ---------- */
   const paras = t => String(t || "").split(/\n\s*\n/).map(s => s.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean);
   const linesOf = t => String(t || "").split(/\n/).map(s => s.replace(/^\s*[-*•]\s*/, "").trim()).filter(Boolean);
@@ -213,7 +221,7 @@ const BKPROP = (function () {
   }
   async function ai(part, extra) {
     const h = CTX.header(), lines = lineData(), t = totals(lines);
-    return B().api("POST", "ai", { part, customer: h.customer, attention: h.attention, title: h.title || P.title, notes: P.notes || "", validDays: h.validDays, subtotal: t.sub, total: t.total,
+    return aiCall({ part, customer: h.customer, attention: h.attention, title: h.title || P.title, notes: P.notes || "", validDays: h.validDays, subtotal: t.sub, total: t.total,
       lines: lines.map(l => ({ section: l.section || "", sub: !!l.sub, name: l.name, description: l.description, model: l.model || "", qty: num(l.qty || 1), unit: l.unit || "", rate: num(l.rate) })), ...(extra || {}) });
   }
   const value = () => { const root = document.getElementById("ed"); if (root) fromFields(root); const out = JSON.parse(JSON.stringify(P)); const lt = document.getElementById("pLetter"); out.letter = lt ? lt.checked : P.letter !== false; return out; };
@@ -243,7 +251,7 @@ const BKPROP = (function () {
     rows = rows.filter(r => r.some(v => String(v).trim() !== ""));
     if (!rows.length) throw new Error("The BoQ looks empty.");
     const sample = rows.slice(0, 25).map((r, i) => `${i}: ` + r.map(v => String(v).replace(/\s+/g, " ").slice(0, 80)).join(" | ")).join("\n");
-    const map = await B().api("POST", "ai", { part: "boqmap", sample });
+    const map = await aiCall({ part: "boqmap", sample });
     return rowsToLines(rows, map);
   }
   async function importBoq() {
@@ -281,7 +289,7 @@ const BKPROP = (function () {
           else if (file) {
             if (file.size > 5 * 1024 * 1024) throw new Error("That file is over 5 MB. Export the BoQ to Excel or split the PDF.");
             const type = file.type || (/\.pdf$/i.test(file.name) ? "application/pdf" : "image/png");
-            const r = await B().api("POST", "ai", { part: "boqread", file: { name: file.name, type, data: await b64(file) } });
+            const r = await aiCall({ part: "boqread", file: { name: file.name, type, data: await b64(file) } });
             lines = (r.items || []).map(lineFrom);
           } else lines = await fromText(text);
           if (!lines.length) throw new Error("No line items were found. Check the file, or paste just the item rows.");
@@ -296,7 +304,7 @@ const BKPROP = (function () {
     if (rows.filter(l => l.includes("\t")).length >= rows.length * 0.6) return fromRows(rows.map(l => l.split("\t")));
     // Free text: Claude reads it in parts of about 45 lines, in parallel, so long BoQs stay inside the time limit.
     const parts = []; for (let i = 0; i < rows.length; i += 45) parts.push(rows.slice(i, i + 45).join("\n"));
-    const res = await Promise.all(parts.slice(0, 8).map(t => B().api("POST", "ai", { part: "boqread", text: t })));
+    const res = await Promise.all(parts.slice(0, 8).map(t => aiCall({ part: "boqread", text: t })));
     return res.flatMap(r => (r.items || []).map(lineFrom));
   }
 

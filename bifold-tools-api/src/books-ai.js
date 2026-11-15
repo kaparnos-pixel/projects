@@ -180,7 +180,9 @@ async function streamText(body, deadlineMs, fail) {
     r = await fetch((process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com") + "/v1/messages", { method: "POST", signal: ctl.signal,
       headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: JSON.stringify({ ...body, stream: true }) });
   } catch { clearTimeout(hard); fail(504, "Claude didn't respond in time. Try again."); }
-  if (!r.ok) { clearTimeout(hard); const j = await r.json().catch(() => ({})); const e = new Error("Claude couldn't draw this right now (" + ((j.error && j.error.type) || r.status) + ")."); e.status = r.status; e.detail = (j.error && j.error.message) || ""; throw e; }
+  if (!r.ok) { clearTimeout(hard); const j = await r.json().catch(() => ({})); const m = (j.error && j.error.message) || "";
+    const why = /credit balance/i.test(m) ? "the Claude API account is out of credit. Add credit in the Claude Console under Billing" : /model/i.test(m) && r.status === 404 ? "the Claude model name isn't recognised (" + m.slice(0, 120) + ")" : r.status === 401 ? "the API key was refused. Check ANTHROPIC_API_KEY in Azure" : r.status === 429 ? "too many requests at once. Wait a minute and try again" : r.status === 529 || r.status >= 500 ? "Claude is busy right now. Try again in a minute" : (m || (j.error && j.error.type) || "HTTP " + r.status).slice(0, 200);
+    const e = new Error("Claude couldn't draft this: " + why + "."); e.status = r.status; e.detail = m; throw e; }
   const reader = r.body.getReader(), dec = new TextDecoder(); let buf = "";
   try {
     for (;;) {
@@ -204,12 +206,12 @@ function parseFigure(text) {
   const title = (head.match(/TITLE:\s*(.+)/) || [])[1] || "", caption = (head.match(/CAPTION:\s*(.+)/) || [])[1] || "";
   return { title: noDash(title.trim()), caption: noDash(caption.trim()), svg: a >= 0 && z > a ? cleanSvg(t.slice(a, z + 6)) : null };
 }
-async function runFigure(b, fail, clean, content) {
+async function runStaged(b, fail, clean, content, maxTokens, finish) {
   const partial = typeof b.partial === "string" ? b.partial.slice(0, 60000) : "";
   const round = Math.max(0, Math.min(6, Number(b.round) || 0));
-  if (round >= 6) fail(502, "Claude's drawing didn't finish. Try again.");
+  if (round >= 6) fail(502, "Claude's answer didn't finish after several parts. Try again.");
   const deadline = Number(process.env.FIGURE_DEADLINE_MS) || 38000;
-  const base = { model: process.env.FIGURE_MODEL || MODEL(), max_tokens: 9000 };
+  const base = { model: b.part === "figure" ? process.env.FIGURE_MODEL || MODEL() : MODEL(), max_tokens: maxTokens };
   let res;
   if (!partial) res = await streamText({ ...base, messages: [{ role: "user", content }] }, deadline, fail);
   else {
@@ -222,9 +224,8 @@ async function runFigure(b, fail, clean, content) {
       res = await streamText({ ...base, messages: [{ role: "user", content: tail }] }, deadline, fail); res.text = partial + res.text;
     }
   }
-  if (!res.done) { if (res.stop === "max_tokens") fail(502, "Claude's drawing was too long. Redraw with a simpler instruction."); return { partial: res.text, round: round + 1 }; }
-  const f = parseFigure(res.text); if (!f.svg) fail(502, "Claude's drawing couldn't be used. Try again.");
-  return f;
+  if (!res.done) { if (res.stop === "max_tokens") fail(502, b.part === "figure" ? "Claude's drawing was too long. Redraw with a simpler instruction." : "Claude's answer was too long. Split the BoQ or try again."); return { partial: res.text, round: round + 1 }; }
+  return finish(res.text);
 }
 
 async function run(b, fail, clean) {
@@ -241,23 +242,10 @@ async function run(b, fail, clean) {
     } else if (b.part === "boqread" && !b.text) fail(400, "Paste the BoQ or choose a file.");
     content.push({ type: "text", text: p[0] });
   } else content = p;
-  if (b.part === "figure") return runFigure(b, fail, clean, content);
-  const max = { boqmap: 400, boqread: 6000, story: 3200, scope: 3500, specs: 3000, commercial: 2600, diagram: 3000, figure: 4800 }[b.part];
-  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 43000);
-  let r;
-  try {
-    r = await fetch((process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com") + "/v1/messages", {
-      method: "POST", signal: ctl.signal,
-      headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: b.part === "figure" ? process.env.FIGURE_MODEL || MODEL() : MODEL(), max_tokens: max, messages: [{ role: "user", content }] }),
-    });
-  } catch { fail(504, "Claude took too long to answer. Try again, or split a long BoQ into smaller parts."); }
-  finally { clearTimeout(timer); }
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) fail(502, "Claude couldn't draft this right now (" + ((j.error && j.error.type) || r.status) + ").");
-  const out = parseJson((j.content || []).filter(c => c.type === "text").map(c => c.text).join(""));
-  if (!out || typeof out !== "object") fail(502, "Claude's answer couldn't be read. Try again.");
-  return noDash(out);
+  // Every part streams and stops before the hosting time limit; the page asks again to carry on (see runStaged).
+  const max = { boqmap: 600, boqread: 8000, story: 4000, scope: 4500, specs: 3500, commercial: 3000, diagram: 3500, figure: 9000 }[b.part] || 3000;
+  if (b.part === "figure") return runStaged(b, fail, clean, content, max, text => { const f = parseFigure(text); if (!f.svg) fail(502, "Claude's drawing couldn't be used. Try again."); return f; });
+  return runStaged(b, fail, clean, content, max, text => { const out = parseJson(text); if (!out || typeof out !== "object") fail(502, "Claude's answer couldn't be read. Try again."); return noDash(out); });
 }
 
 // The drawing is shown as an image (scripts never run there), but it is still reduced to plain drawing elements.

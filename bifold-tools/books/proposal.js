@@ -153,7 +153,9 @@ const BKPROP = (function () {
     btns.forEach(b => { if (b) b.disabled = true; });
     st.className = "propstat busy"; st.textContent = `Claude is writing the proposal for ${lines.length} lines: summary, requirements, solution, scope wording, specifications, terms and the figure. About 30 to 45 seconds.`;
     const chunks = []; for (let i = 0; i < lines.length; i += 20) chunks.push(lines.slice(i, i + 20).map((l, j) => ({ ...l, n: i + j + 1 })));
-    const jobs = [ai("story"), ai("specs"), ai("commercial"), drawFigure({}), ...chunks.map(c => ai("scope", { lines: c.map(l => ({ n: l.n, section: l.section || "", sub: !!l.sub, name: l.name, description: l.description, model: l.model || "", qty: num(l.qty || 1), unit: l.unit || "" })) }))];
+    // A part that fails for a passing reason (unreadable answer, busy, timed out) is asked once more.
+    const again = f => f().catch(e => e.status === 400 || e.status === 401 || e.status === 403 || e.status === 501 ? Promise.reject(e) : f());
+    const jobs = [again(() => ai("story")), again(() => ai("specs")), again(() => ai("commercial")), drawFigure({}), ...chunks.map(c => () => ai("scope", { lines: c.map(l => ({ n: l.n, section: l.section || "", sub: !!l.sub, name: l.name, description: l.description, model: l.model || "", qty: num(l.qty || 1), unit: l.unit || "" })) })).map(again)];
     const res = await Promise.allSettled(jobs);
     const val = i => res[i].status === "fulfilled" ? res[i].value : null;
     const [s, sp, c, dg] = [val(0), val(1), val(2), val(3)];

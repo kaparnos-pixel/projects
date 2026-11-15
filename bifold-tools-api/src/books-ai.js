@@ -30,7 +30,8 @@ const RULES = `HOUSE RULES
 - Never invent prices, part numbers, quantities, brands or models. Use only what the BoQ and the salesperson's notes give. Write "to be confirmed" when something is missing.
 - Professional, confident, specific to this customer. UK/UAE English spelling (organisation, authorised). First-person plural ("we propose").
 - Never use the em dash or en dash characters. Use a comma, colon, parentheses or a full stop. Hyphens inside part numbers and compound words are fine.
-- Each bullet is one sentence. Paragraphs are 2 to 4 sentences.`;
+- Each bullet is one sentence. Paragraphs are 2 to 4 sentences.
+- Inside text never use the double-quote character: write 19-inch (not 19"), and use single quotes for names if needed.`;
 
 const fmtLines = lines => (lines || []).slice(0, 200).map((l, i) => `${i + 1}. ${[l.section && "[" + l.section + "]", l.sub ? "(sub-item)" : "", l.name, l.description, l.model && "model " + l.model, (l.qty || "") + " " + (l.unit || ""), l.rate ? "AED " + l.rate : "price TBD"].filter(Boolean).join(" | ")}`).join("\n");
 
@@ -159,13 +160,35 @@ ${shape}`;
   return part === "diagram" && b.file && b.file.data ? [text] : text;
 }
 
+// Reads Claude's JSON answer, repairing the usual slips: text around it, a code fence, inch marks or other
+// unescaped quotes inside strings (19" rack), raw line breaks inside strings and trailing commas.
 function parseJson(text) {
-  const t = String(text || "").trim();
-  try { return JSON.parse(t); } catch {}
-  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/); if (fence) { try { return JSON.parse(fence[1]); } catch {} }
-  const a = t.indexOf("{"), z = t.lastIndexOf("}");
-  if (a >= 0 && z > a) { try { return JSON.parse(t.slice(a, z + 1)); } catch {} }
+  let t = String(text || "").trim();
+  const tries = [];
+  tries.push(t);
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)(?:```|$)/); if (fence) tries.push(fence[1]);
+  const a = t.indexOf("{"), z = t.lastIndexOf("}"); if (a >= 0 && z > a) tries.push(t.slice(a, z + 1));
+  for (const x of tries) { try { return JSON.parse(x); } catch {} }
+  for (const x of tries.slice(1).concat(tries[0])) { try { return JSON.parse(repairJson(x)); } catch {} }
   return null;
+}
+function repairJson(src) {
+  const s = String(src || ""); let out = "", inStr = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (!inStr) { if (c === '"') inStr = true; out += c; continue; }
+    if (c === "\\") { out += c + (s[i + 1] || ""); i++; continue; }
+    if (c === "\n") { out += "\\n"; continue; }
+    if (c === "\r" || c === "\t") { out += c === "\t" ? "\\t" : ""; continue; }
+    if (c === '"') {
+      // A real closing quote is followed by , } ] or : (after spaces). Anything else is a quote inside the text.
+      let j = i + 1; while (j < s.length && /\s/.test(s[j])) j++;
+      if (j >= s.length || /[,}\]:]/.test(s[j])) { inStr = false; out += c; } else out += '\\"';
+      continue;
+    }
+    out += c;
+  }
+  return out.replace(/,\s*([}\]])/g, "$1");
 }
 const noDash = o => typeof o === "string" ? o.replace(/\s*[—–]\s*/g, ", ") : Array.isArray(o) ? o.map(noDash) : o && typeof o === "object" ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, noDash(v)])) : o;
 const FILE_TYPES = { "application/pdf": "document", "image/png": "image", "image/jpeg": "image", "image/webp": "image", "image/gif": "image" };
@@ -206,6 +229,14 @@ function parseFigure(text) {
   const title = (head.match(/TITLE:\s*(.+)/) || [])[1] || "", caption = (head.match(/CAPTION:\s*(.+)/) || [])[1] || "";
   return { title: noDash(title.trim()), caption: noDash(caption.trim()), svg: a >= 0 && z > a ? cleanSvg(t.slice(a, z + 6)) : null };
 }
+// Joins a continued answer to what came before, dropping a repeated code fence or a repeated stretch of text.
+function joinParts(prev, next) {
+  let n = String(next || "").replace(/^\s*```(?:json|svg|xml)?\s*\n?/, "");
+  const p = String(prev || "");
+  for (let k = Math.min(400, p.length, n.length); k >= 12; k--) if (p.endsWith(n.slice(0, k))) { n = n.slice(k); break; }
+  return p + n;
+}
+
 async function runStaged(b, fail, clean, content, maxTokens, finish) {
   const partial = typeof b.partial === "string" ? b.partial.slice(0, 60000) : "";
   const round = Math.max(0, Math.min(6, Number(b.round) || 0));
@@ -221,7 +252,7 @@ async function runStaged(b, fail, clean, content, maxTokens, finish) {
       if (e.status !== 400) throw e;
       const tail = Array.isArray(content) ? content.slice() : [{ type: "text", text: content }];
       tail.push({ type: "text", text: "\n\nYOU ALREADY WROTE THE START OF THE ANSWER (below). Output ONLY the rest, continuing exactly after its last character, without repeating anything:\n" + partial });
-      res = await streamText({ ...base, messages: [{ role: "user", content: tail }] }, deadline, fail); res.text = partial + res.text;
+      res = await streamText({ ...base, messages: [{ role: "user", content: tail }] }, deadline, fail); res.text = joinParts(partial, res.text);
     }
   }
   if (!res.done) { if (res.stop === "max_tokens") fail(502, b.part === "figure" ? "Claude's drawing was too long. Redraw with a simpler instruction." : "Claude's answer was too long. Split the BoQ or try again."); return { partial: res.text, round: round + 1 }; }

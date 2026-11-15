@@ -173,7 +173,7 @@ function editEmployee(e) {
     <div class="sec">Opening balances (when moving from another system)</div>
     <div class="fields">${inp("leaveOpening", "Annual leave balance (days)", `class="num" inputmode="decimal" value="${v.leaveOpening || ""}"`)}${inp("leaveAsOf", "Balance as of", "type=date")}${inp("unpaidBefore", "Unpaid leave days before", `class="num" inputmode="numeric" value="${v.unpaidBefore || ""}"`)}</div>
     <label><span class="lbl">Notes</span><textarea name="notes" rows="2" maxlength="2000">${esc(v.notes || "")}</textarea></label>
-    <datalist id="natL">${["India", "Pakistan", "Philippines", "Bangladesh", "Nepal", "Sri Lanka", "Egypt", "Jordan", "Lebanon", "Syria", "United Kingdom", "UAE", "Saudi Arabia", "Oman", "Kuwait", "Bahrain", "Qatar"].map(x => `<option value="${x}">`).join("")}</datalist>
+    <datalist id="natL">${["Bahrain", "Bangladesh", "Egypt", "India", "Jordan", "Kuwait", "Lebanon", "Myanmar", "Nepal", "Oman", "Pakistan", "Philippines", "Qatar", "Saudi Arabia", "Sri Lanka", "Syria", "UAE", "United Kingdom"].map(x => `<option value="${x}">`).join("")}</datalist>
     <div class="foot"><button type="button" data-x>Cancel</button><button class="primary" id="sv">Save employee</button></div></form>`, { wide: true, onOpen: (d, done) => {
     const f = d.querySelector("form");
     const sync = () => { d.querySelector("#leftF").hidden = f.status.value !== "left"; };

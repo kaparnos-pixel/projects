@@ -131,3 +131,4 @@ dialog label{display:block}
 .lockedui input:not(.keep),.lockedui textarea,.lockedui select:not(.keep){pointer-events:none}
 .lockedui .edit-only{display:none!important}
 @media (max-width:640px){.edacts{width:100%}.edacts button{flex:1 1 auto;justify-content:center}.card .bd{padding:14px 12px}}
+.signbox dd input.sigdes{width:100%;max-width:240px;padding:3px 8px;font:inherit;border:1px solid var(--line,#d8dee6);border-radius:6px;background:#fff}.signbox dd input.sigdes:focus{outline:2px solid var(--accent,#28A08C);outline-offset:0;border-color:transparent}

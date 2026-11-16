@@ -300,10 +300,10 @@
     snags() { return tbl("snags", [["item", "Open item", 0], ["owner", "Owner", 160], ["target", "Target date", 140]], "") + `<p class="hint" style="margin:0">${R.snags.length ? "These print as open items, and the acceptance wording refers to them." : "With no rows, the report states that there are no open snags."}</p>`; },
     signoff() {
       const s = R.signature, cs = R.company || {};
-      const box = (title, img, rows, extra) => `<div class="signbox"><h3>${title}</h3><div class="sigimg${img ? "" : " blank"}">${img ? `<img src="/api/pcr/files/${esc(img)}" alt="Signature">` : ""}</div><dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v || "-")}</dd>`).join("")}</dl>${extra || ""}</div>`;
+      const box = (title, img, rows, extra) => `<div class="signbox"><h3>${title}</h3><div class="sigimg${img ? "" : " blank"}">${img ? `<img src="/api/pcr/files/${esc(img)}" alt="Signature">` : ""}</div><dl>${rows.map(([k, v, html]) => `<dt>${esc(k)}</dt><dd>${html || esc(v || "-")}</dd>`).join("")}</dl>${extra || ""}</div>`;
       const linkLive = R.link && !s;
       return `<div class="sign2">
-        ${box("Prepared by", cs.fileId, [["Name", R.preparedBy], ["Designation", R.preparedTitle], ["Company", B().name], ["Signed", cs.at ? fdt(cs.at) : "Not signed"]],
+        ${box("Prepared by", cs.fileId, [["Name", R.preparedBy], ["Designation", R.preparedTitle, `<input class="sigdes" data-b="preparedTitle" value="${esc(R.preparedTitle)}" maxlength="100" placeholder="e.g. Project Engineer" aria-label="Designation"${locked() ? " disabled" : ""}>`], ["Company", B().name], ["Signed", cs.at ? fdt(cs.at) : "Not signed"]],
           `<div class="btnrow edit-only"><button type="button" data-sign="company">${cs.fileId ? "Sign again" : "Sign for the company"}</button>${cs.fileId ? '<button type="button" data-sign="company-clear">Remove</button>' : ""}</div>`)}
         ${box("Accepted by (customer)", s && s.fileId, s ? [["Name", s.name], ["Designation", s.designation], ["Company", R.customerName], ["Signed", fdt(s.at) + (s.method === "link" ? ", signing link" : ", on site")]] : [["Name", ""], ["Designation", ""], ["Company", R.customerName], ["Signed", linkLive ? "Waiting for the customer" : "Not signed"]],
           s ? (s.remarks ? `<p class="hint" style="margin:0">Customer remarks: ${esc(s.remarks)}</p>` : "") : `<div class="signopts edit-only">
@@ -337,6 +337,7 @@
   $("cards").addEventListener("input", e => {
     const t = e.target; if (locked()) return;
     if (t.dataset.b && t.type === "checkbox") return;
+    if (t.dataset.b === "preparedTitle") document.querySelectorAll('[data-b="preparedTitle"]').forEach(x => { if (x !== t) x.value = t.value; });
     if (t.dataset.b) { let v = t.value; if (t.type === "number") v = Number(v) || 0; setPath(t.dataset.b, v); if (t.tagName === "SELECT" && t.dataset.b.endsWith(".result")) t.className = "res-" + v; }
     else if (t.dataset.lines) setPath(t.dataset.lines, t.value.split("\n").map(x => x.replace(/^\s*[-•*]\s*/, "").trim()).filter(Boolean));
     else if (t.dataset.paras) setPath(t.dataset.paras, t.value.split(/\n\s*\n/).map(x => x.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean));

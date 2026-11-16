@@ -30,7 +30,7 @@
     <div class="tools">
       <input type="search" id="q" placeholder="Search customer, PO, project or document no." aria-label="Search reports">
       <div class="seg" id="fseg" role="group" aria-label="Status">
-        <button type="button" data-v="all" aria-pressed="true">All</button><button type="button" data-v="draft" aria-pressed="false">Drafts</button><button type="button" data-v="awaiting" aria-pressed="false">Awaiting signature</button><button type="button" data-v="signed" aria-pressed="false">Signed</button>
+        <button type="button" data-v="all" aria-pressed="true">All</button><button type="button" data-v="draft" aria-pressed="false">Drafts</button><button type="button" data-v="awaiting" aria-pressed="false">Awaiting signature</button><button type="button" data-v="signed" aria-pressed="false">Signed</button><button type="button" data-v="complete" aria-pressed="false">Completed</button>
       </div>
       <span class="cnt" id="cnt"></span>
     </div>
@@ -51,6 +51,7 @@
         <button type="button" id="bPdf">PDF</button>
         <button type="button" id="bPv">Preview</button>
         <button type="button" id="bMail">Email</button>
+        <button type="button" id="bDone" class="done">Mark complete</button>
         <button type="button" id="bMore" aria-label="More actions" aria-haspopup="menu">&#8942;</button>
         <div class="menu" id="moreMenu" role="menu" hidden><button type="button" role="menuitem" id="bHist">History</button><button type="button" role="menuitem" id="bDel" class="danger">Delete report</button></div>
       </div>
@@ -123,6 +124,15 @@
 </form></dialog>
 
 <!-- signing link -->
+<dialog id="doneDlg"><form id="doneForm" novalidate>
+  <h3>Mark this report complete</h3>
+  <p class="hint" style="margin:0">Use this when the customer accepted the works without signing here, for example on a paper copy or by email. The report is locked; you can move it back to draft later.</p>
+  <p class="hint" id="doneLink" hidden style="margin:0"><b>The open signing link will be cancelled.</b></p>
+  <label><span class="lbl">How was it accepted? (optional)</span><input id="doneNote" maxlength="300" placeholder="e.g. Customer signed the paper copy on site"></label>
+  <p class="err" id="doneErr"></p>
+  <div class="foot"><button type="button" data-close>Cancel</button><button class="primary" type="submit" id="doneGo">Mark complete</button></div>
+</form></dialog>
+
 <dialog id="linkDlg"><form id="linkForm" novalidate>
   <h3>Customer signing link</h3>
   <p class="hint" style="margin:0">Anyone with this link can read the report and sign it, without signing in. It works once and expires on <b id="lExp"></b>.</p>

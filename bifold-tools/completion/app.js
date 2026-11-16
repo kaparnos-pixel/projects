@@ -49,7 +49,7 @@
   let ME = null, BOOT = null, CUST = [], R = null, FILTER = "all";
   const co = () => (BOOT && BOOT.co === "techhub") ? "techhub" : "bifold";
   const B = () => BR[co()];
-  const STATUS = { draft: "Draft", awaiting: "Awaiting signature", signed: "Signed" };
+  const STATUS = { draft: "Draft", awaiting: "Awaiting signature", signed: "Signed", complete: "Completed" };
   const stChip = s => `<span class="st ${esc(s)}">${esc(STATUS[s] || s)}</span>`;
 
   /* ================= start and routing ================= */
@@ -76,7 +76,7 @@
     const k = (c, label, v, s) => `<div class="kpi" style="--c:${c}"><div class="k">${label}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
     $("kpis").innerHTML = k("var(--accent)", "Drafts", all.filter(r => r.status === "draft").length, "Being prepared")
       + k("var(--warn)", "Awaiting signature", all.filter(r => r.status === "awaiting").length, "Signing link sent")
-      + k("var(--good)", "Signed this month", all.filter(r => r.status === "signed" && String(r.signedAt).slice(0, 7) === ym).length, "Accepted by the customer")
+      + k("var(--good)", "Closed this month", all.filter(r => (r.status === "signed" && String(r.signedAt).slice(0, 7) === ym) || (r.status === "complete" && String(r.completedAt).slice(0, 7) === ym)).length, "Signed or marked complete")
       + k("var(--muted)", "Reports in " + yr, all.filter(r => String(r.createdAt).slice(0, 4) === yr).length, "Both document types");
     const q = $("q").value.trim().toLowerCase();
     const list = all.filter(r => FILTER === "all" || r.status === FILTER).filter(r => !q || [r.docNo, r.customerName, r.projectTitle, r.poRef, r.preparedBy].join(" ").toLowerCase().includes(q));
@@ -127,7 +127,7 @@
   const HEAD = ["customerId", "poRef", "poDate", "projectTitle", "site", "startDate", "completionDate", "preparedBy", "preparedTitle", "attention", "mode"];
   const BODY = ["include", "notes", "instructions", "letter", "scope", "boq", "serials", "testing", "sysinfo", "handover", "warranty", "snags", "diagram", "photos", "textSource"];
   let dirty = false, saving = null, timer = null;
-  const locked = () => R && R.status === "signed";
+  const locked = () => R && (R.status === "signed" || R.status === "complete");
   function setSave(t, err) { const s = $("saveSt"); s.textContent = t; s.classList.toggle("err", !!err); }
   function touch() { if (!R || locked()) return; dirty = true; setSave("Unsaved changes"); clearTimeout(timer); timer = setTimeout(() => save(), 1200); }
   async function save() {
@@ -167,10 +167,14 @@
     if (R.status === "signed") { lb.className = "lockbar"; lb.hidden = false; const s = R.signature || {};
       lb.innerHTML = `<span><b>Signed by ${esc(s.name)}</b>${s.designation ? ", " + esc(s.designation) : ""} on ${esc(fdt(s.at))} (${s.method === "link" ? "signing link" : "on site"}). The report is locked.</span>${R.canReopen ? '<button type="button" id="bReopen">Reopen to edit</button>' : ""}`;
       const br = $("bReopen"); if (br) br.onclick = reopen; }
+    else if (R.status === "complete") { lb.className = "lockbar"; lb.hidden = false; const c = R.completion || {};
+      lb.innerHTML = `<span><b>Marked complete</b> by ${esc(c.byName || c.by || R.completedBy || "")} on ${esc(fdt(c.at || R.completedAt))}${c.note ? ": " + esc(c.note) : ""}. The report is locked.</span>${R.canReopen ? '<button type="button" id="bReopen">Move back to draft</button>' : ""}`;
+      const br = $("bReopen"); if (br) br.onclick = reopen; }
     else if (R.status === "awaiting" && R.link) { lb.className = "lockbar awaiting"; lb.hidden = false; lb.innerHTML = `<span><b>Waiting for the customer to sign.</b> The signing link expires on ${esc(fd(R.link.expires.slice(0, 10)))}. Changes you make now are what the customer will see.</span><button type="button" id="bShowLink">Show link</button>`; $("bShowLink").onclick = showLink; }
     else lb.hidden = true;
     $("cards").classList.toggle("lockedui", locked());
     $("bAi").hidden = locked();
+    $("bDone").hidden = locked();
     $("bDel").hidden = !R.canDelete;
   }
 
@@ -660,7 +664,11 @@
   $("lRevoke").onclick = async () => { try { const res = await api("DELETE", `pcr/reports/${R.id}/link`); R = Object.assign(res, { _custLoaded: res.customerId }); LINKURL = ""; $("linkDlg").close(); renderAll(); toast("Signing link cancelled."); } catch (e) { toast(e.message, true); } };
   $("lMail").onclick = () => { $("linkDlg").close(); openMail(true); };
   async function reopen() {
-    const b = $("bReopen"); if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = "Click again: this removes the customer's signature"; setTimeout(() => { if (b.isConnected) { b.classList.remove("armed"); b.textContent = "Reopen to edit"; } }, 4000); return; }
+    const b = $("bReopen");
+    if (R.status === "complete") {
+      try { const res = await api("POST", `pcr/reports/${R.id}/reopen`); R = Object.assign(res, { _custLoaded: res.customerId }); renderAll(); syncList(); toast("Moved back to draft."); } catch (e) { toast(e.message, true); }
+      return;
+    } if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = "Click again: this removes the customer's signature"; setTimeout(() => { if (b.isConnected) { b.classList.remove("armed"); b.textContent = "Reopen to edit"; } }, 4000); return; }
     try { const res = await api("POST", `pcr/reports/${R.id}/reopen`); R = Object.assign(res, { _custLoaded: res.customerId }); renderAll(); toast("Reopened. Get the customer to sign again when you're done."); } catch (e) { toast(e.message, true); }
   }
 
@@ -740,18 +748,26 @@
     const cu = R.customer || {};
     $("mTo").value = cu.email || ""; $("mCc").value = ""; $("mErr").textContent = "";
     $("mSubj").value = `${R.mode === "certificate" ? "Work Completion Certificate" : "Project Completion Report"} ${R.docNo}${R.poRef ? " | PO " + R.poRef : ""}`;
-    const signed = R.status === "signed";
+    const signed = R.status === "signed" || R.status === "complete";
     $("mMsg").value = `${R.attention ? "Dear " + R.attention + "," : "Dear Sir/Madam,"}\n\nPlease find attached the ${R.mode === "certificate" ? "work completion certificate" : "project completion report"} for ${R.projectTitle || "the completed works"}${R.poRef ? " under your PO " + R.poRef : ""}.${signed ? "" : "\n\nWe would be grateful if you could review it and confirm your acceptance."}\n\nKind regards,\n${R.preparedBy}${R.preparedTitle ? "\n" + R.preparedTitle : ""}\n${B().name}`;
     $("mLinkL").hidden = signed; $("mLink").checked = !signed && (withLink || !!R.link);
     $("mailDlg").showModal();
   }
   $("bMail").onclick = () => openMail(false);
+  $("bDone").onclick = () => { $("doneNote").value = ""; $("doneErr").textContent = ""; $("doneLink").hidden = !R.link; $("doneDlg").showModal(); $("doneNote").focus(); };
+  $("doneForm").onsubmit = async e => {
+    e.preventDefault(); const go = $("doneGo"); go.disabled = true;
+    try { await flush(); const res = await api("POST", `pcr/reports/${R.id}/complete`, { etag: R.etag, note: $("doneNote").value.trim() }); R = Object.assign(res, { _custLoaded: res.customerId }); LINKURL = ""; $("doneDlg").close(); renderAll(); syncList(); toast("Marked complete. The report is locked."); }
+    catch (err) { $("doneErr").textContent = err.message; } finally { go.disabled = false; }
+  };
+  // Keeps the list behind the editor in step with a status change.
+  function syncList() { const i = (BOOT.reports || []).findIndex(r => r.id === R.id); if (i >= 0) Object.assign(BOOT.reports[i], { status: R.status, completedAt: R.completedAt || "", signedAt: R.signedAt || "", linkExpires: R.linkExpires || "" }); }
   $("mailForm").onsubmit = async e => {
     e.preventDefault(); $("mErr").textContent = "";
     if (!$("mTo").value.trim()) { $("mErr").textContent = "Add the customer's email address."; return; }
     busy($("mGo"), true, "Sending");
     try {
-      const withLink = $("mLink").checked && R.status !== "signed";
+      const withLink = $("mLink").checked && !locked();
       if (withLink && !R.link) { const res = await api("POST", `pcr/reports/${R.id}/link`, { etag: R.etag, origin: location.origin }); LINKURL = res.url; R = Object.assign(res.report, { _custLoaded: res.report.customerId }); }
       if (withLink && (!LINKURL || !LINKURL.endsWith(R.link.token))) LINKURL = `${location.origin}/sign/?k=${R.link.token}`;
       const pdf = await build("pdf");

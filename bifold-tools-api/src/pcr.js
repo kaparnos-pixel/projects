@@ -94,12 +94,12 @@ module.exports = function makePcr(H) {
   }
 
   /* ---------------- reports ---------------- */
-  const SUM = ["RowKey", "co", "docNo", "mode", "status", "customerId", "customerName", "poRef", "projectTitle", "site", "completionDate", "preparedBy", "owner", "signedAt", "signerName", "linkExpires", "createdAt", "updatedAt", "updatedBy"];
+  const SUM = ["RowKey", "co", "docNo", "mode", "status", "customerId", "customerName", "poRef", "projectTitle", "site", "completionDate", "preparedBy", "owner", "signedAt", "signerName", "completedAt", "completedBy", "linkExpires", "createdAt", "updatedAt", "updatedBy"];
   function summary(e) {
     return {
       id: e.rowKey || e.RowKey, co: rowCo(e), docNo: e.docNo, mode: e.mode || "report", status: e.status || "draft", customerId: e.customerId, customerName: e.customerName,
       poRef: e.poRef || "", projectTitle: e.projectTitle || "", site: e.site || "", completionDate: e.completionDate || "", preparedBy: e.preparedBy || "", owner: e.owner,
-      signedAt: e.signedAt || "", signerName: e.signerName || "", linkExpires: e.linkExpires || "", createdAt: e.createdAt, updatedAt: e.updatedAt, updatedBy: e.updatedBy,
+      signedAt: e.signedAt || "", signerName: e.signerName || "", completedAt: e.completedAt || "", completedBy: e.completedBy || "", linkExpires: e.linkExpires || "", createdAt: e.createdAt, updatedAt: e.updatedAt, updatedBy: e.updatedBy,
     };
   }
   function full(e, user) {
@@ -107,7 +107,7 @@ module.exports = function makePcr(H) {
     const link = d.link && d.link.expires > now() && !d.link.revoked ? d.link : null;
     return {
       ...summary(e), poDate: e.poDate || "", startDate: e.startDate || "", preparedTitle: e.preparedTitle || "", attention: e.attention || "",
-      customer: d.customer || {}, ...bodyIn({}, d), signature: d.signature || null, link: link ? { token: link.token, expires: link.expires, sentTo: link.sentTo || "" } : null,
+      customer: d.customer || {}, ...bodyIn({}, d), signature: d.signature || null, completion: e.status === "complete" && d.completion ? { ...d.completion, byName: nameOf(d.completion.by) } : null, link: link ? { token: link.token, expires: link.expires, sentTo: link.sentTo || "" } : null,
       history: d.history || [], shares: d.shares || [], etag: e.etag,
       canDelete: user.isManager || e.owner === user.email, canReopen: user.isManager || e.owner === user.email,
     };
@@ -172,6 +172,7 @@ module.exports = function makePcr(H) {
     const e = await load(user, id);
     const co = writeCo(user);
     if (e.status === "signed") fail(409, "The customer has signed this report, so it's locked. Reopen it to make changes; the signature will be removed.");
+    if (e.status === "complete") fail(409, "This report is marked complete, so it's locked. Move it back to draft to make changes.");
     const d = unpackJson(e);
     const next = { ...e, co, ...headIn(b, e) };
     if (b.customerId !== undefined && clean(b.customerId, 60) !== e.customerId) {
@@ -198,7 +199,7 @@ module.exports = function makePcr(H) {
     writeCo(user);
     if (user.aud) user.aud.name = [e.docNo, e.customerName].filter(Boolean).join(", ");
     if (!user.isManager && e.owner !== user.email) fail(403, "Only the person who created this report or a manager can delete it.");
-    if (e.status === "signed" && !user.isManager) fail(403, "Only a manager can delete a signed report.");
+    if ((e.status === "signed" || e.status === "complete") && !user.isManager) fail(403, `Only a manager can delete a ${e.status === "signed" ? "signed" : "completed"} report.`);
     const d = unpackJson(e);
     await (await table(T_PCR)).deleteEntity(PK, e.rowKey);
     if (d.link && d.link.token) await (await table(T_LINK)).updateEntity({ partitionKey: LPK, rowKey: d.link.token, revoked: true }, "Merge").catch(() => {});
@@ -224,6 +225,7 @@ module.exports = function makePcr(H) {
     for (let i = 0; i < 3; i++) {
       const cur = i ? await t.getEntity(PK, e.rowKey) : e;
       if (cur.status === "signed") fail(409, "This report has already been signed.");
+      if (cur.status === "complete") fail(409, "This report is marked complete. Move it back to draft before it's signed.");
       const d = unpackJson(cur);
       d.signature = s;
       if (d.link) d.link = { ...d.link, revoked: true };
@@ -255,6 +257,7 @@ module.exports = function makePcr(H) {
     const e = await load(user, id);
     const co = writeCo(user);
     if (e.status === "signed") fail(409, "The customer has signed this report, so it's locked. Reopen it to change the company signature.");
+    if (e.status === "complete") fail(409, "This report is marked complete, so it's locked. Move it back to draft to change the company signature.");
     const d = unpackJson(e);
     if (b.clear) d.company = { fileId: "", at: "" };
     else d.company = { fileId: await storeBlob(pngIn(b.image), "image/png", `Signature ${e.preparedBy || user.email}.png`, co, user.email), at: now() };
@@ -268,6 +271,14 @@ module.exports = function makePcr(H) {
     const e = await load(user, id);
     writeCo(user);
     if (!user.isManager && e.owner !== user.email) fail(403, "Only the person who created this report or a manager can reopen it.");
+    if (e.status === "complete") {
+      const d = unpackJson(e);
+      d.history = (d.history || []).concat([log(user.email, "Moved the report back to draft")]).slice(-80);
+      const next = { ...e, status: "draft", completedAt: "", completedBy: "", ...packJson(d), updatedAt: now(), updatedBy: user.email }; delete next.etag; delete next.timestamp;
+      if (user.aud) { user.aud.name = [e.docNo, e.customerName].filter(Boolean).join(", "); user.aud.wasComplete = true; }
+      await (await table(T_PCR)).updateEntity(next, "Replace", { etag: e.etag }).catch(etagFail);
+      return full(await (await table(T_PCR)).getEntity(PK, e.rowKey), user);
+    }
     if (e.status !== "signed") fail(400, "This report isn't signed.");
     const d = unpackJson(e);
     d.previousSignatures = (d.previousSignatures || []).concat(d.signature ? [d.signature] : []).slice(-10);
@@ -276,6 +287,25 @@ module.exports = function makePcr(H) {
     const next = { ...e, status: "draft", signedAt: "", signerName: "", ...packJson(d), updatedAt: now(), updatedBy: user.email }; delete next.etag; delete next.timestamp;
     if (user.aud) user.aud.name = [e.docNo, e.customerName].filter(Boolean).join(", ");
     await (await table(T_PCR)).updateEntity(next, "Replace", { etag: e.etag }).catch(etagFail);
+    return full(await (await table(T_PCR)).getEntity(PK, e.rowKey), user);
+  }
+
+  // Closes a report without an electronic customer signature (accepted on paper, by email or verbally).
+  // It locks like a signed report; the open signing link, if any, is cancelled.
+  async function complete(user, id, b) {
+    const e = await load(user, id);
+    writeCo(user);
+    if (e.status === "signed") fail(409, "This report is already signed by the customer.");
+    if (e.status === "complete") fail(409, "This report is already marked complete.");
+    const note = txt(b.note, 300);
+    const d = unpackJson(e);
+    if (d.link && d.link.token) await (await table(T_LINK)).updateEntity({ partitionKey: LPK, rowKey: d.link.token, revoked: true }, "Merge").catch(() => {});
+    d.link = null;
+    d.completion = { by: user.email, at: now(), note };
+    d.history = (d.history || []).concat([log(user.email, "Marked the report complete" + (note ? ": " + note : ""))]).slice(-80);
+    const next = { ...e, status: "complete", completedAt: now(), completedBy: user.email, linkExpires: "", ...packJson(d), updatedAt: now(), updatedBy: user.email }; delete next.etag; delete next.timestamp;
+    if (user.aud) { user.aud.name = [e.docNo, e.customerName].filter(Boolean).join(", "); user.aud.detail = note; }
+    await (await table(T_PCR)).updateEntity(next, "Replace", { etag: b.etag || e.etag }).catch(etagFail);
     return full(await (await table(T_PCR)).getEntity(PK, e.rowKey), user);
   }
 
@@ -288,6 +318,7 @@ module.exports = function makePcr(H) {
     const e = await load(user, id);
     const co = writeCo(user);
     if (e.status === "signed") fail(409, "This report has already been signed.");
+    if (e.status === "complete") fail(409, "This report is marked complete. Move it back to draft to send a signing link.");
     if (user.aud) user.aud.name = [e.docNo, e.customerName].filter(Boolean).join(", ");
     const lt = await table(T_LINK);
     const d = unpackJson(e);
@@ -464,6 +495,7 @@ module.exports = function makePcr(H) {
       if (id && sub === "sign" && method === "POST") return signOnSite(user, id, body);
       if (id && sub === "company-sign" && method === "POST") return companySign(user, id, body);
       if (id && sub === "reopen" && method === "POST") return reopen(user, id);
+      if (id && sub === "complete" && method === "POST") return complete(user, id, body);
       if (id && sub === "link" && method === "POST") return makeLink(user, id, body);
       if (id && sub === "link" && method === "DELETE") return revokeLink(user, id);
       if (id && sub === "share" && method === "POST") return share(user, id, body);

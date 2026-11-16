@@ -139,7 +139,8 @@ module.exports = function makeAudit(H) {
         if (!c && method === "POST") return [A, "Created report", out.docNo, [out.customerName, out.poRef && "PO " + out.poRef].filter(Boolean).join(", ")];
         if (d === "sign") return [A, "Customer signed on site", name || c, [clean(body.name, 100), clean(body.designation, 100)].filter(Boolean).join(", ")];
         if (d === "company-sign") return [A, body.clear ? "Removed company signature" : "Signed for the company", name || c, ""];
-        if (d === "reopen") return [A, "Reopened signed report", name || c, "Customer signature removed"];
+        if (d === "complete") return [A, "Marked report complete", name || c, aud.detail || ""];
+        if (d === "reopen") return out.status === "draft" && !out.completedAt && aud.wasComplete ? [A, "Moved report back to draft", name || c, ""] : [A, "Reopened signed report", name || c, "Customer signature removed"];
         if (d === "link") return [A, method === "DELETE" ? "Cancelled signing link" : "Created customer signing link", name || c, ""];
         if (d === "share") return [A, "Emailed report", name || c, "To " + [].concat(body.to || []).join(", ").slice(0, 200)];
         if (method === "PUT") return [A, "Edited report", out.docNo || name || c, ch];

@@ -35,6 +35,7 @@ const PCRGEN = (function () {
       add("serials", "Equipment Register & Serial Numbers", inc.serials && cfg.serials.length > 0);
       add("diagram", "System Diagram", inc.diagram && !!cfg.diagramImg);
       add("testing", "Testing & Commissioning", inc.testing && cfg.testing.length > 0);
+      add("sysinfo", "System Information", hasSys(cfg));
       add("photos", "Site Photographs", inc.photos && cfg.photos.length > 0);
       add("handover", "Handover Deliverables", cfg.handover.length > 0);
       add("warranty", "Warranty & Support", inc.warranty);
@@ -48,6 +49,7 @@ const PCRGEN = (function () {
       add("serials", "Equipment Installed", reg !== "serials" && inc.serials && cfg.serials.length > 0);
       add("diagram", "System Diagram", inc.diagram && !!cfg.diagramImg);
       add("testing", "Testing & Commissioning", inc.testing && cfg.testing.length > 0);
+      add("sysinfo", "System Information", hasSys(cfg));
       add("photos", "Site Photographs", inc.photos && cfg.photos.length > 0);
       add("snags", "Snag List", inc.snags);
       add("signoff", "Acceptance", inc.signoff);
@@ -74,6 +76,18 @@ const PCRGEN = (function () {
   }
   const serialRows = cfg => cfg.serials.map((r, i) => [String(i + 1), r.type || "-", r.model || "-", r.serial || "-", r.location || "-"]);
   const boqRows = cfg => cfg.boq.map((r, i) => [r.item || String(i + 1), r.desc || "-", r.model || "-", r.qty || "-", r.unit || "-", r.remarks || ""]);
+  const hasSys = cfg => !!(cfg.include.sysinfo && cfg.sysinfo && SYSPARTS.some(([k]) => (cfg.sysinfo[k] || []).length));
+  // Sub-tables of the System Information section: key, heading, columns, Word widths, monospaced columns.
+  const SYSPARTS = [
+    ["ip", "IP Addresses", ["#", "Device", "Hostname", "IP Address", "Subnet / Mask", "Gateway", "VLAN", "Location"], [400, 1700, 1400, 1350, 1350, 1250, 600, 1696], ["device", "hostname", "ip", "mask", "gateway", "vlan", "location"], [3, 4, 5]],
+    ["vlans", "VLANs", ["#", "VLAN ID", "Name", "Subnet", "Gateway", "DHCP", "Purpose"], [400, 900, 1700, 1700, 1400, 1300, 2346 + 300], ["id", "name", "subnet", "gateway", "dhcp", "purpose"], [3, 4]],
+    ["wifi", "Wireless Networks", ["#", "SSID", "Band", "Security", "VLAN", "Password / Key"], [400, 2600, 1500, 1900, 800, 2546], ["ssid", "band", "security", "vlan", "password"], [5]],
+    ["creds", "Logins & Credentials", ["#", "System / Device", "Access", "Username", "Password", "Notes"], [400, 2100, 2300, 1500, 1600, 1846], ["system", "access", "username", "password", "notes"], [2, 3, 4]],
+  ];
+  // Passwords print in a code font only when they are real; "Provided separately" stays in the body font.
+  const sysMono = (cfg, k, mono) => cfg.sysinfo.printPasswords || (k !== "wifi" && k !== "creds") ? mono : mono.filter(j => j !== (k === "wifi" ? 5 : 4));
+  const sysRows = (cfg, k, keys) => (cfg.sysinfo[k] || []).map((r, i) => [String(i + 1)].concat(keys.map(f => r[f] || "-")));
+  const sysIntro = cfg => "The network and system details configured during commissioning are recorded below for the client's IT team and for future support." + (cfg.sysinfo.printPasswords ? " This section contains passwords: keep this document confidential and change the passwords after handover." : " Passwords and keys have been handed over separately under confidential cover.");
   const testRows = cfg => cfg.testing.map((r, i) => [String(i + 1), r.test || "-", r.method || "-", r.result || "-", r.remarks || ""]);
   const signText = cfg => cfg.mode === "certificate"
     ? `By signing below, ${cfg.customer.name} confirms that the works described in this certificate have been completed and accepted.`
@@ -196,6 +210,10 @@ const PCRGEN = (function () {
       if (p.key === "testing") {
         B.push(P("Tests carried out before handover and their results:"));
         B.push(grid(["#", "Test", "Method", "Result", "Remarks"], [500, 3300, 2300, 1100, 2546], testRows(cfg), { center: [0, 3], bold: [3], colorOf: (j, c) => j === 3 ? resultColor(c) : undefined }));
+      }
+      if (p.key === "sysinfo") {
+        B.push(P(sysIntro(cfg), { keepNext: true }));
+        SYSPARTS.forEach(([k, title, head, ws, keys, mono]) => { if (!(cfg.sysinfo[k] || []).length) return; B.push(h2(title)); B.push(grid(head, ws, sysRows(cfg, k, keys), { mono: sysMono(cfg, k, mono), center: [0] })); });
       }
       if (p.key === "photos") {
         const ws = scale([1, 1]); const rows = [];
@@ -329,7 +347,7 @@ const PCRGEN = (function () {
 
     for (const p of parts) {
       // Keep a heading with the start of what follows it.
-      const room = p.key === "diagram" && cfg.diagramImg ? fitBox(cfg.diagramImg, CWp, 560).height + (cfg.diagram.title ? 24 : 0) : p.key === "photos" ? 230 : p.key === "signoff" ? 250 : 0;
+      const room = p.key === "diagram" && cfg.diagramImg ? fitBox(cfg.diagramImg, CWp, 560).height + (cfg.diagram.title ? 24 : 0) : p.key === "photos" ? 230 : p.key === "signoff" ? 250 : p.key === "sysinfo" ? 150 : 0;
       if (p.title && !(cfg.mode === "certificate" && p.key === "letter")) h1(p.num, p.title, room);
       if (p.key === "letter") {
         const L = cfg.letter;
@@ -357,6 +375,10 @@ const PCRGEN = (function () {
       if (p.key === "serials") { text(`The following equipment has been supplied, installed, configured and commissioned at site. ${cfg.serials.length} unit${cfg.serials.length === 1 ? " is" : "s are"} recorded below with serial numbers for warranty registration and future support.`); table(["#", "Device Type", "Make & Model", "Serial Number", "Location"], serialRows(cfg), { mono: [3], columnStyles: { 0: { halign: "center", cellWidth: 24 } } }); }
       if (p.key === "diagram") { if (cfg.diagram.title) h2(cfg.diagram.title); y += 4; image(cfg.diagramImg, CWp, 560); y += 8; if (cfg.diagram.caption) text(cfg.diagram.caption, { italic: true, size: 9, color: MUTE, center: true }); }
       if (p.key === "testing") { text("Tests carried out before handover and their results:"); table(["#", "Test", "Method", "Result", "Remarks"], testRows(cfg), { columnStyles: { 0: { halign: "center", cellWidth: 24 }, 3: { halign: "center", cellWidth: 52, fontStyle: "bold" } }, didParseCell: d => { if (d.section === "body" && d.column.index === 3) d.cell.styles.textColor = rgb(resultColor(d.cell.raw)); } }); }
+      if (p.key === "sysinfo") {
+        text(sysIntro(cfg));
+        SYSPARTS.forEach(([k, title, head, , keys, mono]) => { if (!(cfg.sysinfo[k] || []).length) return; need(70); h2(title); table(head, sysRows(cfg, k, keys), { mono: sysMono(cfg, k, mono), columnStyles: { 0: { halign: "center", cellWidth: 22 } } }); });
+      }
       if (p.key === "photos") {
         const w = (CWp - 18) / 2, maxH = 200;
         for (let i = 0; i < cfg.photos.length; i += 2) {

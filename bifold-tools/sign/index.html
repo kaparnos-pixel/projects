@@ -98,6 +98,14 @@ input[type=text]{width:100%;font:inherit;padding:10px 12px;border:1px solid var(
     if (d.boq.length) { h.push(`<h2>Bill of quantities</h2>`); h.push(table(["#", "Description", "Make / model", "Qty", "Unit", "Remarks"], d.boq.map((r, i) => [r.item || i + 1, r.desc, r.model, r.qty, r.unit, r.remarks]))); }
     if (d.serials.length) { h.push(`<h2>Equipment and serial numbers</h2><p>${d.serials.length} unit${d.serials.length === 1 ? "" : "s"} recorded.</p>`); h.push(table(["#", "Device type", "Make & model", "Serial number", "Location"], d.serials.map((r, i) => [i + 1, r.type, r.model, r.serial, r.location]), { 3: "m" })); }
     if (d.testing.length) { h.push(`<h2>Testing and commissioning</h2>`); h.push(table(["#", "Test", "Method", "Result", "Remarks"], d.testing.map((r, i) => [i + 1, r.test, r.method, r.result || "-", r.remarks])).replace(/<td class="">(Pass)<\/td>/g, '<td class="pass">$1</td>').replace(/<td class="">(Fail|Open)<\/td>/g, '<td class="fail">$1</td>')); }
+    const si = d.sysinfo;
+    if (si && ["ip", "vlans", "wifi", "creds"].some(k => (si[k] || []).length)) {
+      h.push(`<h2>System information</h2><p>${si.printPasswords ? "This section includes passwords. Keep it confidential." : "Passwords and keys are handed over separately."}</p>`);
+      if (si.ip.length) { h.push(`<h3>IP addresses</h3>`); h.push(table(["#", "Device", "Hostname", "IP address", "Subnet / mask", "Gateway", "VLAN", "Location"], si.ip.map((r, i) => [i + 1, r.device, r.hostname, r.ip, r.mask, r.gateway, r.vlan, r.location]))); }
+      if (si.vlans.length) { h.push(`<h3>VLANs</h3>`); h.push(table(["#", "VLAN ID", "Name", "Subnet", "Gateway", "DHCP", "Purpose"], si.vlans.map((r, i) => [i + 1, r.id, r.name, r.subnet, r.gateway, r.dhcp, r.purpose]))); }
+      if (si.wifi.length) { h.push(`<h3>Wireless networks</h3>`); h.push(table(["#", "SSID", "Band", "Security", "VLAN", "Password / key"], si.wifi.map((r, i) => [i + 1, r.ssid, r.band, r.security, r.vlan, r.password]))); }
+      if (si.creds.length) { h.push(`<h3>Logins and credentials</h3>`); h.push(table(["#", "System / device", "Access", "Username", "Password", "Notes"], si.creds.map((r, i) => [i + 1, r.system, r.access, r.username, r.password, r.notes]))); }
+    }
     if (d.handover && d.handover.length && d.mode !== "certificate") h.push(`<h2>Handover deliverables</h2><ul>${d.handover.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`);
     if (w) {
       h.push(`<h2>Warranty</h2><div class="kv">${[w.hwMonths ? ["Hardware", w.hwMonths + " months"] : null, w.wkMonths ? ["Workmanship", w.wkMonths + " months"] : null, ["Starts", fd(w.start || d.completionDate)], w.hours ? ["Support hours", w.hours] : null].filter(Boolean).map(r => `<div>${esc(r[0])}</div><div>${esc(r[1])}</div>`).join("")}</div>`);

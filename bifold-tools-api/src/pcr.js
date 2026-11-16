@@ -40,9 +40,9 @@ module.exports = function makePcr(H) {
   const nameOf = e => String(e || "").split("@")[0].split(/[._-]+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
 
   /* ---------------- shape of a report ---------------- */
-  const INCLUDE = ["boq", "serials", "diagram", "testing", "photos", "warranty", "snags", "signoff", "stamp"];
+  const INCLUDE = ["boq", "serials", "diagram", "testing", "sysinfo", "photos", "warranty", "snags", "signoff", "stamp"];
   function includeIn(v) {
-    const d = { boq: true, serials: true, diagram: true, testing: true, photos: true, warranty: true, snags: false, signoff: true, stamp: false };
+    const d = { boq: true, serials: true, diagram: true, testing: true, sysinfo: true, photos: true, warranty: true, snags: false, signoff: true, stamp: false };
     v = v && typeof v === "object" ? v : {};
     return Object.fromEntries(INCLUDE.map(k => [k, v[k] === undefined ? d[k] : !!v[k]]));
   }
@@ -58,6 +58,10 @@ module.exports = function makePcr(H) {
     const imageId = UUID.test(clean(v.imageId, 60)) ? clean(v.imageId, 60) : "";
     return { title: txt(v.title, 120), caption: txt(v.caption, 300), nodes, edges, imageId, imageW: num(v.imageW), imageH: num(v.imageH), source: ["claude", "manual", "upload"].includes(v.source) ? v.source : "" };
   }
+  const SYS = { ip: [["device", "hostname", "ip", "mask", "gateway", "vlan", "location"], 400], vlans: [["id", "name", "subnet", "gateway", "dhcp", "purpose"], 100], wifi: [["ssid", "band", "security", "vlan", "password"], 50], creds: [["system", "access", "username", "password", "notes"], 150] };
+  const sysinfoIn = v => { v = v && typeof v === "object" ? v : {}; const o = { printPasswords: !!v.printPasswords }; Object.entries(SYS).forEach(([k, [keys, max]]) => { o[k] = rowsIn(v[k], max, keys, 300); }); return o; };
+  // What a reader of the finished report (or the signing page) gets: passwords hidden unless chosen.
+  const sysinfoOut = si => si.printPasswords ? si : { ...si, wifi: si.wifi.map(r => ({ ...r, password: r.password ? "Provided separately" : "" })), creds: si.creds.map(r => ({ ...r, password: r.password ? "Provided separately" : "" })) };
   function bodyIn(b, cur) {
     cur = cur || {};
     const pick = (k, fn) => b[k] !== undefined ? fn(b[k]) : cur[k];
@@ -80,6 +84,8 @@ module.exports = function makePcr(H) {
       handover: pick("handover", v => lines(v, 20)) || [],
       warranty: pick("warranty", warranty) || warranty({ hwMonths: 12, wkMonths: 12 }),
       snags: pick("snags", v => rowsIn(v, 40, ["item", "owner", "target"], 300)) || [],
+      // System information handed over: IP plan, VLANs, Wi-Fi and logins. Passwords print only when chosen.
+      sysinfo: pick("sysinfo", sysinfoIn) || sysinfoIn({}),
       diagram: pick("diagram", diagramIn) || diagramIn({}),
       photos: pick("photos", photos) || [],
       company: pick("company", v => ({ fileId: UUID.test(clean(v && v.fileId, 60)) ? clean(v.fileId, 60) : "", at: clean(v && v.at, 40) })) || { fileId: "", at: "" },
@@ -175,12 +181,15 @@ module.exports = function makePcr(H) {
       const c = await customerOf(e.customerId, co); next.customerName = c.name; d.customer = custSnap(c);
     }
     if (next.mode !== e.mode && e.docNo) next.docNo = e.docNo.replace(/-(PCR|WCC)-/, next.mode === "certificate" ? "-WCC-" : "-PCR-");
-    const body = bodyIn(b, bodyIn({}, d));
+    const before = bodyIn({}, d), body = bodyIn(b, before);
+    // The log says which system-information tables changed, never the addresses or passwords themselves.
+    const sysCh = b.sysinfo === undefined ? [] : Object.keys(SYS).filter(k => JSON.stringify(before.sysinfo[k]) !== JSON.stringify(body.sysinfo[k])).map(k => ({ ip: "IP addresses", vlans: "VLANs", wifi: "Wi-Fi", creds: "logins" })[k]);
+    if (b.sysinfo !== undefined && before.sysinfo.printPasswords !== body.sysinfo.printPasswords) sysCh.push(body.sysinfo.printPasswords ? "passwords set to print" : "passwords set to hide");
     Object.assign(d, body);
     if (b.log) d.history = (d.history || []).concat([log(user.email, b.log)]).slice(-80);
     Object.assign(next, packJson(d), { updatedAt: now(), updatedBy: user.email });
     delete next.etag; delete next.timestamp;
-    if (user.aud) { user.aud.name = [e.docNo, e.customerName].filter(Boolean).join(", "); user.aud.changes = diff(e, next); }
+    if (user.aud) { user.aud.name = [e.docNo, e.customerName].filter(Boolean).join(", "); user.aud.changes = diff(e, next).concat(sysCh.length ? ["system information: " + sysCh.join(", ")] : []); }
     await t.updateEntity(next, "Replace", { etag: b.etag || e.etag }).catch(etagFail);
     return full(await t.getEntity(PK, id), user);
   }
@@ -334,6 +343,7 @@ module.exports = function makePcr(H) {
       preparedBy: e.preparedBy || "", preparedTitle: e.preparedTitle || "", attention: e.attention || "",
       letter: b.letter, scope: b.scope, handover: b.handover,
       boq: inc.boq ? b.boq : [], serials: inc.serials ? b.serials : [], testing: inc.testing ? b.testing : [], warranty: inc.warranty ? b.warranty : null, snags: inc.snags ? b.snags : [],
+      sysinfo: inc.sysinfo ? sysinfoOut(b.sysinfo) : null,
       photoCount: inc.photos ? b.photos.length : 0, hasDiagram: inc.diagram && (b.diagram.nodes.length > 0 || !!b.diagram.imageId),
       signed: sig ? { name: sig.name, designation: sig.designation, at: sig.at } : null,
     };

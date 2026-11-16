@@ -125,7 +125,7 @@
 
   /* ================= editor: load, save ================= */
   const HEAD = ["customerId", "poRef", "poDate", "projectTitle", "site", "startDate", "completionDate", "preparedBy", "preparedTitle", "attention", "mode"];
-  const BODY = ["include", "notes", "instructions", "letter", "scope", "boq", "serials", "testing", "handover", "warranty", "snags", "diagram", "photos", "textSource"];
+  const BODY = ["include", "notes", "instructions", "letter", "scope", "boq", "serials", "testing", "sysinfo", "handover", "warranty", "snags", "diagram", "photos", "textSource"];
   let dirty = false, saving = null, timer = null;
   const locked = () => R && R.status === "signed";
   function setSave(t, err) { const s = $("saveSt"); s.textContent = t; s.classList.toggle("err", !!err); }
@@ -158,6 +158,7 @@
     $("bMail").hidden = !BOOT.features.mail;
     if (!R.letter.body.length && !locked()) { applyTemplate(true); dirty = true; save(); }
     if (!R.warranty.hours) R.warranty.hours = B().hours;
+    if (!R.sysinfo) R.sysinfo = { printPasswords: false, ip: [], vlans: [], wifi: [], creds: [] };
     renderAll();
   }
   function head() {
@@ -182,6 +183,7 @@
     { key: "serials", title: "Equipment & serial numbers", sub: "Asset register for warranty and support", inc: "serials" },
     { key: "diagram", title: "System diagram", sub: "Drawn by Claude from the BoQ, serials and notes, or your own drawing", inc: "diagram" },
     { key: "testing", title: "Testing & commissioning", sub: "Only tests that were actually carried out", inc: "testing" },
+    { key: "sysinfo", title: "System information", sub: "IP addresses, VLANs, Wi-Fi networks and logins handed over", inc: "sysinfo" },
     { key: "photos", title: "Site pictures", sub: "Installed equipment, racks, labels", inc: "photos" },
     { key: "warranty", title: "Warranty", sub: "Hardware and workmanship cover", inc: "warranty" },
     { key: "snags", title: "Snag list", sub: "Open items at handover", inc: "snags" },
@@ -195,7 +197,8 @@
     toc();
   }
   function toc() {
-    const count = { boq: R.boq.length, serials: R.serials.length, testing: R.testing.length, photos: R.photos.length, snags: R.snags.length, diagram: R.diagram.nodes.length || (R.diagram.imageId ? 1 : 0) };
+    const si = R.sysinfo || {};
+    const count = { boq: R.boq.length, serials: R.serials.length, testing: R.testing.length, sysinfo: ["ip", "vlans", "wifi", "creds"].reduce((a, k) => a + (si[k] || []).length, 0), photos: R.photos.length, snags: R.snags.length, diagram: R.diagram.nodes.length || (R.diagram.imageId ? 1 : 0) };
     $("toc").innerHTML = CARDS.map(c => `<a href="#edit/${esc(R.id)}" data-go="${c.key}" class="${c.inc && !R.include[c.inc] ? "off" : ""}"><span>${esc(c.title)}</span>${count[c.key] != null ? `<em>${count[c.key]}</em>` : c.inc && !R.include[c.inc] ? "<em>off</em>" : ""}</a>`).join("");
   }
   $("toc").addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (!a) return; e.preventDefault(); $("c-" + a.dataset.go).scrollIntoView({ behavior: "smooth", block: "start" }); });
@@ -267,6 +270,17 @@
       return tbl("testing", [["test", "Test", 0], ["method", "Method", 170], ["result", "Result", 110, "res"], ["remarks", "Remarks", 180]], "")
         + `<p class="hint" style="margin:0">Results print in the report. Leave a result blank if the test wasn't done, or remove the row.</p>`;
     },
+    sysinfo() {
+      const si = R.sysinfo;
+      const n = k => si[k].length;
+      return `<div class="btnrow edit-only"><button type="button" class="primary" data-sysup>Upload from Excel</button><button type="button" data-systpl>Download the Excel template</button><label class="chk"><input type="checkbox" id="sysReplace" checked> Replace the rows already entered</label><span class="hint">One workbook with a sheet for each table (IP addresses, VLANs, Wi-Fi, Logins). Column headings are matched automatically.</span></div>
+        <h3 class="sysh">IP addresses <em>${n("ip")}</em></h3>${tbl("sysinfo.ip", SYSCOLS.ip, "Paste or import")}
+        <h3 class="sysh">VLANs <em>${n("vlans")}</em></h3>${tbl("sysinfo.vlans", SYSCOLS.vlans, "Paste or import")}
+        <h3 class="sysh">Wi-Fi networks <em>${n("wifi")}</em></h3>${tbl("sysinfo.wifi", SYSCOLS.wifi, "Paste or import")}
+        <h3 class="sysh">Logins and credentials <em>${n("creds")}</em></h3>${tbl("sysinfo.creds", SYSCOLS.creds, "Paste or import")}
+        <label class="chk"><input type="checkbox" data-b="sysinfo.printPasswords"${si.printPasswords ? " checked" : ""}> Print passwords in the report and on the customer's signing page</label>
+        <p class="hint" style="margin:0">${si.printPasswords ? "<b>Passwords will be printed.</b> Treat the report as confidential and send it only to the customer's IT contact." : "Passwords stay in the tools site only. The report shows <i>Provided separately</i>, so hand them over under separate confidential cover."} Passwords are hidden on screen until you click into them and are never sent to Claude or written to the activity log.</p>`;
+    },
     photos() {
       return `<label class="drop edit-only"><input type="file" accept="image/*" multiple hidden><b>Add pictures</b> or drop them here. They are resized to keep the report small.</label>
         <div class="photos">${R.photos.map((p, i) => `<div class="ph-card"><img src="/api/pcr/files/${esc(p.id)}" alt="${esc(p.caption || "Site picture " + (i + 1))}" loading="lazy"><div class="meta"><input data-b="photos.${i}.caption" value="${esc(p.caption)}" placeholder="Caption, e.g. Main rack after dressing" maxlength="200"><div class="btnrow edit-only"><button type="button" data-mv="-1" data-i="${i}"${i ? "" : " disabled"} aria-label="Move earlier">&larr;</button><button type="button" data-mv="1" data-i="${i}"${i < R.photos.length - 1 ? "" : " disabled"} aria-label="Move later">&rarr;</button><button type="button" class="danger" data-del="photos" data-i="${i}">Remove</button></div></div></div>`).join("")}</div>`;
@@ -302,19 +316,27 @@
 
   /* ---- generic table editor ---- */
   function tbl(key, cols, importLabel) {
-    const rows = R[key];
+    const rows = getPath(key) || [];
     return `<div class="tblwrap"><table class="grid-tbl"><thead><tr><th>#</th>${cols.map(c => `<th${c[2] ? ` style="width:${c[2]}px"` : ""}>${esc(c[1])}</th>`).join("")}<th></th></tr></thead><tbody>
-      ${rows.map((r, i) => `<tr><td class="n">${i + 1}</td>${cols.map(c => `<td>${c[3] === "res" ? `<select data-b="${key}.${i}.${c[0]}" class="res-${esc(r[c[0]])}">${["", "Pass", "Fail", "Open", "N/A"].map(v => `<option value="${v}"${r[c[0]] === v ? " selected" : ""}>${v || "-"}</option>`).join("")}</select>` : `<input data-b="${key}.${i}.${c[0]}" value="${esc(r[c[0]])}"${c[3] === "mono" ? ' class="mono"' : ""} maxlength="${key === "boq" && c[0] === "desc" ? 400 : 300}">`}</td>`).join("")}<td class="x"><button type="button" class="x edit-only" data-del="${key}" data-i="${i}" aria-label="Remove row ${i + 1}">&times;</button></td></tr>`).join("")}
+      ${rows.map((r, i) => `<tr><td class="n">${i + 1}</td>${cols.map(c => `<td>${c[3] === "res" ? `<select data-b="${key}.${i}.${c[0]}" class="res-${esc(r[c[0]])}">${["", "Pass", "Fail", "Open", "N/A"].map(v => `<option value="${v}"${r[c[0]] === v ? " selected" : ""}>${v || "-"}</option>`).join("")}</select>` : `<input data-b="${key}.${i}.${c[0]}" value="${esc(r[c[0]])}"${c[3] === "mono" ? ' class="mono"' : c[3] === "pw" ? ' type="password" class="mono pw" autocomplete="new-password" spellcheck="false"' : ""} maxlength="${key === "boq" && c[0] === "desc" ? 400 : 300}">`}</td>`).join("")}<td class="x"><button type="button" class="x edit-only" data-del="${key}" data-i="${i}" aria-label="Remove row ${i + 1}">&times;</button></td></tr>`).join("")}
       </tbody></table></div>
       <div class="tblfoot edit-only"><div class="btnrow"><button type="button" data-add="${key}">Add row</button>${importLabel ? `<button type="button" data-import="${key}">${esc(importLabel)}</button>` : ""}${rows.length ? `<button type="button" class="danger" data-clear="${key}">Clear all</button>` : ""}</div><span>${rows.length} row${rows.length === 1 ? "" : "s"}</span></div>`;
   }
-  const BLANK = { boq: () => ({ item: "", desc: "", model: "", qty: "", unit: "Nos", remarks: "" }), serials: () => ({ type: "", model: "", serial: "", location: "" }), testing: () => ({ test: "", method: "", result: "", remarks: "" }), snags: () => ({ item: "", owner: "", target: "" }) };
+  const SYSCOLS = {
+    ip: [["device", "Device", 0], ["hostname", "Hostname", 140], ["ip", "IP address", 140, "mono"], ["mask", "Subnet / mask", 150, "mono"], ["gateway", "Gateway", 130, "mono"], ["vlan", "VLAN", 64], ["location", "Location", 120]],
+    vlans: [["id", "VLAN ID", 80], ["name", "Name", 150], ["subnet", "Subnet", 150, "mono"], ["gateway", "Gateway", 130, "mono"], ["dhcp", "DHCP", 140], ["purpose", "Purpose", 0]],
+    wifi: [["ssid", "SSID", 0], ["band", "Band", 110], ["security", "Security", 130], ["vlan", "VLAN", 80], ["password", "Password / key", 180, "pw"]],
+    creds: [["system", "System / device", 0], ["access", "Access (URL or IP)", 190, "mono"], ["username", "Username", 140, "mono"], ["password", "Password", 160, "pw"], ["notes", "Notes", 160]],
+  };
+  const blankOf = cols => () => Object.fromEntries(cols.map(c => [c[0], ""]));
+  const BLANK = { "sysinfo.ip": blankOf(SYSCOLS.ip), "sysinfo.vlans": blankOf(SYSCOLS.vlans), "sysinfo.wifi": blankOf(SYSCOLS.wifi), "sysinfo.creds": blankOf(SYSCOLS.creds), boq: () => ({ item: "", desc: "", model: "", qty: "", unit: "Nos", remarks: "" }), serials: () => ({ type: "", model: "", serial: "", location: "" }), testing: () => ({ test: "", method: "", result: "", remarks: "" }), snags: () => ({ item: "", owner: "", target: "" }) };
 
   /* ---- binding ---- */
   function setPath(path, val) { const ks = path.split("."); let o = R; for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]]; o[ks[ks.length - 1]] = val; }
   function getPath(path) { return path.split(".").reduce((o, k) => o == null ? o : o[k], R); }
   $("cards").addEventListener("input", e => {
     const t = e.target; if (locked()) return;
+    if (t.dataset.b && t.type === "checkbox") return;
     if (t.dataset.b) { let v = t.value; if (t.type === "number") v = Number(v) || 0; setPath(t.dataset.b, v); if (t.tagName === "SELECT" && t.dataset.b.endsWith(".result")) t.className = "res-" + v; }
     else if (t.dataset.lines) setPath(t.dataset.lines, t.value.split("\n").map(x => x.replace(/^\s*[-•*]\s*/, "").trim()).filter(Boolean));
     else if (t.dataset.paras) setPath(t.dataset.paras, t.value.split(/\n\s*\n/).map(x => x.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean));
@@ -322,9 +344,12 @@
     if (t.dataset.b && t.dataset.b.startsWith("diagram.")) drawDiagram();
     touch();
   });
+  $("cards").addEventListener("focusin", e => { if (e.target.classList && e.target.classList.contains("pw")) e.target.type = "text"; });
+  $("cards").addEventListener("focusout", e => { if (e.target.classList && e.target.classList.contains("pw")) e.target.type = "password"; });
   $("cards").addEventListener("change", e => {
     const t = e.target; if (locked()) return;
     if (t.dataset.inc) { R.include[t.dataset.inc] = t.checked; const c = CARDS.find(x => x.inc === t.dataset.inc); if (c) renderCard(c.key); toc(); touch(); return; }
+    if (t.dataset.b === "sysinfo.printPasswords") { R.sysinfo.printPasswords = t.checked; renderCard("sysinfo"); touch(); return; }
     if (t.dataset.b === "mode") { renderCard("text"); }
     if (t.dataset.b === "customerId") { const c = CUST.find(x => x.id === t.value); if (c && !R.attention) R.attention = c.contactName || ""; flush(); }
     if (t.dataset.b && /^(warranty\.|completionDate)/.test(t.dataset.b)) renderCard("warranty");
@@ -332,10 +357,12 @@
   });
   $("cards").addEventListener("click", async e => {
     const t = e.target.closest("button"); if (!t || locked() && !t.dataset.sign) return;
-    if (t.dataset.add) { R[t.dataset.add].push(BLANK[t.dataset.add]()); renderCard(t.dataset.add); toc(); touch(); const ins = $("c-" + t.dataset.add).querySelectorAll("tbody tr:last-child input"); if (ins[0]) ins[t.dataset.add === "boq" ? 1 : 0].focus(); return; }
-    if (t.dataset.del) { const arr = getPath(t.dataset.del); arr.splice(Number(t.dataset.i), 1); renderCard(t.dataset.del.split(".")[0] === "scope" ? "text" : t.dataset.del); toc(); touch(); return; }
-    if (t.dataset.clear) { if (!t.classList.contains("armed")) { t.classList.add("armed"); t.textContent = "Click again to clear"; setTimeout(() => { t.classList.remove("armed"); t.textContent = "Clear all"; }, 3000); return; } R[t.dataset.clear] = []; renderCard(t.dataset.clear); toc(); touch(); return; }
+    if (t.dataset.add) { const k = t.dataset.add, card = k.split(".")[0]; getPath(k).push(BLANK[k]()); renderCard(card); toc(); touch(); const tb = [...$("c-" + card).querySelectorAll("tbody")].find(b => b.querySelector(`[data-b^="${k}."]`)); const ins = tb ? tb.querySelectorAll("tr:last-child input") : []; if (ins[0]) ins[k === "boq" ? 1 : 0].focus(); return; }
+    if (t.dataset.del) { const arr = getPath(t.dataset.del); arr.splice(Number(t.dataset.i), 1); const c0 = t.dataset.del.split(".")[0]; renderCard(c0 === "scope" ? "text" : c0); toc(); touch(); return; }
+    if (t.dataset.clear) { if (!t.classList.contains("armed")) { t.classList.add("armed"); t.textContent = "Click again to clear"; setTimeout(() => { t.classList.remove("armed"); t.textContent = "Clear all"; }, 3000); return; } setPath(t.dataset.clear, []); renderCard(t.dataset.clear.split(".")[0]); toc(); touch(); return; }
     if (t.dataset.import) return openImport(t.dataset.import);
+    if (t.hasAttribute("data-sysup")) return sysUpload();
+    if (t.hasAttribute("data-systpl")) return sysTemplate(t);
     if (t.hasAttribute("data-addstream")) { R.scope.streams.push({ heading: String.fromCharCode(65 + R.scope.streams.length) + ". ", bullets: [] }); renderCard("text"); touch(); return; }
     if (t.dataset.mv) { const i = Number(t.dataset.i), j = i + Number(t.dataset.mv); [R.photos[i], R.photos[j]] = [R.photos[j], R.photos[i]]; renderCard("photos"); touch(); return; }
     if (t.dataset.ai) return draft(t.dataset.ai === "all" ? ["text", "closeout", "diagram"] : [t.dataset.ai], t);
@@ -472,13 +499,63 @@
   /* ================= import BoQ / serials ================= */
   const MAP = {
     boq: [["item", "Item no.", /^(#|item\s*(no|#)?|s\.?\s*no\.?|sr\.?\s*(no)?|sl\.?\s*no\.?|no\.?)$/i], ["desc", "Description", /desc|particular|item|product|scope/i], ["model", "Make / model", /model|make|brand|part|sku|code/i], ["qty", "Qty", /^qty|quant/i], ["unit", "Unit", /^(unit|uom|u\/m)$/i], ["remarks", "Remarks", /remark|note|comment/i]],
+    "sysinfo.ip": [["device", "Device", /^(device|equipment|item|descr|name)/i], ["hostname", "Hostname", /host|dns|device\s*name/i], ["ip", "IP address", /^(ip|ip\s*addr|ipv4|address|mgmt\s*ip|management\s*ip)/i], ["mask", "Subnet / mask", /mask|subnet|prefix|cidr/i], ["gateway", "Gateway", /gate|gw/i], ["vlan", "VLAN", /vlan/i], ["location", "Location", /loc|area|floor|room|site|zone|rack/i]],
+    "sysinfo.vlans": [["id", "VLAN ID", /^(vlan\s*(id|no|#)?|id|tag)$/i], ["name", "Name", /name|desc/i], ["subnet", "Subnet", /subnet|network|range|cidr|prefix/i], ["gateway", "Gateway", /gate|gw|svi/i], ["dhcp", "DHCP", /dhcp|pool|scope/i], ["purpose", "Purpose", /purpose|use|remark|note|comment/i]],
+    "sysinfo.wifi": [["ssid", "SSID", /ssid|network\s*name|wlan|wi-?fi/i], ["band", "Band", /band|radio|freq|ghz/i], ["security", "Security", /secur|auth|encrypt|wpa/i], ["vlan", "VLAN", /vlan/i], ["password", "Password / key", /pass|key|psk|secret/i]],
+    "sysinfo.creds": [["system", "System / device", /system|device|equipment|item|name|asset/i], ["access", "Access (URL or IP)", /url|access|link|ip|address|portal|login\s*page/i], ["username", "Username", /user|login|account/i], ["password", "Password", /pass|pwd|secret|pin/i], ["notes", "Notes", /note|remark|comment|role/i]],
     serials: [["type", "Device type", /type|device|item|descr|product|category/i], ["model", "Make & model", /model|make|brand|part|sku/i], ["serial", "Serial number", /serial|s\/n|^sn$|^s\.n/i], ["location", "Location", /loc|area|floor|room|site|zone/i]],
   };
+  const MUST = { boq: "desc", serials: "serial", "sysinfo.ip": "ip", "sysinfo.vlans": "id", "sysinfo.wifi": "ssid", "sysinfo.creds": "system" };
+  const MUST_LABEL = { boq: "a description", serials: "a serial number", "sysinfo.ip": "an IP address", "sysinfo.vlans": "a VLAN ID", "sysinfo.wifi": "an SSID", "sysinfo.creds": "a system or device name" };
+  const CAP = { boq: 400, serials: 1000, "sysinfo.ip": 400, "sysinfo.vlans": 100, "sysinfo.wifi": 50, "sysinfo.creds": 150 };
+  const SYSNAME = { "sysinfo.ip": "IP addresses", "sysinfo.vlans": "VLANs", "sysinfo.wifi": "Wi-Fi networks", "sysinfo.creds": "logins and credentials" };
+  // One workbook, one sheet per table. Each sheet goes to the table whose headings it matches best.
+  function sysTemplate(btn) {
+    loadScript(LIB.xlsx).then(() => {
+      const wb = XLSX.utils.book_new();
+      const SHEETS = { "IP addresses": "sysinfo.ip", VLANs: "sysinfo.vlans", "Wi-Fi": "sysinfo.wifi", Logins: "sysinfo.creds" };
+      const EX = { "sysinfo.ip": ["Core switch", "CORE-SW-01", "192.168.10.2", "255.255.255.0", "192.168.10.1", "10", "Server room rack 1"], "sysinfo.vlans": ["10", "Management", "192.168.10.0/24", "192.168.10.1", "Static", "Network devices"], "sysinfo.wifi": ["Corp-WiFi", "2.4 / 5 GHz", "WPA2-Enterprise", "20", ""], "sysinfo.creds": ["Firewall", "https://192.168.10.1", "admin", "", "Admin portal"] };
+      Object.entries(SHEETS).forEach(([name, k]) => { const ws = XLSX.utils.aoa_to_sheet([MAP[k].map(c => c[1]), EX[k]]); ws["!cols"] = MAP[k].map(() => ({ wch: 22 })); XLSX.utils.book_append_sheet(wb, ws, name); });
+      XLSX.writeFile(wb, "System_Information_Template.xlsx");
+    }).catch(e => toast(e.message, true));
+  }
+  function sysUpload() {
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".xlsx,.xls,.csv";
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return;
+      try {
+        await loadScript(LIB.xlsx);
+        const wb = /\.csv$/i.test(f.name) ? XLSX.read(await f.text(), { type: "string" }) : XLSX.read(await f.arrayBuffer(), { type: "array" });
+        const got = {}; let total = 0;
+        wb.SheetNames.forEach(name => {
+          const grid = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, defval: "" }).map(r => r.map(c => String(c == null ? "" : c).trim())).filter(r => r.some(Boolean));
+          let best = null;
+          Object.keys(SYSNAME).forEach(k => {
+            const byName = { "sysinfo.ip": /ip|address|device|host/i, "sysinfo.vlans": /vlan/i, "sysinfo.wifi": /wi-?fi|wlan|ssid|wireless/i, "sysinfo.creds": /login|cred|pass|user|account/i }[k].test(name) ? 1 : 0;
+            grid.slice(0, 15).forEach((r, hi) => { const hits = MAP[k].filter(([, , re]) => r.some(c => re.test(c))).length; const sc = hits * 2 + byName; if (hits >= 2 && (!best || sc > best.sc)) best = { k, hi, sc }; });
+          });
+          if (!best || got[best.k]) return;
+          const head = grid[best.hi], used = new Set();
+          const idx = MAP[best.k].map(([, , re]) => { const j = head.findIndex((h, j) => !used.has(j) && re.test(h)); if (j >= 0) used.add(j); return j; });
+          const must = MUST[best.k];
+          const rows = grid.slice(best.hi + 1).map(r => Object.fromEntries(MAP[best.k].map(([k], i) => [k, idx[i] >= 0 ? String(r[idx[i]] || "").trim() : ""]))).filter(r => r[must]);
+          if (rows.length) { got[best.k] = rows.slice(0, CAP[best.k]); total += rows.length; }
+        });
+        const keys = Object.keys(got);
+        if (!keys.length) return toast("No IP, VLAN, Wi-Fi or login tables were recognised in that file. Use the Excel template for the column headings.", true);
+        const replace = !$("sysReplace") || $("sysReplace").checked;
+        keys.forEach(k => setPath(k, (replace ? [] : getPath(k)).concat(got[k]).slice(0, CAP[k])));
+        renderCard("sysinfo"); toc(); touch();
+        toast(keys.map(k => `${got[k].length} ${SYSNAME[k]}`).join(", ") + " imported.");
+      } catch (e) { toast(/library/.test(e.message) ? e.message : "That file couldn't be read. Save it as .xlsx or .csv and try again.", true); }
+    };
+    inp.click();
+  }
   let IMP = null;
   function openImport(key) {
     IMP = { key, head: [], rows: [] };
-    $("impTitle").textContent = key === "boq" ? "Import the customer's BoQ" : "Import equipment and serial numbers";
-    $("impPaste").value = ""; $("impMap").innerHTML = ""; $("impErr").textContent = ""; $("impGo").disabled = true; $("impReplace").checked = !R[key].length;
+    $("impTitle").textContent = key === "boq" ? "Import the customer's BoQ" : key === "serials" ? "Import equipment and serial numbers" : "Import " + SYSNAME[key];
+    $("impPaste").value = ""; $("impMap").innerHTML = ""; $("impErr").textContent = ""; $("impGo").disabled = true; $("impReplace").checked = !getPath(key).length;
     $("impDlg").showModal();
   }
   function setGrid(grid) {
@@ -488,7 +565,7 @@
     IMP.head = grid[hi] || []; IMP.rows = grid.slice(hi + 1);
     const used = new Set();
     const guess = MAP[IMP.key].map(([k, , re]) => { const j = IMP.head.findIndex((h, j) => !used.has(j) && re.test(h)); if (j >= 0) used.add(j); return j; });
-    $("impMap").innerHTML = `<div class="grid2">${MAP[IMP.key].map(([k, label], i) => `<label><span class="lbl">${esc(label)}</span><select data-k="${k}"><option value="-1">(not in file)</option>${IMP.head.map((h, j) => `<option value="${j}"${guess[i] === j ? " selected" : ""}>${esc(h || "Column " + (j + 1))}</option>`).join("")}</select></label>`).join("")}</div><p class="hint">${IMP.rows.length} row${IMP.rows.length === 1 ? "" : "s"} found under the heading row. Rows without a ${IMP.key === "boq" ? "description" : "serial number"} are skipped.</p>`;
+    $("impMap").innerHTML = `<div class="grid2">${MAP[IMP.key].map(([k, label], i) => `<label><span class="lbl">${esc(label)}</span><select data-k="${k}"><option value="-1">(not in file)</option>${IMP.head.map((h, j) => `<option value="${j}"${guess[i] === j ? " selected" : ""}>${esc(h || "Column " + (j + 1))}</option>`).join("")}</select></label>`).join("")}</div><p class="hint">${IMP.rows.length} row${IMP.rows.length === 1 ? "" : "s"} found under the heading row. Rows without ${MUST_LABEL[IMP.key]} are skipped.</p>`;
     $("impGo").disabled = !IMP.rows.length;
   }
   bindDrop(document.querySelector("#impDlg .drop"), async files => {
@@ -510,13 +587,13 @@
   $("impForm").onsubmit = e => {
     e.preventDefault();
     const idx = {}; $("impMap").querySelectorAll("select[data-k]").forEach(s => idx[s.dataset.k] = Number(s.value));
-    const must = IMP.key === "boq" ? "desc" : "serial";
-    if (idx[must] < 0) { $("impErr").textContent = `Choose which column holds the ${IMP.key === "boq" ? "description" : "serial number"}.`; return; }
+    const must = MUST[IMP.key];
+    if (idx[must] < 0) { $("impErr").textContent = `Choose which column holds ${MUST_LABEL[IMP.key]}.`; return; }
     const out = IMP.rows.map(r => Object.fromEntries(MAP[IMP.key].map(([k]) => [k, idx[k] >= 0 ? String(r[idx[k]] || "").trim() : ""]))).filter(r => r[must] && !/^(sub\s*total|total|grand total|vat)/i.test(r[must]));
     if (IMP.key === "boq") out.forEach(r => { if (/^\d+(\.0+)?$/.test(r.qty)) r.qty = String(Number(r.qty)); });
-    const cap = IMP.key === "boq" ? 400 : 1000;
-    R[IMP.key] = ($("impReplace").checked ? [] : R[IMP.key]).concat(out).slice(0, cap);
-    $("impDlg").close(); renderCard(IMP.key); toc(); touch(); toast(`${out.length} row${out.length === 1 ? "" : "s"} imported.`);
+    const cap = CAP[IMP.key];
+    setPath(IMP.key, ($("impReplace").checked ? [] : getPath(IMP.key)).concat(out).slice(0, cap));
+    $("impDlg").close(); renderCard(IMP.key.split(".")[0]); toc(); touch(); toast(`${out.length} row${out.length === 1 ? "" : "s"} imported.`);
   };
 
   /* ================= signatures ================= */
@@ -587,6 +664,12 @@
   }
 
   /* ================= documents ================= */
+  // Passwords leave the editor only when the report is set to print them.
+  function sysOut() {
+    const si = R.sysinfo || {}, hide = r => si.printPasswords ? r : { ...r, password: r.password ? "Provided separately" : "" };
+    const clean = k => (si[k] || []).filter(r => Object.values(r).some(v => String(v).trim()));
+    return { printPasswords: !!si.printPasswords, ip: clean("ip"), vlans: clean("vlans"), wifi: clean("wifi").map(hide), creds: clean("creds").map(hide) };
+  }
   async function loadImg(url) {
     const r = await fetch(url, { cache: "force-cache" }); if (!r.ok) return null;
     const blob = await r.blob(); const bytes = new Uint8Array(await blob.arrayBuffer());
@@ -612,6 +695,7 @@
       statusLine: s ? "Completed, tested, handed over and accepted by the client" : "Completed, tested and handed over",
       customer: { name: R.customerName, trn: cu.trn, attention: R.attention, addressLines: [cu.address, cu.emirate].filter(Boolean).join(", ").split(/\s*[\n,]\s*/).filter(Boolean).reduce((a, x) => { const l = a[a.length - 1]; if (l && (l + ", " + x).length < 48) a[a.length - 1] = l + ", " + x; else a.push(x); return a; }, []) },
       include: inc, letter: R.letter, scope: R.scope, boq: dropBlank(R.boq), serials: dropBlank(R.serials), testing: dropBlank(R.testing), handover: R.handover, snags: dropBlank(R.snags),
+      sysinfo: sysOut(), 
       diagram: R.diagram, diagramImg, photos,
       warranty: Object.assign({}, w, { start, hwUntil: until(w.hwMonths), wkUntil: until(w.wkMonths) }),
       warrantyLine: parts.length ? `The equipment and works carry ${parts.join(" and ")}, from ${fd(start)}${w.hours ? ". Support is available " + w.hours.replace(/^./, c => c.toLowerCase()) : ""}.` : "",

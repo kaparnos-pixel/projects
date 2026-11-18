@@ -18,6 +18,15 @@ jobs:
           node-version: 22
       - name: Install storage clients
         run: npm ci --omit=dev --prefix bifold-tools-api
+      - name: Check settings (shows only set / not set)
+        env:
+          S1: ${{ secrets.STORAGE_CONNECTION }}
+          V1: ${{ vars.STORAGE_CONNECTION }}
+          S2: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+        run: |
+          echo "Repository secret STORAGE_CONNECTION: $([ -n "$S1" ] && echo set || echo NOT set)"
+          echo "Repository variable STORAGE_CONNECTION: $([ -n "$V1" ] && echo set || echo not set)"
+          echo "Repository secret AZURE_STORAGE_CONNECTION_STRING: $([ -n "$S2" ] && echo set || echo not set)"
       - name: Back up tables and files
         env:
           NODE_PATH: bifold-tools-api/node_modules

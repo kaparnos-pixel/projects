@@ -188,7 +188,7 @@ $("form").onsubmit=async e=>{
 };
 
 /* ---------- export ---------- */
-const XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+const XLSX_URL="/assets/vendor/xlsx-0.18.5.full.min.js";
 function loadX(){return window.XLSX?Promise.resolve(window.XLSX):new Promise((ok,no)=>{const s=document.createElement("script");s.src=XLSX_URL;s.onload=()=>ok(window.XLSX);s.onerror=()=>no(new Error("Couldn't load the spreadsheet tool. Check your connection and try again."));document.head.appendChild(s)})}
 $("expBtn").onclick=async()=>{
   try{

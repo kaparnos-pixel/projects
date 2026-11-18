@@ -1,0 +1,44 @@
+name: Restore from backup
+
+# Run by hand only: Actions > Restore from backup > Run workflow.
+# Leave "Dry run" ticked first to see what would change.
+on:
+  workflow_dispatch:
+    inputs:
+      day:
+        description: "Backup date (YYYY-MM-DD)"
+        required: true
+      tables:
+        description: "Tables to restore, comma separated, or all"
+        required: true
+      mode:
+        description: "merge = put backed-up rows back; exact = also remove rows added since"
+        type: choice
+        options: [merge, exact]
+        default: merge
+      dry_run:
+        description: "Dry run (only report what would change)"
+        type: boolean
+        default: true
+
+concurrency: backup
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --omit=dev --prefix bifold-tools-api
+      - name: Restore
+        env:
+          NODE_PATH: bifold-tools-api/node_modules
+          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION }}
+          BACKUP_CONNECTION: ${{ secrets.BACKUP_CONNECTION }}
+          RESTORE_DAY: ${{ inputs.day }}
+          RESTORE_TABLES: ${{ inputs.tables }}
+          RESTORE_MODE: ${{ inputs.mode }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: node .github/scripts/restore.cjs

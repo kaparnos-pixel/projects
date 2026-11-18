@@ -4,10 +4,10 @@
 (function () {
   "use strict";
   const LIB = {
-    docx: "https://cdn.jsdelivr.net/npm/docx@9.5.1/dist/index.iife.js",
-    jspdf: "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js",
-    autotable: "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
-    xlsx: "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
+    docx: "/assets/vendor/docx-9.5.1.iife.js",
+    jspdf: "/assets/vendor/jspdf-2.5.2.umd.min.js",
+    autotable: "/assets/vendor/jspdf-autotable-3.8.4.min.js",
+    xlsx: "/assets/vendor/xlsx-0.18.5.full.min.js",
   };
   const BR = {
     bifold: { name: "Bifold Technologies LLC", logo: "/assets/amc/bifold_logo.png", stamp: "/assets/amc/bifold_stamp.png", support: "+971 04 264 0374  |  bifoldtech.com",

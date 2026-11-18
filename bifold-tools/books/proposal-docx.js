@@ -6,7 +6,7 @@
  */
 const BKPROPDOCX = (function () {
   "use strict";
-  const LIB = { jszip: "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js", docx: "https://cdn.jsdelivr.net/npm/docx@9.5.1/dist/index.iife.js" };
+  const LIB = { jszip: "/assets/vendor/jszip-3.10.1.min.js", docx: "/assets/vendor/docx-9.5.1.iife.js" };
   const loaded = {};
   const load = src => loaded[src] || (loaded[src] = new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => { delete loaded[src]; rej(new Error("Couldn't load the Word library. Check your connection and try again.")); }; document.head.appendChild(s); }));
   // docx.js and docx-preview both register window.docx: load each one into its own name and put back what was there.

@@ -383,7 +383,7 @@ const BKPROP = (function () {
     try {
       const blob = await build(d);
       dlg.querySelector("#pvDl").onclick = () => save(blob, fileName(d));
-      await BKPROPDOCX.load(BKPROPDOCX.LIB.jszip); await BKPROPDOCX.loadAs("https://cdn.jsdelivr.net/npm/docx-preview@0.3.5/dist/docx-preview.min.js", "docxPreview");
+      await BKPROPDOCX.load(BKPROPDOCX.LIB.jszip); await BKPROPDOCX.loadAs("/assets/vendor/docx-preview-0.3.5.min.js", "docxPreview");
       await window.docx_preview_render(blob, dlg.querySelector("#pvBox"));
       dlg.querySelector("#pvMsg").hidden = true;
     } catch (e) { dlg.querySelector("#pvMsg").textContent = e.message || "The preview couldn't be drawn. Use Download Word."; }

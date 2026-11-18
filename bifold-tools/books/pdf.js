@@ -2,7 +2,7 @@
 // jsPDF + AutoTable (the same libraries the AMC and Completion tools use). Branded per company.
 (function () {
 "use strict";
-const LIB = { jspdf: "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js", autotable: "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js" };
+const LIB = { jspdf: "/assets/vendor/jspdf-2.5.2.umd.min.js", autotable: "/assets/vendor/jspdf-autotable-3.8.4.min.js" };
 const loaded = {};
 const load = src => loaded[src] || (loaded[src] = new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => { delete loaded[src]; rej(new Error("Couldn't load the PDF library. Check your connection and try again.")); }; document.head.appendChild(s); }));
 async function lib() { await load(LIB.jspdf); await load(LIB.autotable); return window.jspdf.jsPDF; }

@@ -4,10 +4,10 @@
 /* ============ constants ============ */
 const RANJAN = "ranjan@bifoldtech.com";
 const LIB = {
-  docx: "https://cdn.jsdelivr.net/npm/docx@9.5.1/dist/index.iife.js",
-  jspdf: "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js",
-  autotable: "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js",
-  jszip: "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
+  docx: "/assets/vendor/docx-9.5.1.iife.js",
+  jspdf: "/assets/vendor/jspdf-2.5.2.umd.min.js",
+  autotable: "/assets/vendor/jspdf-autotable-3.8.4.min.js",
+  jszip: "/assets/vendor/jszip-3.10.1.min.js",
 };
 // Company branding: everything a document or screen says about "us" comes from here.
 const BRANDS = {

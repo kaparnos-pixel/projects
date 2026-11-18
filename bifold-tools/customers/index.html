@@ -139,7 +139,7 @@ $("delBtn").onclick=async()=>{
   try{await api("DELETE","customers/"+encodeURIComponent(cur.id));LIST=LIST.filter(x=>x.id!==cur.id);render();$("dlg").close();toast("Customer deleted")}catch(err){$("err").textContent=err.message}
 };
 /* ---------- bulk import ---------- */
-const XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+const XLSX_URL="/assets/vendor/xlsx-0.18.5.full.min.js";
 const IMP_FIELDS=[["name","Customer name *",["customer","customer name","company","company name","name","client","client name","account","account name","organisation","organization"]],
   ["contactName","Contact person",["contact","contact person","contact name","attention","attn","person"]],
   ["phone","Phone",["phone","mobile","tel","telephone","contact number","phone number","mobile number","landline"]],

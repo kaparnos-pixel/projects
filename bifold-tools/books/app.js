@@ -63,7 +63,7 @@ const today = () => D.today;
 
 // Excel export (SheetJS, loaded when needed, same library the other tools use).
 let xlsxP = null;
-function xlsx() { return xlsxP || (xlsxP = new Promise((res, rej) => { if (window.XLSX) return res(window.XLSX); const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"; s.onload = () => res(window.XLSX); s.onerror = () => { xlsxP = null; rej(new Error("Couldn't load the Excel library. Check your connection.")); }; document.head.appendChild(s); })); }
+function xlsx() { return xlsxP || (xlsxP = new Promise((res, rej) => { if (window.XLSX) return res(window.XLSX); const s = document.createElement("script"); s.src = "/assets/vendor/xlsx-0.18.5.full.min.js"; s.onload = () => res(window.XLSX); s.onerror = () => { xlsxP = null; rej(new Error("Couldn't load the Excel library. Check your connection.")); }; document.head.appendChild(s); })); }
 async function exportSheets(name, sheets) {
   const X = await xlsx(); const wb = X.utils.book_new();
   sheets.forEach(([n, rows]) => X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(rows), n.slice(0, 31)));

@@ -24,7 +24,7 @@ const SRC = env.STORAGE_CONNECTION;
 const DST = env.BACKUP_CONNECTION || SRC;
 const KEEP = Math.max(7, Number(env.KEEP_DAYS) || 35);
 const CONTAINER = "backups";
-if (!SRC) { console.error("STORAGE_CONNECTION is not set."); process.exit(1); }
+if (!SRC) { console.error("No backup was made: the STORAGE_CONNECTION secret is not set. In GitHub open Settings > Secrets and variables > Actions > New repository secret, name it STORAGE_CONNECTION and paste the storage account connection string (Azure portal > the storage account > Access keys > Connection string)."); process.exit(1); }
 
 const day = new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10); // Dubai date
 const opts = /UseDevelopmentStorage|127\.0\.0\.1|localhost/.test(SRC) ? { allowInsecureConnection: true } : {};

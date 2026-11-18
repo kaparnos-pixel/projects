@@ -35,7 +35,7 @@ jobs:
       - name: Restore
         env:
           NODE_PATH: bifold-tools-api/node_modules
-          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION }}
+          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION || secrets.BUSINESSTOOLSSTORE }}
           BACKUP_CONNECTION: ${{ secrets.BACKUP_CONNECTION }}
           RESTORE_DAY: ${{ inputs.day }}
           RESTORE_TABLES: ${{ inputs.tables }}

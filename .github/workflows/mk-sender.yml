@@ -33,7 +33,7 @@ jobs:
       - name: Send due campaigns
         env:
           NODE_PATH: bifold-tools-api/node_modules
-          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION }}
+          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION || secrets.BUSINESSTOOLSSTORE }}
           ACS_CONNECTION: ${{ secrets.ACS_CONNECTION }}
           MK_SENDER_BIFOLD: ${{ secrets.MK_SENDER_BIFOLD }}
           MK_SENDER_TECHHUB: ${{ secrets.MK_SENDER_TECHHUB }}

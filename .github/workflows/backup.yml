@@ -21,16 +21,15 @@ jobs:
       - name: Check settings (shows only set / not set)
         env:
           S1: ${{ secrets.STORAGE_CONNECTION }}
-          V1: ${{ vars.STORAGE_CONNECTION }}
-          S2: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+          S2: ${{ secrets.BUSINESSTOOLSSTORE }}
         run: |
           echo "Repository secret STORAGE_CONNECTION: $([ -n "$S1" ] && echo set || echo NOT set)"
-          echo "Repository variable STORAGE_CONNECTION: $([ -n "$V1" ] && echo set || echo not set)"
-          echo "Repository secret AZURE_STORAGE_CONNECTION_STRING: $([ -n "$S2" ] && echo set || echo not set)"
+          echo "Repository secret BUSINESSTOOLSSTORE: $([ -n "$S2" ] && echo set || echo not set)"
+          case "$S1$S2" in DefaultEndpointsProtocol=*) echo "Looks like a storage connection string: yes";; *) echo "Looks like a storage connection string: NO (it should start with DefaultEndpointsProtocol=)";; esac
       - name: Back up tables and files
         env:
           NODE_PATH: bifold-tools-api/node_modules
-          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION }}
+          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION || secrets.BUSINESSTOOLSSTORE }}
           BACKUP_CONNECTION: ${{ secrets.BACKUP_CONNECTION }}
           KEEP_DAYS: ${{ vars.BACKUP_KEEP_DAYS }}
         run: node .github/scripts/backup.cjs

@@ -23,7 +23,7 @@ jobs:
       - name: Send alerts
         env:
           NODE_PATH: bifold-tools-api/node_modules
-          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION }}
+          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION || secrets.BUSINESSTOOLSSTORE }}
           GRAPH_TENANT_ID: ${{ secrets.GRAPH_TENANT_ID }}
           GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
           GRAPH_CLIENT_SECRET: ${{ secrets.GRAPH_CLIENT_SECRET }}

@@ -96,10 +96,47 @@ function signatures(ctx, labels) {
   ctx.y = y + 8;
 }
 
+/* ---------- delivery challan: quantities only, received-by block ---------- */
+async function challanPdf(d) {
+  const ctx = await base("DELIVERY CHALLAN", d.number || "DRAFT", `Date: ${fd(d.date)}`);
+  const { doc, M, W, C, S } = ctx;
+  // The company's own details are in the header and footer; the challan leads with who gets the goods and where.
+  parties(ctx, "Customer", [d.contactName, d.attention ? "Attn: " + d.attention : "", d.contactAddress, d.contactTrn ? `TRN ${d.contactTrn}` : ""],
+    "Deliver to", [d.deliverTo || d.contactAddress || d.contactName, d.siteContact ? "Site contact: " + d.siteContact : ""]);
+  metaRow(ctx, [["Challan no.", d.number || "Draft"], ["Date", fd(d.date)], ["Customer PO / ref", d.ref], [d.srcType === "quote" ? "Against quotation" : "Against invoice", d.srcNo],
+    ["Vehicle no.", d.vehicle], ["Driver", [d.driver, d.driverPhone].filter(Boolean).join(", ")]]);
+  const lines = d.lines || [], ser = lines.some(l => l.serials);
+  const head = ["#", "Item and description"].concat(ser ? ["Serial numbers"] : [], ["Qty", "Unit"]);
+  const body = lines.map((l, i) => [String(i + 1), l.name + (l.description ? "\n" + l.description : "")].concat(ser ? [l.serials || ""] : [], [String(l.qty), l.unit || "Nos"]));
+  const n = head.length;
+  doc.autoTable({ startY: ctx.y, margin: { left: M, right: M, bottom: 22 }, head: [head], body, theme: "grid",
+    foot: [[{ content: "Total quantity", colSpan: n - 2, styles: { halign: "right" } }, String(Math.round(lines.reduce((a, l) => a + Number(l.qty || 0), 0) * 100) / 100), ""]],
+    headStyles: { fillColor: C.p, textColor: 255, fontSize: 7.8, fontStyle: "bold", lineColor: C.p }, footStyles: { fillColor: C.soft, textColor: 20, fontStyle: "bold", fontSize: 8.4 },
+    styles: { fontSize: 8.4, cellPadding: 1.9, lineColor: [220, 226, 232], lineWidth: 0.15, textColor: 30, valign: "top" },
+    columnStyles: { 0: { cellWidth: 8 }, 1: { cellWidth: "auto" }, ...(ser ? { 2: { cellWidth: 52, fontSize: 7.6 } } : {}), [n - 2]: { cellWidth: 16, halign: "right" }, [n - 1]: { cellWidth: 16 } } });
+  ctx.y = doc.lastAutoTable.finalY + 6;
+  para(ctx, "Notes", d.notes);
+  para(ctx, "Receipt", "Received the above goods in good order and condition. Any shortage or visible damage must be noted on this challan at the time of delivery.", 8);
+  // Delivered by / received by blocks with room for name, signature, date and company stamp.
+  let y = ctx.y + 4; const H = doc.internal.pageSize.getHeight(); if (y > H - 62) { doc.addPage(); y = 24; }
+  const cw = (W - 2 * M - 8) / 2;
+  [["Delivered by (" + S.legalName + ")", [d.driver]], ["Received by (customer)", d.status === "delivered" ? [d.receivedBy, "", d.receivedOn ? fd(d.receivedOn) : ""] : []]].forEach(([t, v], i) => {
+    const x = M + i * (cw + 8); doc.setDrawColor(...C.a); doc.setLineWidth(0.3); doc.roundedRect(x, y, cw, 40, 1.5, 1.5);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...C.p); doc.text(doc.splitTextToSize(t, cw - 6)[0], x + 3, y + 5);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(90);
+    ["Name", "Signature", "Date", "Stamp"].forEach((k, j) => { const yy = y + 13 + j * 7.5; doc.text(k, x + 3, yy); doc.setDrawColor(200); doc.setLineWidth(0.2); doc.line(x + 22, yy + 0.8, x + cw - 4, yy + 0.8); if (v[j]) { doc.setTextColor(30); doc.text(v[j], x + 23, yy); doc.setTextColor(90); } });
+  });
+  ctx.y = y + 46;
+  footer(ctx, "This delivery challan is not a tax invoice.");
+  if (d.status === "cancelled") stampText(ctx, "CANCELLED", [200, 30, 40]); else if (d.status === "draft") stampText(ctx, "DRAFT", [120, 130, 140]);
+  return doc.output("blob");
+}
+
 /* ---------- tax invoice, tax credit note, quotation, purchase order, receipt ---------- */
 async function docPdf(d) {
   const BK = window.BK, D = BK.D, S = D.settings, vat = S.vatRegistered;
   const T = d.type;
+  if (T === "dc") return challanPdf(d);
   const TITLE = { invoice: vat ? "TAX INVOICE" : "INVOICE", creditnote: vat ? "TAX CREDIT NOTE" : "CREDIT NOTE", quote: "QUOTATION", po: "PURCHASE ORDER", receipt: "PAYMENT RECEIPT" }[T] || T.toUpperCase();
   const ctx = await base(TITLE, d.number || "DRAFT", `Date: ${fd(d.date)}`);
   const { doc, M, W, C } = ctx;

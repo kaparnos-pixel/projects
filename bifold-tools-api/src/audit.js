@@ -156,7 +156,7 @@ module.exports = function makeAudit(H) {
     }
     if (a === "books") {
       const A = "Books";
-      const LBL = { proposal: "proposal", quote: "quotation", invoice: "tax invoice", creditnote: "tax credit note", receipt: "payment received", po: "purchase order", bill: "bill", vendorcredit: "vendor credit", payment: "payment made", expense: "expense", journal: "manual journal", transfer: "transfer" };
+      const LBL = { dc: "delivery challan", proposal: "proposal", quote: "quotation", invoice: "tax invoice", creditnote: "tax credit note", receipt: "payment received", po: "purchase order", bill: "bill", vendorcredit: "vendor credit", payment: "payment made", expense: "expense", journal: "manual journal", transfer: "transfer" };
       const money = v => v ? "AED " + short(v) : "";
       if (b === "settings") return [A, aud.lock ? "Changed settings and lock date" : "Changed company and VAT settings", "", [aud.lock && "lock date: " + aud.lock, ch].filter(Boolean).join("; ")];
       if (b === "ct") return [A, "Saved corporate tax inputs", name, [body.sbr ? "Small Business Relief elected" : "", body.lossBf ? "losses b/f AED " + short(body.lossBf) : "", (body.adj || []).length ? (body.adj || []).length + " adjustments" : ""].filter(Boolean).join(", ")];
@@ -179,7 +179,7 @@ module.exports = function makeAudit(H) {
       if (b === "docs") {
         const lbl = LBL[(out.type || body.type) === "quote" && (out.format || body.format) === "proposal" ? "proposal" : out.type || body.type] || "document";
         const who = [out.contactName, money(out.total || out.amount)].filter(Boolean).join(", ");
-        if (d === "void") return [A, out.type === "quote" || out.type === "po" ? "Cancelled " + lbl : "Voided " + lbl, name || out.number || c, clean(body.reason, 200)];
+        if (d === "void") return [A, ["quote", "po", "dc"].includes(out.type) ? "Cancelled " + lbl : "Voided " + lbl, name || out.number || c, clean(body.reason, 200)];
         if (d === "apply") return [A, "Applied " + lbl, name || out.number, ch];
         if (d === "amc") return [A, body.amcId ? "Tracked invoice in the AMC Tracker" : "Removed invoice from the AMC Tracker", name || out.number, ch];
         if (d === "deal") return [A, "Added quotation to the Sales Pipeline", name, out.dealId || ""];
@@ -187,6 +187,7 @@ module.exports = function makeAudit(H) {
         if (d === "sent") return [A, "Marked " + lbl + " as sent", name || out.number, out.contactName || ""];
         if (d === "convert") return [A, "Converted to a new document", name || c, ""];
         if (method === "POST") return [A, (out.status === "draft" ? "Saved draft " : out.status === "posted" && (out.type === "invoice" || out.type === "creditnote") ? "Issued " : "Created ") + lbl, out.number || "draft", who];
+        if (method === "PUT" && aud.dcStatus) return [A, "Marked delivery challan " + aud.dcStatus.split(",")[0], out.number || name || c, [out.contactName, aud.dcStatus.split(", ").slice(1).join(", ")].filter(Boolean).join("; ")];
         if (method === "PUT") return [A, aud.issued ? "Issued " + lbl : "Edited " + lbl, out.number || name || c, [who, ch].filter(Boolean).join("; ")];
         if (method === "DELETE") return [A, "Deleted " + lbl, name || c, ""];
         if (method === "GET") return [A, "Opened " + lbl, out.number || c, ""];

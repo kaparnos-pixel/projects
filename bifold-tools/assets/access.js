@@ -165,7 +165,7 @@
     { group: null, items: [{ href: "/", label: "Home", icon: "home", need: [] }] },
     { group: "Sales", items: [{ href: "/pipeline/", label: "Sales Pipeline", icon: "pipeline", need: ["pipeline"] }, { href: "/pnl/", label: "PnL Calculator", icon: "pnl", need: ["pnl"] }] },
     { group: "Finance", items: [{ href: "/books/", label: "Books & VAT", icon: "books", need: BK.any, subs: [["#/dashboard", "Dashboard", BK.ledger],
-        [null, "Sales", BK.any], ["#/customers", "Customers", BK.sales], ["#/quotes", "Quotations", BK.any.filter(k => k !== "bk_purch")], ["#/invoices", "Invoices", BK.sales], ["#/receipts", "Payments received", BK.sales], ["#/creditnotes", "Credit notes", BK.sales],
+        [null, "Sales", BK.any], ["#/customers", "Customers", BK.sales], ["#/quotes", "Quotations", BK.any.filter(k => k !== "bk_purch")], ["#/invoices", "Invoices", BK.sales], ["#/challans", "Delivery challans", BK.sales], ["#/receipts", "Payments received", BK.sales], ["#/creditnotes", "Credit notes", BK.sales],
         [null, "Purchases", BK.purch], ["#/vendors", "Suppliers", BK.purch], ["#/pos", "Purchase orders", BK.purch], ["#/bills", "Bills", BK.purch], ["#/payments", "Payments made", BK.purch], ["#/expenses", "Expenses", BK.purch], ["#/vendorcredits", "Vendor credits", BK.purch],
         [null, "Accountant", BK.items], ["#/banking", "Banking", BK.ledger], ["#/journals", "Manual journals", BK.ledger], ["#/accounts", "Chart of accounts", BK.ledger], ["#/items", "Items", BK.items],
         [null, "Tax and reports", BK.reports], ["#/vat", "VAT return", BK.reports], ["#/report/ct", "Corporate tax", BK.reports], ["#/reports", "All reports", BK.reports],

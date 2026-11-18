@@ -12,14 +12,14 @@ const fd = d => d ? new Date(d.slice(0, 10) + "T00:00:00Z").toLocaleDateString("
 const addDays = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 864e5);
 
-const LISTS = { quotes: "quote", invoices: "invoice", receipts: "receipt", creditnotes: "creditnote", pos: "po", bills: "bill", payments: "payment", vendorcredits: "vendorcredit", expenses: "expense", journals: "journal", transfers: "transfer" };
+const LISTS = { challans: "dc", quotes: "quote", invoices: "invoice", receipts: "receipt", creditnotes: "creditnote", pos: "po", bills: "bill", payments: "payment", vendorcredits: "vendorcredit", expenses: "expense", journals: "journal", transfers: "transfer" };
 const ROUTE_OF = Object.fromEntries(Object.entries(LISTS).map(([k, v]) => [v, k]));
-const PLURAL = { quote: "Quotations", invoice: "Invoices", receipt: "Payments received", creditnote: "Credit notes", po: "Purchase orders", bill: "Bills", payment: "Payments made", vendorcredit: "Vendor credits", expense: "Expenses", journal: "Manual journals", transfer: "Transfers" };
-const NAME = { quote: "Quotation", invoice: "Invoice", receipt: "Payment received", creditnote: "Credit note", po: "Purchase order", bill: "Bill", payment: "Payment made", vendorcredit: "Vendor credit", expense: "Expense", journal: "Manual journal", transfer: "Transfer" };
-const SALES = new Set(["quote", "invoice", "receipt", "creditnote"]);
+const PLURAL = { dc: "Delivery challans", quote: "Quotations", invoice: "Invoices", receipt: "Payments received", creditnote: "Credit notes", po: "Purchase orders", bill: "Bills", payment: "Payments made", vendorcredit: "Vendor credits", expense: "Expenses", journal: "Manual journals", transfer: "Transfers" };
+const NAME = { dc: "Delivery challan", quote: "Quotation", invoice: "Invoice", receipt: "Payment received", creditnote: "Credit note", po: "Purchase order", bill: "Bill", payment: "Payment made", vendorcredit: "Vendor credit", expense: "Expense", journal: "Manual journal", transfer: "Transfer" };
+const SALES = new Set(["quote", "invoice", "receipt", "creditnote", "dc"]);
 const LINE_TYPES = new Set(["quote", "invoice", "creditnote", "po", "bill", "vendorcredit", "expense"]);
 // Team access areas (set by a manager in Team access): full, sales, purch, bank, reports, quotes.
-const AREA = { quote: "sales", invoice: "sales", receipt: "sales", creditnote: "sales", po: "purch", bill: "purch", payment: "purch", vendorcredit: "purch", expense: "purch", journal: "bank", transfer: "bank" };
+const AREA = { dc: "sales", quote: "sales", invoice: "sales", receipt: "sales", creditnote: "sales", po: "purch", bill: "purch", payment: "purch", vendorcredit: "purch", expense: "purch", journal: "bank", transfer: "bank" };
 const canW = t => { const P = D.perms; return t === "quote" ? P.quotes : !!P[AREA[t]]; };
 const canR = t => D.perms.reports || D.perms.bank || canW(t);
 const seesLedger = () => D.perms.reports || D.perms.bank;
@@ -55,7 +55,7 @@ const acctName = c => { const a = ACC.get(c); return a ? `${a.code} ${a.name}` :
 function go(h) { if (location.hash === h) route(); else location.hash = h; }
 const params = () => Object.fromEntries(new URLSearchParams((location.hash.split("?")[1] || "")));
 const busy = (btn, on) => { if (!btn) return; btn.disabled = on; if (on) { btn.dataset.t = btn.textContent; btn.textContent = "Working…"; } else if (btn.dataset.t) btn.textContent = btn.dataset.t; };
-function st(v) { const L = { posted: "Posted", draft: "Draft", void: "Void", open: "Open", overdue: "Overdue", partial: "Part paid", paid: "Paid", applied: "Applied", unapplied: "Unapplied", sent: "Sent", accepted: "Accepted", declined: "Declined", converted: "Converted", cancelled: "Cancelled", expired: "Expired" }; return `<span class="st ${esc(v)}">${esc(L[v] || v)}</span>`; }
+function st(v) { const L = { posted: "Posted", draft: "Draft", void: "Void", open: "Open", overdue: "Overdue", partial: "Part paid", paid: "Paid", applied: "Applied", unapplied: "Unapplied", sent: "Sent", accepted: "Accepted", declined: "Declined", converted: "Converted", cancelled: "Cancelled", expired: "Expired", dispatched: "Dispatched", delivered: "Delivered" }; return `<span class="st ${esc(v)}">${esc(L[v] || v)}</span>`; }
 const vatOn = () => D.settings.vatRegistered;
 const docTitle = d => d.type === "invoice" ? (vatOn() ? "Tax invoice" : "Invoice") : d.type === "creditnote" ? (vatOn() ? "Tax credit note" : "Credit note") : NAME[d.type];
 const label = d => `${docTitle(d)} ${d.number || "(draft)"}`;
@@ -107,7 +107,7 @@ async function quickContact(kind) {
 /* ---------- navigation ---------- */
 // The Books sections live in the left sidebar under Books & VAT (assets/access.js); this marks the current one,
 // fills the breadcrumb and shows counts that need attention.
-const SECTION = { dashboard: ["Dashboard"], customers: ["Customers", "Sales"], quotes: ["Quotations", "Sales"], invoices: ["Invoices", "Sales"], receipts: ["Payments received", "Sales"], creditnotes: ["Credit notes", "Sales"],
+const SECTION = { dashboard: ["Dashboard"], customers: ["Customers", "Sales"], quotes: ["Quotations", "Sales"], invoices: ["Invoices", "Sales"], challans: ["Delivery challans", "Sales"], receipts: ["Payments received", "Sales"], creditnotes: ["Credit notes", "Sales"],
   vendors: ["Suppliers", "Purchases"], pos: ["Purchase orders", "Purchases"], bills: ["Bills", "Purchases"], payments: ["Payments made", "Purchases"], expenses: ["Expenses", "Purchases"], vendorcredits: ["Vendor credits", "Purchases"],
   banking: ["Banking", "Accountant"], journals: ["Manual journals", "Accountant"], accounts: ["Chart of accounts", "Accountant"], items: ["Items", "Accountant"],
   vat: ["VAT return", "Tax and reports"], ct: ["Corporate tax", "Tax and reports"], reports: ["Reports", "Tax and reports"], settings: ["Settings", "Setup"] };
@@ -255,6 +255,7 @@ const VIEWS = {
   invoice: [["", "All"], ["unpaid", "Unpaid"], ["overdue", "Overdue"], ["paid", "Paid"], ["draft", "Draft"], ["void", "Void"]],
   bill: [["", "All"], ["unpaid", "Unpaid"], ["due", "Due in 7 days"], ["overdue", "Overdue"], ["paid", "Paid"], ["draft", "Draft"], ["void", "Void"]],
   po: [["", "All"], ["open", "Open"], ["converted", "Billed"], ["cancelled", "Cancelled"]],
+  dc: [["", "All"], ["draft", "Draft"], ["dispatched", "Dispatched"], ["delivered", "Delivered"], ["cancelled", "Cancelled"]],
 };
 function listView(type) {
   const p = params(); const view = p.view || "";
@@ -268,6 +269,7 @@ function listView(type) {
     return d.view === view || d.status === view;
   };
   const cols = {
+    dc: [["Date", d => fd(d.date)], ["Challan", d => `<span class="t">${esc(d.number)}</span>`], ["Customer", d => esc(d.contactName)], ["Customer PO / ref", d => esc(d.ref)], ["Against", d => { const x = DOCS.get(d.invoiceRef); return x ? esc(x.number || "draft") : ""; }], ["Status", d => st(d.view)]],
     quote: [["Date", d => fd(d.date)], ["Quotation", d => `<span class="t">${esc(d.number)}</span>`], ["Customer", d => esc(d.contactName)], ["Reference", d => esc(d.ref || d.title)], ["Valid until", d => fd(d.dueDate)], ["Status", d => st(d.view)], ["Amount", d => aed(d.total), "r mono"]],
     invoice: [["Date", d => fd(d.date)], ["Invoice", d => `<span class="t">${esc(d.number || "Draft")}</span>`], ["Customer", d => esc(d.contactName)], ["PO / ref", d => esc(d.ref)], ["Due", d => fd(d.dueDate)], ["Status", d => st(d.view)], ["Total", d => aed(d.total), "r mono"], ["Balance", d => d.status === "posted" ? aed(d.balance) : "", "r mono"]],
     creditnote: [["Date", d => fd(d.date)], ["Credit note", d => `<span class="t">${esc(d.number || "Draft")}</span>`], ["Customer", d => esc(d.contactName)], ["Status", d => st(d.view)], ["Total", d => aed(d.total), "r mono"], ["Unapplied", d => d.status === "posted" ? aed(d.balance) : "", "r mono"]],
@@ -399,7 +401,7 @@ function wireVerify(c) {
 /* ---------- attachments ---------- */
 const CLIP = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>';
 const clipCount = d => d.fileCount ? ` <span class="clip" title="${d.fileCount} attachment${d.fileCount === 1 ? "" : "s"}">${CLIP}${d.fileCount}</span>` : "";
-const DEF_KIND = { quote: "other", invoice: "po", creditnote: "other", receipt: "payment", po: "quote", bill: "invoice", vendorcredit: "invoice", payment: "payment", expense: "receipt", journal: "other", transfer: "payment" };
+const DEF_KIND = { dc: "delivery", quote: "other", invoice: "po", creditnote: "other", receipt: "payment", po: "quote", bill: "invoice", vendorcredit: "invoice", payment: "payment", expense: "receipt", journal: "other", transfer: "payment" };
 const FILE_MAX = 10 * 1048576;
 const kb = n => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
 function readB64(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1] || ""); r.onerror = () => rej(new Error(`Couldn't read ${file.name}.`)); r.readAsDataURL(file); }); }
@@ -518,6 +520,7 @@ async function docView(id) {
   nav(ROUTE_OF[(DOCS.get(id) || {}).type]);
   $("app").innerHTML = `<div class="empty">Opening…</div>`;
   let d; try { d = await api("GET", "docs/" + id); } catch (e) { $("app").innerHTML = `<div class="empty"><strong>Can't open this document</strong>${esc(e.message)}</div>`; return; }
+  if (d.type === "dc") return dcView(d);
   const P = D.perms, tp = d.type, posted = d.status === "posted", W = canW(tp);
   const A = []; // [label, action, primary?, danger?]
   const canEdit = (tp === "quote" || tp === "po") ? d.status !== "cancelled" : d.status === "draft" || (posted && ["bill", "receipt", "payment", "expense", "journal", "transfer"].includes(tp));
@@ -540,13 +543,14 @@ async function docView(id) {
   if (tp === "quote" && ["draft", "sent"].includes(d.status)) A.push(["Mark accepted", "accept"], ["Mark declined", "decline"]);
   if (["quote", "invoice", "po"].includes(tp) && !d.sentAt && d.status !== "draft" && d.status !== "void") A.push(["Mark as sent", "sent"]);
   if (tp === "invoice" && posted) A.push(["Create credit note", "credit"]);
+  if ((tp === "invoice" && d.status !== "void") || (tp === "quote" && !["cancelled", "declined"].includes(d.status))) A.push(["Create delivery challan", "challan"]);
   if (tp === "bill" && posted) A.push(["Record vendor credit", "credit"]);
   if (LINE_TYPES.has(tp)) A.push(["Duplicate", "dup"]);
   if (posted && P.full) A.push(["Void", "void", false, true]);
   if ((tp === "quote" || tp === "po") && ["draft", "sent", "accepted", "declined"].includes(d.status)) A.push(["Cancel", "cancel", false, true]);
   if (d.status === "draft" || ((tp === "quote" || tp === "po") && d.status !== "converted")) A.push(["Delete", "del", false, true]);
   // What each action needs: change rights on this document, or on the document it creates.
-  const NEEDS = { pay: tp === "invoice" ? "receipt" : "payment", convert: tp === "quote" ? "invoice" : "bill", credit: tp === "invoice" ? "creditnote" : "vendorcredit" };
+  const NEEDS = { challan: "dc", pay: tp === "invoice" ? "receipt" : "payment", convert: tp === "quote" ? "invoice" : "bill", credit: tp === "invoice" ? "creditnote" : "vendorcredit" };
   const READ_OK = new Set(["preview", "pdf", "amcopen", "pipe", "propview", "propdl"]);
   for (let i = A.length - 1; i >= 0; i--) { const k = A[i][1]; const ok = READ_OK.has(k) || (NEEDS[k] ? W && canW(NEEDS[k]) : W); if (!ok) A.splice(i, 1); }
   const lines = d.lines || [];
@@ -592,6 +596,7 @@ async function docView(id) {
   if (d.fromId && DOCS.get(d.fromId)) linked.push(`<a class="mi" href="#/doc/${d.fromId}"><span><b>Created from</b><div class="t">${esc(label(DOCS.get(d.fromId)))}</div></span></a>`);
   if (d.toId && DOCS.get(d.toId)) linked.push(`<a class="mi" href="#/doc/${d.toId}"><span><b>Converted to</b><div class="t">${esc(label(DOCS.get(d.toId)))}</div></span></a>`);
   if (d.source) linked.push(`<a class="mi" href="#/doc/${d.source.id}"><span><b>Against</b><div class="t">${esc(d.source.number)}</div></span></a>`);
+  D.docs.filter(x => x.type === "dc" && x.invoiceRef === d.id).forEach(x => linked.push(`<a class="mi" href="#/doc/${x.id}"><span><b>Delivery challan ${esc(x.number)}</b><div class="t">${fd(x.date)}</div></span>${st(x.view)}</a>`));
   (d.payments || []).forEach(x => linked.push(`<a class="mi" href="#/doc/${x.id}"><span><b>${esc(NAME[x.type])} ${esc(x.number)}</b><div class="t">${fd(x.date)}</div></span><span class="amt">${aed(x.amt)}</span></a>`));
   page(`${docTitle(d)} ${d.number || ""}`.trim(), `${PLURAL[tp]} · ${d.contactName || ""}`, `<a class="btn" href="#/${ROUTE_OF[tp]}">← ${PLURAL[tp]}</a>`,
     `<div class="dv">${showPaper}<aside class="side">
@@ -616,6 +621,7 @@ async function docView(id) {
     convert: async () => { const r = await api("POST", `docs/${id}/convert`, {}); sessionStorage.setItem("bk-draft", JSON.stringify(r.draft)); go(`#/new/${r.draft.type}?draft=1`); return "nav"; },
     credit: async () => { const r = await api("POST", `docs/${id}/convert`, {}); sessionStorage.setItem("bk-draft", JSON.stringify(r.draft)); go(`#/new/${r.draft.type}?draft=1`); return "nav"; },
     apply: async () => { await applyDialog(d); return "stay"; },
+    challan: () => { sessionStorage.setItem("bk-draft", JSON.stringify(challanFrom(d))); go("#/new/dc?draft=1"); return "nav"; },
     edit: () => { go("#/edit/" + id); return "nav"; },
     amcopen: () => { location.href = "/amc/#amc=" + encodeURIComponent(d.amcId); return "stay"; },
     amclink: async () => { const r = await amcDialog(d); return r ? undefined : "stay"; },
@@ -644,6 +650,150 @@ async function docView(id) {
     finally { busy(b, false); }
   });
 }
+/* ---------- delivery challans ---------- */
+// A challan copies the goods (names, descriptions, quantities, units) from an invoice or quotation and links back to it.
+function challanFrom(d) {
+  return { contactId: d.contactId, srcId: d.id, ref: d.ref || d.poRef || "", attention: d.attention || "", deliverTo: d.deliverTo || d.contactAddress || "", date: today(),
+    lines: (d.lines || []).map(l => ({ name: l.name, description: l.description || "", qty: l.qty, unit: l.unit || "", itemId: l.itemId || "" })) };
+}
+function dcView(d) {
+  const id = d.id, W = canW("dc"), B = BK.brand();
+  const src = d.invoiceRef ? DOCS.get(d.invoiceRef) : null;
+  const A = [];
+  if (W && d.status === "draft") A.push(["Mark dispatched", "dispatch", true]);
+  if (W && ["draft", "dispatched"].includes(d.status)) A.push(["Mark delivered", "deliver", d.status === "dispatched"]);
+  if (W && d.status !== "cancelled") A.push(["Edit", "edit"]);
+  A.push(["Preview PDF", "preview"], ["Download PDF", "pdf"]);
+  if (W) A.push(["Upload files", "upload"], ["Duplicate", "dup"]);
+  if (W && d.status !== "cancelled" && d.status !== "draft") A.push(["Cancel", "cancel", false, true]);
+  if (W && d.status === "draft") A.push(["Delete", "del", false, true]);
+  const meta = [];
+  const M = (k, v) => v && meta.push(`<div><span>${k}</span>${esc(v)}</div>`);
+  M("Date", fd(d.date)); M("Customer PO / ref", d.ref); M(d.srcType === "quote" ? "Against quotation" : "Against invoice", d.srcNo); M("Deliver to", d.deliverTo); M("Site contact", d.siteContact);
+  M("Vehicle no.", d.vehicle); M("Driver", [d.driver, d.driverPhone].filter(Boolean).join(", ")); if (d.status === "delivered") M("Received by", [d.receivedBy, fd(d.receivedOn)].filter(Boolean).join(" on "));
+  const lines = d.lines || [], ser = lines.some(l => l.serials);
+  const qty = r2(lines.reduce((a, l) => a + num(l.qty), 0));
+  const paper = `<article class="paper" style="--brand:${B.key === "techhub" ? "#003C50" : "#1E5A8C"}">
+    <div class="ph"><img src="${esc(B.logo || "/assets/bifold_logo.png")}" alt=""><div><h2>DELIVERY CHALLAN</h2><div class="no"><b>${esc(d.number || "DRAFT")}</b>${d.status === "cancelled" ? `<br><span class="stamp">CANCELLED</span>` : d.status === "draft" ? `<br><span class="stamp" style="border-color:var(--muted);color:var(--muted)">DRAFT</span>` : ""}</div></div></div>
+    <div class="pp"><div><h4>From</h4><b>${esc(D.settings.legalName)}</b><br>${esc(D.settings.address)}</div><div><h4>Customer</h4><b>${esc(d.contactName || "")}</b><br>${d.attention ? "Attn: " + esc(d.attention) + "<br>" : ""}${esc(d.contactAddress || "")}</div></div>
+    <div class="meta">${meta.join("")}</div>
+    <table><thead><tr><th>#</th><th>Item and description</th>${ser ? "<th>Serial numbers</th>" : ""}<th style="text-align:right">Qty</th><th>Unit</th></tr></thead><tbody>
+      ${lines.map((l, i) => `<tr><td>${i + 1}</td><td><b>${esc(l.name)}</b>${l.description ? `<div class="ds">${esc(l.description)}</div>` : ""}</td>${ser ? `<td class="mono" style="font-size:11.5px;white-space:pre-wrap">${esc(l.serials || "")}</td>` : ""}<td style="text-align:right">${l.qty}</td><td>${esc(l.unit || "Nos")}</td></tr>`).join("")}
+      <tr><td></td><td style="text-align:right"${ser ? ' colspan="2"' : ""}><b>Total quantity</b></td><td style="text-align:right"><b>${qty}</b></td><td></td></tr></tbody></table>
+    ${d.notes ? `<div class="pn"><b>Notes</b>\n${esc(d.notes)}</div>` : ""}${d.voidReason ? `<div class="note bad" style="margin-top:12px"><b>Cancelled</b>${esc(d.voidReason)}</div>` : ""}</article>`;
+  page(`Delivery challan ${d.number || ""}`.trim(), `Delivery challans · ${d.contactName || ""}`, `<a class="btn" href="#/challans">← Delivery challans</a>`,
+    `<div class="dv">${paper}<aside class="side">
+      <section class="card"><header><h2>${st(d.view)}</h2></header><div class="bd acts2">${A.map(([l, k, p, x]) => `<button type="button" data-a="${k}" class="${p ? "primary" : x ? "danger" : ""}">${esc(l)}</button>`).join("")}</div></section>
+      ${attachCard(d)}
+      ${W ? "" : `<div class="note" style="margin-bottom:14px"><b>View only</b>You can open, preview and download this challan but not change it.</div>`}
+      <section class="card"${W ? "" : " hidden"}><header><h2>Internal notes<span>team only, never printed</span></h2></header><div class="bd" style="display:grid;gap:8px"><textarea id="inote" rows="3" maxlength="2000">${esc(d.internalNote || "")}</textarea><div style="display:flex;justify-content:flex-end"><button type="button" id="inoteSave">Save note</button></div></div></section>
+      ${src ? `<section class="card"><header><h2>Linked</h2></header><a class="mi" href="#/doc/${src.id}"><span><b>Delivered against</b><div class="t">${esc(label(src))}</div></span></a></section>` : ""}
+      <section class="card"><header><h2>History</h2></header><div class="bd" style="font-size:12px;color:var(--muted)">Created by ${esc(d.createdBy)} on ${fd(d.createdAt)}<br>Last changed by ${esc(d.updatedBy)} on ${fd(d.updatedAt)}</div></section>
+    </aside></div>`, "challans");
+  wireAttach(d, async () => { await load(); docView(id); });
+  if ($("inoteSave")) $("inoteSave").onclick = async e => { busy(e.target, true); try { await api("PUT", `docs/${id}/internal`, { internalNote: $("inote").value }); await load(); toast("Note saved."); docView(id); } catch (err) { toast(err.message, 1); busy(e.target, false); } };
+  const pdfName = `Delivery Challan ${d.number || "draft"} ${d.contactName || ""}.pdf`;
+  const build = () => BKPDF.doc(d);
+  const put = extra => api("PUT", "docs/" + id, { ...d, srcId: d.invoiceRef, ...extra });
+  const act = {
+    dispatch: () => put({ status: "dispatched" }),
+    deliver: async () => {
+      const r = await dialog(`<form><h3>Mark ${esc(d.number)} delivered</h3><p class="hint" style="margin:0">Record who received the goods at site. Upload the signed copy of the challan to keep the proof with it.</p>
+        <div class="fields"><label><span class="lbl">Received by *</span><input name="who" required maxlength="120" value="${esc(d.siteContact || "")}"></label><label><span class="lbl">Date received</span><input name="on" type="date" value="${esc(today())}"></label></div>
+        <div class="err"></div><div class="foot"><button type="button" data-x>Cancel</button><button class="primary" type="submit">Mark delivered</button></div></form>`,
+        { onOpen: (dl, done) => dl.querySelector("form").onsubmit = e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); if (!f.who.trim()) { dl.querySelector(".err").textContent = "Enter who received the goods."; return; } done(f); } });
+      if (!r) return "stay";
+      return put({ status: "delivered", receivedBy: r.who.trim(), receivedOn: r.on });
+    },
+    edit: () => { go("#/edit/" + id); return "nav"; },
+    preview: () => { window.BXPdf.preview(build, pdfName); return "stay"; },
+    pdf: async () => { saveBlob(await build(), pdfName); return "stay"; },
+    upload: () => { $("attCard").scrollIntoView({ behavior: "smooth", block: "center" }); $("attIn").click(); return "stay"; },
+    dup: () => { sessionStorage.setItem("bk-draft", JSON.stringify({ contactId: d.contactId, lines: (d.lines || []).map(l => ({ ...l, serials: "" })), deliverTo: d.deliverTo, attention: d.attention, siteContact: d.siteContact })); go("#/new/dc?draft=1"); return "nav"; },
+    cancel: async () => { const r = await ask(`Cancel ${label(d)}?`, "It stays on file, marked cancelled.", { input: true, okText: "Cancel it", danger: true, placeholder: "Reason, e.g. delivery rescheduled" }); if (!r) return "stay"; return api("POST", `docs/${id}/void`, { reason: r }); },
+    del: async () => { if (!await ask(`Delete ${label(d)}?`, "This removes it completely.", { okText: "Delete", danger: true })) return "stay"; await api("DELETE", "docs/" + id); await load(); go("#/challans"); return "nav"; },
+  };
+  $("app").querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
+    busy(b, true);
+    try { const r = await act[b.dataset.a](); if (r !== "nav" && r !== "stay") { await load(); docView(id); toast("Saved."); } }
+    catch (e) { toast(e.message, 1); }
+    finally { busy(b, false); }
+  });
+}
+function dcEditor(d) {
+  const isNew = !d.id, [title, tag] = headerFor(d, isNew);
+  const lines = (d.lines && d.lines.length ? d.lines : [{ qty: 1 }]).map(l => ({ ...l }));
+  const srcOpts = cid => D.docs.filter(x => x.contactId === cid && ((x.type === "invoice" && x.status !== "void") || (x.type === "quote" && !["cancelled", "declined"].includes(x.status))))
+    .sort((a, b) => b.date.localeCompare(a.date)).map(x => `<option value="${x.id}"${x.id === (d.srcId || d.invoiceRef) ? " selected" : ""}>${esc(label(x))} · ${fd(x.date)}</option>`).join("");
+  const keep = !isNew && d.status !== "draft";
+  const saveBtns = keep ? `<button type="button" class="primary" data-s="${esc(d.status)}">Save changes</button>` : `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="dispatched">Save and dispatch</button>`;
+  page(title, tag, `<a class="btn" href="${d.id ? "#/doc/" + d.id : "#/challans"}">Cancel</a>`,
+    `<form class="ed" id="ed" novalidate>
+      <section class="panel"><div class="row wide">
+        <label><span class="lbl">Customer *</span>${contactPicker("customer", d.contactId)}</label>
+        <label><span class="lbl">Challan date</span><input type="date" id="date" value="${esc(d.date || today())}" required></label>
+        <label><span class="lbl">Customer PO / reference</span><input id="ref" maxlength="80" value="${esc(d.ref || "")}"></label>
+        <label><span class="lbl">Delivered against</span><select id="srcId"><option value="">Not linked</option>${srcOpts(d.contactId)}</select></label>
+      </div>
+      <div class="row wide">
+        <label style="grid-column:span 2"><span class="lbl">Deliver to (site address)</span><textarea id="deliverTo" rows="2" maxlength="400">${esc(d.deliverTo || "")}</textarea></label>
+        <label><span class="lbl">Attention (contact person)</span><input id="attention" maxlength="100" value="${esc(d.attention || "")}"></label>
+        <label><span class="lbl">Site contact</span><input id="siteContact" maxlength="120" value="${esc(d.siteContact || "")}" placeholder="Name and phone"></label>
+        <label><span class="lbl">Vehicle no.</span><input id="vehicle" maxlength="40" value="${esc(d.vehicle || "")}"></label>
+        <label><span class="lbl">Driver</span><input id="driver" maxlength="100" value="${esc(d.driver || "")}"></label>
+        <label><span class="lbl">Driver phone</span><input id="driverPhone" maxlength="30" value="${esc(d.driverPhone || "")}"></label>
+      </div><div class="hint" id="cinfo"></div></section>
+      <section class="panel" style="padding:0;overflow:hidden"><div class="tblwrap"><table class="lines dcl"><thead><tr><th class="h">#</th><th>Item / description</th><th>Serial numbers</th><th class="n">Qty</th><th class="u">Unit</th><th class="rm"></th></tr></thead><tbody id="lines"></tbody></table></div>
+        <div style="padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" id="addLine">+ Add line</button><button type="button" id="copySrc">Copy items from the linked document</button><span class="hint" style="margin:0">Quantities only: a delivery challan shows no prices.</span><span class="hint" id="qtot" style="margin:0 0 0 auto"></span></div></section>
+      <section class="panel"><label><span class="lbl">Notes (shown on the challan)</span><textarea id="notes" rows="2" maxlength="3000">${esc(d.notes || "")}</textarea></label></section>
+      ${editorFiles(d)}
+      <div class="err" id="err"></div>
+      <div class="edfoot">${saveBtns}</div>
+    </form>`, "challans");
+  const queue = []; wireEditorFiles(queue);
+  const body = $("lines");
+  const rowHTML = (l, i) => `<tr data-i="${i}"><td class="h">${i + 1}</td>
+    <td><input list="dlItems" data-k="name" value="${esc(l.name || "")}" placeholder="Type an item or a description" maxlength="300"><textarea data-k="description" rows="1" maxlength="2000" placeholder="Details (optional)">${esc(l.description || "")}</textarea></td>
+    <td><textarea data-k="serials" class="mono" rows="2" maxlength="3000" placeholder="One per line or comma separated">${esc(l.serials || "")}</textarea></td>
+    <td class="n"><input class="num" data-k="qty" inputmode="decimal" value="${l.qty ?? 1}"></td>
+    <td class="u"><input data-k="unit" maxlength="20" placeholder="Nos" value="${esc(l.unit || "")}"></td>
+    <td class="rm"><button type="button" class="x" data-rm aria-label="Remove line">×</button></td></tr>`;
+  const calc = () => { $("qtot").textContent = `Total quantity ${r2(lines.reduce((a, l) => a + num(l.qty), 0))}`; };
+  const draw = () => { body.innerHTML = lines.map(rowHTML).join(""); calc(); };
+  body.addEventListener("input", e => {
+    const tr = e.target.closest("tr"); if (!tr) return; const l = lines[tr.dataset.i]; const k = e.target.dataset.k; l[k] = e.target.value;
+    if (k === "name") { const it = D.items.find(x => x.name === e.target.value); if (it) { Object.assign(l, { itemId: it.id, description: l.description || it.description, unit: it.unit }); const t = tr.querySelector('[data-k="description"]'); if (!t.value) t.value = l.description || ""; tr.querySelector('[data-k="unit"]').value = l.unit || ""; } }
+    // Serial numbers set the quantity when the quantity hasn't been typed differently.
+    if (k === "serials") { const n = l.serials.split(/[\n,;]+/).map(x => x.trim()).filter(Boolean).length; if (n > 0 && (num(l.qty) <= 1 || l._autoQty)) { l.qty = n; l._autoQty = true; tr.querySelector('[data-k="qty"]').value = n; } }
+    if (k === "qty") l._autoQty = false;
+    calc();
+  });
+  body.addEventListener("click", e => { if (e.target.dataset.rm != null) { lines.splice(Number(e.target.closest("tr").dataset.i), 1); if (!lines.length) lines.push({ qty: 1 }); draw(); } });
+  $("addLine").onclick = () => { lines.push({ qty: 1 }); draw(); body.querySelector("tr:last-child input").focus(); };
+  $("copySrc").onclick = async () => {
+    const sid = $("srcId").value; if (!sid) return toast("Choose the invoice or quotation in Delivered against first.", 1);
+    try { const x = await api("GET", "docs/" + sid); const add = challanFrom(x).lines; if (lines.length === 1 && !lines[0].name && !lines[0].description) lines.length = 0; lines.push(...add); draw();
+      if (!$("ref").value && x.ref) $("ref").value = x.ref; toast(`${add.length} items copied from ${x.number || "the draft"}.`); } catch (err) { toast(err.message, 1); }
+  };
+  const showInfo = () => {
+    const c = CUS.get($("contact").value); $("cinfo").textContent = c ? [c.address, c.phone].filter(Boolean).join(" · ") : "";
+    const cur = $("srcId").value; $("srcId").innerHTML = `<option value="">Not linked</option>` + srcOpts($("contact").value); if ([...$("srcId").options].some(o => o.value === cur)) $("srcId").value = cur;
+    if (c && !$("deliverTo").value.trim() && c.address) $("deliverTo").value = c.address;
+    if (c && !$("attention").value.trim() && c.attention) $("attention").value = c.attention;
+  };
+  wireContact("customer", showInfo); showInfo();
+  draw();
+  $("app").querySelectorAll("[data-s]").forEach(b => b.onclick = async () => {
+    $("err").textContent = "";
+    const v = k => $(k).value;
+    const payload = { type: "dc", contactId: v("contact"), date: v("date"), ref: v("ref"), srcId: v("srcId"), attention: v("attention"), deliverTo: v("deliverTo"), siteContact: v("siteContact"), vehicle: v("vehicle"), driver: v("driver"), driverPhone: v("driverPhone"),
+      notes: v("notes"), lines: lines.map(({ _autoQty, ...l }) => l), status: b.dataset.s, receivedBy: d.receivedBy, receivedOn: d.receivedOn, etag: d.etag };
+    busy(b, true);
+    try { const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await afterSave(r, queue, "dc"); await load(); toast(`Delivery challan ${r.number} saved.`); go("#/doc/" + r.id); }
+    catch (err) { $("err").textContent = err.message; busy(b, false); }
+  });
+}
+
 async function applyDialog(d) {
   const target = SALES.has(d.type) ? "invoice" : "bill";
   const open = D.docs.filter(x => x.type === target && x.status === "posted" && x.contactId === d.contactId && (x.balance > 0.004 || (d.applied || []).some(a => a.id === x.id)));
@@ -678,6 +828,7 @@ async function editor(type, id) {
   if (!NAME[type]) return go("#/dashboard");
   if (!canW(type)) { toast("You don't have access to create or change this in Books.", true); return go(id ? "#/doc/" + id : "#/dashboard"); }
   if (!d) d = { type, _fresh: true, contactId: p.contact || "", date: today(), lines: [] };
+  if (type === "dc") return dcEditor(d);
   if (LINE_TYPES.has(type)) return lineEditor(d);
   if (type === "receipt" || type === "payment") return payEditor(d, p.apply);
   if (type === "journal") return journalEditor(d);

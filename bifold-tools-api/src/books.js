@@ -49,6 +49,8 @@ const TYPES = {
   invoice: { side: "sales", party: "customer", lines: true, ledger: true, taxDoc: true, prefix: "INV-", label: "Tax invoice" },
   creditnote: { side: "sales", party: "customer", lines: true, ledger: true, taxDoc: true, credit: true, prefix: "CN-", label: "Tax credit note" },
   receipt: { side: "sales", party: "customer", pay: true, ledger: true, prefix: "RCT-", label: "Payment received" },
+  // Delivery challan: goods out to a customer, quantities only. Never posted and never on a VAT return.
+  dc: { side: "sales", party: "customer", dc: true, ledger: false, prefix: "DC-", label: "Delivery challan" },
   po: { side: "purch", party: "vendor", lines: true, ledger: false, prefix: "PO-", label: "Purchase order" },
   bill: { side: "purch", party: "vendor", lines: true, ledger: true, prefix: "BILL-", label: "Bill" },
   vendorcredit: { side: "purch", party: "vendor", lines: true, ledger: true, credit: true, prefix: "VC-", label: "Vendor credit" },
@@ -60,6 +62,7 @@ const TYPES = {
 // What a payment or credit can be applied to.
 const APPLIES = { receipt: "invoice", creditnote: "invoice", payment: "bill", vendorcredit: "bill" };
 const DRAFTABLE = new Set(["quote", "invoice", "creditnote", "po", "bill"]);
+const DC_STATUS = ["draft", "dispatched", "delivered"]; // "cancelled" is set by cancelling
 const OFFER_STATUS = ["draft", "sent", "accepted", "declined", "cancelled"]; // quote / po; "converted" is set by converting
 
 const ACCT_TYPES = {
@@ -136,7 +139,7 @@ module.exports = function makeBooks(H) {
   //   bk_purch    suppliers, POs, bills, payments, expenses, vendor credits
   //   bk_bank     banking, transfers, manual journals (reads every transaction)   bk_reports  every report and the VAT / CT returns, read only
   // Settings, the chart of accounts, the lock date, voiding and tax-return journals stay with full access.
-  const AREA = { quote: "sales", invoice: "sales", receipt: "sales", creditnote: "sales", po: "purch", bill: "purch", payment: "purch", vendorcredit: "purch", expense: "purch", journal: "bank", transfer: "bank" };
+  const AREA = { dc: "sales", quote: "sales", invoice: "sales", receipt: "sales", creditnote: "sales", po: "purch", bill: "purch", payment: "purch", vendorcredit: "purch", expense: "purch", journal: "bank", transfer: "bank" };
   const AREA_NAME = { sales: "Sales", purch: "Purchases", bank: "Banking and journals", reports: "Reports and VAT" };
   function permsOf(user) {
     const s = user.sections || [], full = !!user.isManager || s.includes("books");
@@ -539,6 +542,22 @@ module.exports = function makeBooks(H) {
       Object.assign(f, { contactId: c.id, contactName: c.name, contactTrn: c.trn });
       Object.assign(body, { contactAddress: c.address, contactEmail: c.email, contactPhone: c.phone, attention: clean(b.attention, 100) || c.attention, contactCountry: c.country || "" });
     } else Object.assign(f, { contactId: "", contactName: clean(b.payee, 150), contactTrn: "" });
+    if (tp.dc) {
+      // Quantity-only lines; serial numbers travel with the goods.
+      const lines = (Array.isArray(b.lines) ? b.lines : []).slice(0, 300).map(l => ({ name: clean(l && l.name, 300), description: clean(l && l.description, 2000), qty: r2(num(l && l.qty)), unit: clean(l && l.unit, 20), serials: clean(l && l.serials, 3000), itemId: clean(l && l.itemId, 60) }))
+        .filter(l => l.name || l.description);
+      if (!lines.length) fail(400, "Add at least one item being delivered.");
+      const bad = lines.findIndex(l => !(l.qty > 0)); if (bad >= 0) fail(400, `Line ${bad + 1}: enter the quantity delivered.`);
+      body.lines = lines; f.subtotal = 0; f.vatAmt = 0; f.total = 0;
+      body.deliverTo = clean(b.deliverTo, 400); body.siteContact = clean(b.siteContact, 120); body.vehicle = clean(b.vehicle, 40); body.driver = clean(b.driver, 100); body.driverPhone = clean(b.driverPhone, 30);
+      body.attention = clean(b.attention, 100) || body.attention;
+      body.receivedBy = clean(b.receivedBy, 120); body.receivedOn = clean(b.receivedOn, 10); if (body.receivedOn && !isDate(body.receivedOn)) fail(400, "The received date is not valid.");
+      if (b.status === "delivered" && !body.receivedBy) fail(400, "Enter the name of the person who received the goods.");
+      // What the goods were delivered against: an invoice or a quotation (kept as a link, not a conversion).
+      f.invoiceRef = ""; body.srcNo = ""; body.srcType = "";
+      const src = clean(b.srcId, 60) && ctx.docs.find(x => x.id === clean(b.srcId, 60) && ["invoice", "quote"].includes(x.type));
+      if (src) { if (src.contactId !== f.contactId) fail(400, `${src.number || "That document"} is for a different customer.`); f.invoiceRef = src.id; body.srcNo = src.number; body.srcType = src.type; }
+    }
     if (tp.lines) {
       const lines = linesIn(b.lines, type, s, accts);
       if (!lines.length) fail(400, "Add at least one line.");
@@ -690,7 +709,7 @@ module.exports = function makeBooks(H) {
     const { f, body } = await docIn(user, b, null, ctx);
     const wantDraft = DRAFTABLE.has(type) && b.status === "draft";
     const now = new Date().toISOString();
-    f.status = TYPES[type].ledger ? (wantDraft ? "draft" : "posted") : (OFFER_STATUS.includes(b.status) && b.status !== "cancelled" ? b.status : "draft");
+    f.status = TYPES[type].ledger ? (wantDraft ? "draft" : "posted") : TYPES[type].dc ? (DC_STATUS.includes(b.status) ? b.status : "draft") : (OFFER_STATUS.includes(b.status) && b.status !== "cancelled" ? b.status : "draft");
     if (f.status === "posted" && locked(ctx.settings, f.date)) fail(400, lockMsg(ctx.settings));
     if (f.status === "posted") postInto(f, body, ctx.settings); else { f.gl = "[]"; f.tax = "[]"; }
     // Tax invoices and tax credit notes are numbered when issued; everything else when created.
@@ -720,6 +739,7 @@ module.exports = function makeBooks(H) {
     const { f, body } = await docIn(user, b, cur, ctx);
     let status = cur.status;
     if (tp.ledger) { if (cur.status === "draft" && b.status === "posted") status = "posted"; }
+    else if (tp.dc) { if (cur.status === "cancelled") fail(400, "This delivery challan is cancelled and can't be changed."); if (DC_STATUS.includes(b.status)) status = b.status; }
     else if (cur.status === "converted") status = "converted"; // a converted quotation / PO stays linked to what it became
     else if (OFFER_STATUS.includes(b.status)) status = b.status;
     if ((status === "posted" && locked(ctx.settings, f.date)) || (cur.status === "posted" && locked(ctx.settings, cur.date))) fail(400, lockMsg(ctx.settings));
@@ -737,7 +757,7 @@ module.exports = function makeBooks(H) {
     if (status === "posted" && cur.status !== "posted") { body.issuedAt = new Date().toISOString(); body.issuedBy = user.email; } else { body.issuedAt = old.issuedAt; body.issuedBy = old.issuedBy; }
     const next = { partitionKey: dPK(ctx.co), rowKey: id, ...f, files: cur.files || "[]", internalNote: cur.internalNote || "", internalBy: cur.internalBy || "", internalAt: cur.internalAt || "", dealId: cur.dealId || "", amcId: cur.amcId || "", amcRef: cur.amcRef || "", fromId: cur.fromId || "", toId: cur.toId || "", sentAt: cur.sentAt || (status === "sent" ? new Date().toISOString() : ""), voidReason: "", createdBy: cur.createdBy, createdAt: cur.createdAt,
       updatedBy: user.email, updatedAt: new Date().toISOString(), ...packJson(body) };
-    if (user.aud) { user.aud.name = `${tp.label} ${f.number || "draft"}`; user.aud.changes = diff(cur, next); if (status === "posted" && cur.status !== "posted") user.aud.issued = true; }
+    if (user.aud) { user.aud.name = `${tp.label} ${f.number || "draft"}`; user.aud.changes = diff(cur, next); if (status === "posted" && cur.status !== "posted") user.aud.issued = true; if (tp.dc && status !== cur.status) user.aud.dcStatus = status + (status === "delivered" && body.receivedBy ? ", received by " + body.receivedBy : ""); }
     try { await t.updateEntity(next, "Replace", { etag: b.etag || cur.etag }); }
     catch (err) { if (err.statusCode === 412) fail(409, "Someone else changed this document after you opened it. Reload it and make your change again."); throw err; }
     if (cur.type === "quote" && cur.dealId) await syncDeal(user, next, status !== cur.status ? `marked ${status}` : `revised to AED ${num(next.subtotal).toLocaleString("en-US", { minimumFractionDigits: 2 })} before VAT`);

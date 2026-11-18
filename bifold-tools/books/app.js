@@ -282,7 +282,8 @@ function listView(type) {
     journal: [["Date", d => fd(d.date)], ["Journal", d => `<span class="t">${esc(d.number)}</span>`], ["Accounts", d => esc([...new Set(d.gl.map(g => (ACC.get(g[0]) || {}).name))].slice(0, 3).join(", "))], ["Status", d => st(d.view)], ["Amount", d => aed(d.total), "r mono"]],
     transfer: [["Date", d => fd(d.date)], ["Transfer", d => `<span class="t">${esc(d.number)}</span>`], ["From", d => esc(acctName(d.account))], ["To", d => esc(acctName((d.gl.find(g => g[1] > 0) || [])[0]))], ["Status", d => st(d.view)], ["Amount", d => aed(d.amount), "r mono"]],
   }[type];
-  cols[1] = [cols[1][0], (f => d => f(d) + clipCount(d) + (d.dealId ? ` <span class="clip" title="In the Sales Pipeline">● pipeline</span>` : "") + (d.amcId ? ` <span class="clip" title="Tracked in the AMC Tracker">● AMC ${esc(d.amcRef || "")}</span>` : "") + (d.format === "proposal" ? ` <span class="clip prp" title="Sent as a full proposal">● proposal</span>` : ""))(cols[1][1]), cols[1][2]];
+  const dcOf = new Map(); D.docs.forEach(x => { if (x.type === "dc" && x.invoiceRef && x.status !== "cancelled") dcOf.set(x.invoiceRef, (dcOf.get(x.invoiceRef) || []).concat(x.number)); });
+  cols[1] = [cols[1][0], (f => d => f(d) + clipCount(d) + (dcOf.has(d.id) ? ` <span class="clip" title="Delivery challans: ${esc(dcOf.get(d.id).join(", "))}">● ${dcOf.get(d.id).length > 1 ? dcOf.get(d.id).length + " challans" : esc(dcOf.get(d.id)[0])}</span>` : "") + (d.dealId ? ` <span class="clip" title="In the Sales Pipeline">● pipeline</span>` : "") + (d.amcId ? ` <span class="clip" title="Tracked in the AMC Tracker">● AMC ${esc(d.amcRef || "")}</span>` : "") + (d.format === "proposal" ? ` <span class="clip prp" title="Sent as a full proposal">● proposal</span>` : ""))(cols[1][1]), cols[1][2]];
   const views = VIEWS[type] || [["", "All"], ["posted", "Posted"], ["void", "Void"]];
   page(PLURAL[type], SALES.has(type) ? "Sales" : type === "journal" || type === "transfer" ? "Accountant" : "Purchases",
     `<button id="xl">Export to Excel</button>${canW(type) ? `${type === "quote" ? `<button id="newProp">+ New proposal</button>` : ""}<button class="primary" id="newBtn">+ New ${NAME[type].toLowerCase()}</button>` : `<span class="st draft">View only</span>`}`,
@@ -543,7 +544,7 @@ async function docView(id) {
   if (tp === "quote" && ["draft", "sent"].includes(d.status)) A.push(["Mark accepted", "accept"], ["Mark declined", "decline"]);
   if (["quote", "invoice", "po"].includes(tp) && !d.sentAt && d.status !== "draft" && d.status !== "void") A.push(["Mark as sent", "sent"]);
   if (tp === "invoice" && posted) A.push(["Create credit note", "credit"]);
-  if ((tp === "invoice" && d.status !== "void") || (tp === "quote" && !["cancelled", "declined"].includes(d.status))) A.push(["Create delivery challan", "challan"]);
+  if ((tp === "invoice" && d.status !== "void") || (tp === "quote" && !["cancelled", "declined"].includes(d.status))) A.push([tp === "quote" ? "Convert to delivery challan" : "Create delivery challan", "challan"]);
   if (tp === "bill" && posted) A.push(["Record vendor credit", "credit"]);
   if (LINE_TYPES.has(tp)) A.push(["Duplicate", "dup"]);
   if (posted && P.full) A.push(["Void", "void", false, true]);
@@ -654,7 +655,9 @@ async function docView(id) {
 // A challan copies the goods (names, descriptions, quantities, units) from an invoice or quotation and links back to it.
 function challanFrom(d) {
   return { contactId: d.contactId, srcId: d.id, ref: d.ref || d.poRef || "", attention: d.attention || "", deliverTo: d.deliverTo || d.contactAddress || "", date: today(),
-    lines: (d.lines || []).map(l => ({ name: l.name, description: l.description || "", qty: l.qty, unit: l.unit || "", itemId: l.itemId || "" })) };
+    srcLabel: label(d),
+    // Proposal lines carry the brand / model separately: keep it on the challan so the goods can be checked at site.
+    lines: (d.lines || []).map(l => ({ name: l.name, description: [l.model && !String(l.description || "").includes(l.model) ? "Brand / model: " + l.model : "", l.description || ""].filter(Boolean).join("\n"), qty: l.qty, unit: l.unit || "", itemId: l.itemId || "" })) };
 }
 function dcView(d) {
   const id = d.id, W = canW("dc"), B = BK.brand();
@@ -729,6 +732,7 @@ function dcEditor(d) {
   const saveBtns = keep ? `<button type="button" class="primary" data-s="${esc(d.status)}">Save changes</button>` : `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="dispatched">Save and dispatch</button>`;
   page(title, tag, `<a class="btn" href="${d.id ? "#/doc/" + d.id : "#/challans"}">Cancel</a>`,
     `<form class="ed" id="ed" novalidate>
+      ${isNew && d.srcLabel ? `<div class="note" style="margin-bottom:14px"><b>Converted from ${esc(d.srcLabel)}</b>Everything below is editable: change quantities, remove items that aren't going in this delivery, add serial numbers and the delivery details, then save. The challan stays editable after it's saved, until it's cancelled. The ${d.srcLabel.startsWith("Quotation") ? "quotation" : "invoice"} itself isn't changed and can still be converted again for a part delivery.</div>` : ""}
       <section class="panel"><div class="row wide">
         <label><span class="lbl">Customer *</span>${contactPicker("customer", d.contactId)}</label>
         <label><span class="lbl">Challan date</span><input type="date" id="date" value="${esc(d.date || today())}" required></label>

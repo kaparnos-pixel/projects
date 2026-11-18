@@ -257,7 +257,8 @@
     serials() {
       const types = new Map(); R.serials.forEach(r => types.set(r.type || "Other", (types.get(r.type || "Other") || 0) + 1));
       const missing = R.serials.filter(r => !r.serial).length;
-      return tbl("serials", [["type", "Device type", 150], ["model", "Make & model", 0], ["serial", "Serial number", 190, "mono"], ["location", "Location", 160]], "Import from Excel / CSV")
+      return `<div class="btnrow edit-only" style="margin-bottom:10px"><button type="button" data-dcpull>Pull from delivery challans</button><span class="hint">Brings in the serial numbers typed on this customer's delivery challans in Books & VAT.</span></div>`
+        + tbl("serials", [["type", "Device type", 150], ["model", "Make & model", 0], ["serial", "Serial number", 190, "mono"], ["location", "Location", 160]], "Import from Excel / CSV")
         + `<p class="hint" style="margin:0">${R.serials.length ? [...types].map(([t, n]) => `${n} x ${esc(t)}`).join(", ") : "Copy the serial numbers exactly as printed on the labels."}${missing ? ` <b style="color:var(--bad)">${missing} row${missing > 1 ? "s have" : " has"} no serial number.</b>` : ""}</p>`
         + `<details class="more edit-only"><summary>Paste a list of serial numbers</summary><div class="grid2" style="margin-top:10px"><label><span class="lbl">Device type</span><input id="psType" placeholder="e.g. Access Point"></label><label><span class="lbl">Make & model</span><input id="psModel" placeholder="e.g. Aruba AP22"></label><label><span class="lbl">Location</span><input id="psLoc"></label><label class="full"><span class="lbl">Serial numbers, one per line (or scanned)</span><textarea id="psList" rows="4" class="mono"></textarea></label></div><div class="btnrow"><button type="button" id="psAdd">Add to register</button></div></details>`;
     },
@@ -367,6 +368,7 @@
     if (t.dataset.clear) { if (!t.classList.contains("armed")) { t.classList.add("armed"); t.textContent = "Click again to clear"; setTimeout(() => { t.classList.remove("armed"); t.textContent = "Clear all"; }, 3000); return; } setPath(t.dataset.clear, []); renderCard(t.dataset.clear.split(".")[0]); toc(); touch(); return; }
     if (t.dataset.import) return openImport(t.dataset.import);
     if (t.hasAttribute("data-sysup")) return sysUpload();
+    if (t.hasAttribute("data-dcpull")) return dcPull(t);
     if (t.hasAttribute("data-systpl")) return sysTemplate(t);
     if (t.hasAttribute("data-addstream")) { R.scope.streams.push({ heading: String.fromCharCode(65 + R.scope.streams.length) + ". ", bullets: [] }); renderCard("text"); touch(); return; }
     if (t.dataset.mv) { const i = Number(t.dataset.i), j = i + Number(t.dataset.mv); [R.photos[i], R.photos[j]] = [R.photos[j], R.photos[i]]; renderCard("photos"); touch(); return; }
@@ -555,6 +557,42 @@
       } catch (e) { toast(/library/.test(e.message) ? e.message : "That file couldn't be read. Save it as .xlsx or .csv and try again.", true); }
     };
     inp.click();
+  }
+  // Serial numbers from Books delivery challans: one row per serial, the item name as the device type
+  // and any "Brand / model:" line as make & model. Serials already in the register are skipped.
+  async function dcPull(btn) {
+    btn.disabled = true;
+    let list;
+    try { await flush(); list = (await api("GET", `pcr/reports/${R.id}/challans`)).challans || []; } catch (e) { toast(e.message, true); btn.disabled = false; return; }
+    btn.disabled = false;
+    if (!list.length) return toast(`No delivery challans for ${R.customerName || "this customer"} in Books & VAT.`, true);
+    const ser = l => String(l.serials || "").split(/[\n,;]+/).map(x => x.trim()).filter(Boolean);
+    const dl = document.createElement("dialog");
+    dl.style.cssText = "width:min(640px,94vw);max-width:94vw"; dl.innerHTML = `<form method="dialog" style="box-sizing:border-box;width:100%"><h3>Pull serial numbers from delivery challans</h3>
+      <p class="hint" style="margin:0 0 10px">${esc(R.customerName || "")}: choose the challans for this project.</p>
+      <div style="max-height:52vh;overflow:auto;display:grid;gap:6px">${list.map((c, i) => { const n = c.lines.reduce((a, l) => a + ser(l).length, 0);
+        return `<label class="chk" style="align-items:flex-start;padding:8px 10px;border:1px solid var(--line,#e3e8ee);border-radius:8px"><input type="checkbox" value="${i}"${n ? "" : " disabled"}${n && (!R.poRef || c.ref === R.poRef) ? " checked" : ""}><span><b>${esc(c.number)}</b> · ${esc(fd(c.date))}${c.ref ? " · PO " + esc(c.ref) : ""}${c.srcNo ? " · " + esc(c.srcNo) : ""}<br><span class="hint" style="margin:0">${n ? `${n} serial number${n > 1 ? "s" : ""} on ${c.lines.filter(l => ser(l).length).length} item${c.lines.filter(l => ser(l).length).length > 1 ? "s" : ""}` : "No serial numbers on this challan"}${c.deliverTo ? " · " + esc(c.deliverTo) : ""}</span></span></label>`; }).join("")}</div>
+      <label style="display:block;margin-top:10px"><span class="lbl">Location for these rows (optional)</span><input id="dcLoc" maxlength="200" placeholder="e.g. Ground floor"></label>
+      <p class="err" id="dcErr"></p>
+      <div class="foot"><button type="button" value="x" data-x>Cancel</button><button class="primary" type="submit" value="ok">Add serial numbers</button></div></form>`;
+    document.body.appendChild(dl); dl.showModal();
+    dl.querySelector("[data-x]").onclick = () => dl.close();
+    dl.addEventListener("close", () => dl.remove());
+    dl.querySelector("form").onsubmit = e => {
+      const pick = [...dl.querySelectorAll("input[type=checkbox]:checked")].map(x => list[x.value]);
+      if (!pick.length) { e.preventDefault(); dl.querySelector("#dcErr").textContent = "Choose at least one challan."; return; }
+      const have = new Set(R.serials.map(r => String(r.serial || "").trim().toLowerCase()).filter(Boolean));
+      const loc = dl.querySelector("#dcLoc").value.trim();
+      const rows = []; let dup = 0;
+      pick.forEach(c => c.lines.forEach(l => {
+        const m = /Brand \/ model:\s*(.+)/i.exec(l.description || ""); const model = m ? m[1].trim() : "";
+        ser(l).forEach(sn => { const k = sn.toLowerCase(); if (have.has(k)) { dup++; return; } have.add(k); rows.push({ type: String(l.name).slice(0, 200), model: model.slice(0, 200), serial: sn.slice(0, 200), location: loc.slice(0, 200) }); });
+      }));
+      const blank = R.serials.length === 1 && !Object.values(R.serials[0]).some(v => String(v).trim());
+      R.serials = (blank ? [] : R.serials).concat(rows).slice(0, 1000);
+      renderCard("serials"); toc(); touch();
+      toast(rows.length ? `${rows.length} serial number${rows.length > 1 ? "s" : ""} added from ${pick.map(c => c.number).join(", ")}.${dup ? ` ${dup} already in the register were skipped.` : ""}` : "Those serial numbers are already in the register.");
+    };
   }
   let IMP = null;
   function openImport(key) {

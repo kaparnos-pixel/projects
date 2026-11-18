@@ -269,7 +269,7 @@ function listView(type) {
     return d.view === view || d.status === view;
   };
   const cols = {
-    dc: [["Date", d => fd(d.date)], ["Challan", d => `<span class="t">${esc(d.number)}</span>`], ["Customer", d => esc(d.contactName)], ["Customer PO / ref", d => esc(d.ref)], ["Against", d => { const x = DOCS.get(d.invoiceRef); return x ? esc(x.number || "draft") : ""; }], ["Status", d => st(d.view)]],
+    dc: [["Date", d => fd(d.date)], ["Challan", d => `<span class="t">${esc(d.number)}</span>`], ["Customer", d => esc(d.contactName)], ["Customer PO / ref", d => esc(d.ref)], ["Against", d => { const x = DOCS.get(d.invoiceRef); return x ? esc(x.number || "draft") : ""; }], ["Invoiced", d => { const x = DOCS.get(d.toId); return x && x.status !== "void" ? `<a href="#/doc/${x.id}" onclick="event.stopPropagation()">${esc(x.number || "draft")}</a>` : ""; }], ["Status", d => st(d.view)]],
     quote: [["Date", d => fd(d.date)], ["Quotation", d => `<span class="t">${esc(d.number)}</span>`], ["Customer", d => esc(d.contactName)], ["Reference", d => esc(d.ref || d.title)], ["Valid until", d => fd(d.dueDate)], ["Status", d => st(d.view)], ["Amount", d => aed(d.total), "r mono"]],
     invoice: [["Date", d => fd(d.date)], ["Invoice", d => `<span class="t">${esc(d.number || "Draft")}</span>`], ["Customer", d => esc(d.contactName)], ["PO / ref", d => esc(d.ref)], ["Due", d => fd(d.dueDate)], ["Status", d => st(d.view)], ["Total", d => aed(d.total), "r mono"], ["Balance", d => d.status === "posted" ? aed(d.balance) : "", "r mono"]],
     creditnote: [["Date", d => fd(d.date)], ["Credit note", d => `<span class="t">${esc(d.number || "Draft")}</span>`], ["Customer", d => esc(d.contactName)], ["Status", d => st(d.view)], ["Total", d => aed(d.total), "r mono"], ["Unapplied", d => d.status === "posted" ? aed(d.balance) : "", "r mono"]],
@@ -662,11 +662,13 @@ function challanFrom(d) {
 function dcView(d) {
   const id = d.id, W = canW("dc"), B = BK.brand();
   const src = d.invoiceRef ? DOCS.get(d.invoiceRef) : null;
+  const inv = d.toId ? DOCS.get(d.toId) : null, invoiced = inv && inv.status !== "void";
   const A = [];
+  if (canW("invoice") && d.status !== "cancelled" && !invoiced && !(src && src.type === "invoice")) A.push(["Convert to invoice", "toinv", d.status === "delivered"]);
   if (W && d.status === "draft") A.push(["Mark dispatched", "dispatch", true]);
   if (W && ["draft", "dispatched"].includes(d.status)) A.push(["Mark delivered", "deliver", d.status === "dispatched"]);
   if (W && d.status !== "cancelled") A.push(["Edit", "edit"]);
-  A.push(["Preview PDF", "preview"], ["Download PDF", "pdf"]);
+  A.push(["Preview PDF", "preview"], ["Download PDF", "pdf"], ["Email", "email"]);
   if (W) A.push(["Upload files", "upload"], ["Duplicate", "dup"]);
   if (W && d.status !== "cancelled" && d.status !== "draft") A.push(["Cancel", "cancel", false, true]);
   if (W && d.status === "draft") A.push(["Delete", "del", false, true]);
@@ -690,7 +692,7 @@ function dcView(d) {
       ${attachCard(d)}
       ${W ? "" : `<div class="note" style="margin-bottom:14px"><b>View only</b>You can open, preview and download this challan but not change it.</div>`}
       <section class="card"${W ? "" : " hidden"}><header><h2>Internal notes<span>team only, never printed</span></h2></header><div class="bd" style="display:grid;gap:8px"><textarea id="inote" rows="3" maxlength="2000">${esc(d.internalNote || "")}</textarea><div style="display:flex;justify-content:flex-end"><button type="button" id="inoteSave">Save note</button></div></div></section>
-      ${src ? `<section class="card"><header><h2>Linked</h2></header><a class="mi" href="#/doc/${src.id}"><span><b>Delivered against</b><div class="t">${esc(label(src))}</div></span></a></section>` : ""}
+      ${src || inv ? `<section class="card"><header><h2>Linked</h2></header>${src ? `<a class="mi" href="#/doc/${src.id}"><span><b>Delivered against</b><div class="t">${esc(label(src))}</div></span></a>` : ""}${inv ? `<a class="mi" href="#/doc/${inv.id}"><span><b>Invoiced</b><div class="t">${esc(label(inv))} · ${fd(inv.date)}</div></span>${st(inv.view)}</a>` : ""}</section>` : ""}
       <section class="card"><header><h2>History</h2></header><div class="bd" style="font-size:12px;color:var(--muted)">Created by ${esc(d.createdBy)} on ${fd(d.createdAt)}<br>Last changed by ${esc(d.updatedBy)} on ${fd(d.updatedAt)}</div></section>
     </aside></div>`, "challans");
   wireAttach(d, async () => { await load(); docView(id); });
@@ -709,6 +711,15 @@ function dcView(d) {
       return put({ status: "delivered", receivedBy: r.who.trim(), receivedOn: r.on });
     },
     edit: () => { go("#/edit/" + id); return "nav"; },
+    toinv: async () => { const r = await api("POST", `docs/${id}/convert`, {}); sessionStorage.setItem("bk-draft", JSON.stringify(r.draft)); go("#/new/invoice?draft=1"); if (r.unpriced) setTimeout(() => toast(`${r.unpriced} line${r.unpriced > 1 ? "s have" : " has"} no price yet. Enter the rate before issuing.`, 1), 400); return "nav"; },
+    email: async () => {
+      saveBlob(await build(), pdfName);
+      const subj = `Delivery challan ${d.number || ""} from ${D.settings.legalName}`;
+      const n = (d.lines || []).length;
+      const txt = `Dear ${d.attention || d.contactName},\n\nPlease find attached delivery challan ${d.number || ""} dated ${fd(d.date)} for ${n} item${n === 1 ? "" : "s"}${d.ref ? ` against your PO / reference ${d.ref}` : ""}${d.deliverTo ? `, delivered to ${d.deliverTo.replace(/\s*\n\s*/g, ", ")}` : ""}.${d.status === "delivered" && d.receivedBy ? `\n\nThe goods were received by ${d.receivedBy}${d.receivedOn ? " on " + fd(d.receivedOn) : ""}.` : "\n\nPlease check the goods on arrival and sign the challan to confirm receipt."}\n\nThe PDF has been downloaded; please attach it to this email.\n\nKind regards,\n${D.settings.legalName}`;
+      location.href = `mailto:${encodeURIComponent(d.contactEmail || "")}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(txt)}`;
+      return "stay";
+    },
     preview: () => { window.BXPdf.preview(build, pdfName); return "stay"; },
     pdf: async () => { saveBlob(await build(), pdfName); return "stay"; },
     upload: () => { $("attCard").scrollIntoView({ behavior: "smooth", block: "center" }); $("attIn").click(); return "stay"; },

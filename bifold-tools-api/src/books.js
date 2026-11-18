@@ -720,6 +720,7 @@ module.exports = function makeBooks(H) {
     const t = await table(T);
     await t.createEntity(e);
     // A converted quotation / PO points to what it became.
+    if (fromId) { const src0 = ctx.docs.find(x => x.id === fromId); if (src0 && src0.type === "dc" && type === "invoice") await t.updateEntity({ partitionKey: dPK(ctx.co), rowKey: fromId, toId: e.rowKey }, "Merge").catch(() => {}); }
     if (fromId) { const src = ctx.docs.find(x => x.id === fromId); if (src && (src.type === "quote" || src.type === "po")) {
       await t.updateEntity({ partitionKey: dPK(ctx.co), rowKey: fromId, status: "converted", toId: e.rowKey }, "Merge").catch(() => {});
       if (src.type === "quote") { const q = await getOrNull(t, dPK(ctx.co), fromId); if (q && q.dealId) await syncDeal(user, q, `converted to invoice ${f.number || "(draft)"}`); } } }
@@ -815,7 +816,7 @@ module.exports = function makeBooks(H) {
     await t.updateEntity({ partitionKey: dPK(ctx.co), rowKey: id, status: "void", gl: "[]", tax: "[]", allocs: "[]", voidReason: reason, voidedBy: user.email, voidedAt: new Date().toISOString(), updatedBy: user.email, updatedAt: new Date().toISOString() }, "Merge", { etag: cur.etag })
       .catch(err => { if (err.statusCode === 412) fail(409, "This changed while you were voiding it. Reload and try again."); throw err; });
     // A void quote link: let the quotation be converted again.
-    if (cur.fromId) await t.updateEntity({ partitionKey: dPK(ctx.co), rowKey: cur.fromId, status: "accepted", toId: "" }, "Merge").catch(() => {});
+    if (cur.fromId) { const src = ctx.docs.find(x => x.id === cur.fromId); await t.updateEntity({ partitionKey: dPK(ctx.co), rowKey: cur.fromId, ...(src && src.type === "dc" ? {} : { status: "accepted" }), toId: "" }, "Merge").catch(() => {}); }
     return getDoc(user, id);
   }
 
@@ -1052,6 +1053,7 @@ module.exports = function makeBooks(H) {
     const co = coOf(user);
     const cur = await getOrNull(await table(T), dPK(co), id);
     if (!cur) fail(404, "This document doesn't exist.");
+    if (cur.type === "dc") return challanToInvoice(user, co, cur);
     const to = { quote: "invoice", po: "bill", invoice: "creditnote", bill: "vendorcredit" }[cur.type];
     if (!to) fail(400, "This document can't be converted.");
     needWrite(user, cur.type); needWrite(user, to);
@@ -1065,6 +1067,43 @@ module.exports = function makeBooks(H) {
     if (to === "creditnote") Object.assign(draft, { invoiceId: id, reason: clean(b.reason, 500) || "Credit against " + cur.number });
     if (to === "vendorcredit") Object.assign(draft, { billId: id, reason: clean(b.reason, 500) || "Credit against " + cur.number, ref: clean(b.ref, 80) || "" });
     return { draft };
+  }
+
+  // Delivered goods -> invoice draft. Prices come from the quotation the goods were delivered against,
+  // then from the item list; anything unpriced comes through at zero for the user to fill in.
+  async function challanToInvoice(user, co, cur) {
+    needWrite(user, "dc"); needWrite(user, "invoice");
+    if (cur.status === "cancelled") fail(400, "This delivery challan is cancelled.");
+    if (cur.toId) { const inv = await getOrNull(await table(T), dPK(co), cur.toId); if (inv && inv.status !== "void") fail(400, `This challan is already invoiced as ${inv.number || "a draft invoice"}.`); }
+    const src = cur.invoiceRef ? await getOrNull(await table(T), dPK(co), cur.invoiceRef) : null;
+    if (src && src.type === "invoice") fail(400, `These goods were delivered against invoice ${src.number}, so they're already invoiced.`);
+    const body = unpackJson(cur), sb = src ? unpackJson(src) : {};
+    const items = await listItems(co);
+    const pool = (sb.lines || []).slice();
+    const norm = x => String(x || "").trim().toLowerCase();
+    const lines = (body.lines || []).map(l => {
+      const k = pool.findIndex(q => (l.itemId && q.itemId === l.itemId) || norm(q.name) === norm(l.name));
+      const q = k >= 0 ? pool.splice(k, 1)[0] : null;
+      const it = !q && (items.find(i => i.id === l.itemId) || items.find(i => norm(i.name) === norm(l.name)));
+      const desc = [l.description, l.serials ? "S/N: " + l.serials.split(/[\n,;]+/).map(x => x.trim()).filter(Boolean).join(", ") : ""].filter(Boolean).join("\n");
+      const o = { itemId: l.itemId || (q && q.itemId) || (it && it.id) || "", name: l.name, description: desc, qty: l.qty, unit: l.unit,
+        rate: q ? q.rate : it ? it.salePrice : 0, discPct: q ? q.discPct || 0 : 0, vat: q ? q.vat : it ? it.vat : "SR", account: q ? q.account : (it && it.salesAcct) || "" };
+      if (q && q.model) o.model = q.model;
+      return o;
+    });
+    const unpriced = lines.filter(l => !(l.rate > 0)).length;
+    return { draft: { type: "invoice", contactId: cur.contactId, date: today(), ref: cur.ref, poRef: cur.ref, lines, attention: body.attention, emirate: src ? src.emirate : undefined, placeOfSupply: sb.placeOfSupply, salesperson: sb.salesperson,
+      notes: `Goods delivered under delivery challan ${cur.number}${src ? ` against quotation ${src.number}` : ""}.`, fromId: cur.rowKey }, unpriced };
+  }
+
+  // Completion reports: the customer's delivery challans with their serial numbers.
+  async function challansFor(user, customerId) {
+    if (!customerId || user.co === "all") return [];
+    const t = await table(T);
+    const heads = (await allDocs(user.co)).filter(d => d.type === "dc" && d.contactId === customerId && d.status !== "cancelled").sort((a, b) => b.date.localeCompare(a.date)).slice(0, 40);
+    const full = await Promise.all(heads.map(h => getOrNull(t, dPK(user.co), h.id)));
+    return full.filter(Boolean).map(e => { const b = unpackJson(e); return { id: e.rowKey, number: e.number, date: e.date, status: e.status, ref: e.ref || "", srcNo: b.srcNo || "", deliverTo: b.deliverTo || "",
+      lines: (b.lines || []).map(l => ({ name: l.name, description: l.description || "", qty: l.qty, unit: l.unit || "", serials: l.serials || "" })) }; });
   }
 
   // ---------- bootstrap: everything the page needs ----------
@@ -1172,5 +1211,5 @@ module.exports = function makeBooks(H) {
   }
   // Company letterhead details for other modules' documents (HR payslips).
   async function orgProfile(co) { const s = await loadSettings(co); return { legalName: s.legalName, tradeName: s.tradeName, address: s.address, emirate: s.emirate, phone: s.phone, email: s.email, website: s.website, licenceNo: s.licenceNo, trn: s.vatRegistered ? s.trn : "" }; }
-  return { route, alerts, TYPES, invoicesForAmc, orgProfile };
+  return { route, alerts, TYPES, invoicesForAmc, orgProfile, challansFor };
 };

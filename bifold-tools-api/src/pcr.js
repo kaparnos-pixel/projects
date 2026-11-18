@@ -496,6 +496,8 @@ module.exports = function makePcr(H) {
       if (id && sub === "company-sign" && method === "POST") return companySign(user, id, body);
       if (id && sub === "reopen" && method === "POST") return reopen(user, id);
       if (id && sub === "complete" && method === "POST") return complete(user, id, body);
+      // The customer's delivery challans from Books & VAT, to pull serial numbers in.
+      if (id && sub === "challans" && method === "GET") { const e = await load(user, id); return { challans: await H.books().challansFor({ ...user, co: rowCo(e) }, e.customerId) }; }
       if (id && sub === "link" && method === "POST") return makeLink(user, id, body);
       if (id && sub === "link" && method === "DELETE") return revokeLink(user, id);
       if (id && sub === "share" && method === "POST") return share(user, id, body);

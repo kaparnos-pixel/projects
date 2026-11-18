@@ -161,10 +161,11 @@ const ICON={
   campaigns:I('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
   suppliers:I('<path d="M3 9l1.5-5h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v8h14v-8M10 21v-5h4v5"/>'),
   books:I('<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3M8 7h7M8 10.5h4M14.5 12.5l1.5 1.5 3-3.5"/>'),
+  inventory:I('<path d="M3 7.5L12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9M7.5 5.2l9 4.6"/>'),
   hr:I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M15.5 4.8a3.3 3.3 0 0 1 0 6.4M17.5 14.8c2.2.6 3.6 2.4 4 5.2"/>'),
   access:I('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4M12 15v2"/>'),plus:I('<path d="M12 5v14M5 12h14"/>'),
 };
-const FN={hr:"finance",books:"finance",pipeline:"sales",pnl:"sales",amc:"service",visits:"service",pdc:"finance",campaigns:"marketing",completion:"service",customers:"master",suppliers:"master",access:"admin",activity:"admin"};
+const FN={hr:"finance",books:"finance",pipeline:"sales",pnl:"sales",amc:"service",visits:"service",pdc:"finance",campaigns:"marketing",completion:"service",inventory:"service",customers:"master",suppliers:"master",access:"admin",activity:"admin"};
 const aed=n=>Math.round(n||0).toLocaleString("en-US");
 const short=n=>{n=+n||0;return n>=1e6?(n/1e6).toFixed(n>=1e7?1:2)+"M":n>=1e4?Math.round(n/1e3)+"K":aed(n)};
 const dubai=()=>new Date(Date.now()+4*3600e3);
@@ -212,6 +213,7 @@ function apps(m){
     ["pdc","/pdc/","Finance","PDC & Guarantees","Post-dated cheques, security deposits and advance payment guarantees.",["pdc"]],
     ["hr","/hr/","People","HR & Payroll","Employees, leave, monthly payroll, WPS salary file, payslips, salary receipts and gratuity.",["hr"]],
     ["amc","/amc/","Service","AMC Tracker","Branded AMC proposals, awards, expiry alerts and maintenance visits.",["amc","visits"]],
+    ["inventory","/inventory/","Service","Inventory","Stock in every location with serial numbers: receive, issue, transfer and count, reserve on quotations and issue on challans and invoices.",["inventory"]],
     ["completion","/completion/","Service","Completion Reports","Project close-out with BoQ, serial numbers, site pictures, Claude-drawn diagrams, warranty and customer sign-off.",["completion"]],
     ["campaigns","/campaigns/","Marketing","Email Campaigns","Branded email campaigns, contact lists, Claude drafting and scheduled sending.",["campaigns"]],
     ["customers","/customers/","Master data","Customers","The single customer list every tool uses.",["customers"]],
@@ -249,6 +251,7 @@ async function load(m){
       $("funnelCard").hidden=false;
     }).catch(()=>failK(k));
   }
+  if(can(m,"inventory"))api("inv/bootstrap").then(d=>{const low=d.items.filter(i=>i.active&&i.minQty>0&&(d.stock.find(s=>s.itemId===i.id)||{onHand:0}).onHand<=i.minQty).length;st("inventory",`${d.stock.filter(s=>s.onHand>0).length} items in stock${low?` · ${low} to reorder`:""}`)}).catch(()=>{});
   if(can(m,"completion"))api("pcr/reports").then(l=>{const w=l.filter(r=>r.status==="awaiting").length,d=l.filter(r=>r.status==="draft").length;st("completion",`${d} draft${d===1?"":"s"} · ${w} awaiting signature`)}).catch(()=>{});
   if(can(m,"amc")||can(m,"visits")){
     const k=can(m,"amc")?kpiCard("amc","service","Active AMCs","amc","/amc/#amcs","AMC contracts"):null;

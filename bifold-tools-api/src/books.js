@@ -1096,6 +1096,21 @@ module.exports = function makeBooks(H) {
       notes: `Goods delivered under delivery challan ${cur.number}${src ? ` against quotation ${src.number}` : ""}.`, fromId: cur.rowKey }, unpriced };
   }
 
+  // Inventory: the quotations, delivery challans and invoices stock can be reserved or issued against.
+  async function stockDocs(user) {
+    if (user.co === "all") return [];
+    return (await allDocs(user.co)).filter(d => ["quote", "dc", "invoice"].includes(d.type))
+      .map(d => ({ id: d.id, type: d.type, number: d.number || "", status: d.status, date: d.date, contactName: d.contactName || "", fromId: d.fromId || "", toId: d.toId || "", invoiceRef: d.invoiceRef || "" }));
+  }
+  async function stockDoc(user, id) {
+    if (user.co === "all") return null;
+    const e = await getOrNull(await table(T), dPK(user.co), clean(id, 60));
+    if (!e || !["quote", "dc", "invoice"].includes(e.type)) return null;
+    const b = unpackJson(e);
+    return { id: e.rowKey, type: e.type, number: e.number || "", status: e.status, date: e.date, contactName: e.contactName || "",
+      lines: (b.lines || []).map((l, i) => ({ i, itemId: l.itemId || "", name: l.name || "", description: l.description || "", model: l.model || "", qty: num(l.qty), unit: l.unit || "", serials: l.serials || "", sub: !!l.sub })) };
+  }
+
   // Completion reports: the customer's delivery challans with their serial numbers.
   async function challansFor(user, customerId) {
     if (!customerId || user.co === "all") return [];
@@ -1120,7 +1135,7 @@ module.exports = function makeBooks(H) {
     const s = { ...settings }; delete s.counters;
     return {
       company: { key: co, name: CO[co].name }, settings: s, accounts: accts, items, docs: list, customers, vendors, vver,
-      perms: { ...P, acct, pipeline: canPipeline(user), amc: canAmc(user) }, ai: AI.ready(), vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
+      perms: { ...P, acct, pipeline: canPipeline(user), amc: canAmc(user), inventory: !!(user.isManager || (user.sections || []).includes("inventory")) }, ai: AI.ready(), vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
       acctTypes: ACCT_TYPES, sys: SYS, fileKinds: FILE_KINDS, emirates: EMIRATES, today: today(), me: user.email,
     };
   }
@@ -1211,5 +1226,5 @@ module.exports = function makeBooks(H) {
   }
   // Company letterhead details for other modules' documents (HR payslips).
   async function orgProfile(co) { const s = await loadSettings(co); return { legalName: s.legalName, tradeName: s.tradeName, address: s.address, emirate: s.emirate, phone: s.phone, email: s.email, website: s.website, licenceNo: s.licenceNo, trn: s.vatRegistered ? s.trn : "" }; }
-  return { route, alerts, TYPES, invoicesForAmc, orgProfile, challansFor };
+  return { route, alerts, TYPES, invoicesForAmc, orgProfile, challansFor, stockDocs, stockDoc };
 };

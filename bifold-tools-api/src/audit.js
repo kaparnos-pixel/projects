@@ -205,11 +205,20 @@ module.exports = function makeAudit(H) {
         if (method === "DELETE") return [A, "Deleted draft payroll", name || c, ""];
       }
     }
+    if (a === "inv") {
+      const A = "Inventory";
+      if (b === "items") return [A, method === "POST" ? "Added stock item" : method === "DELETE" ? "Deleted stock item" : "Edited stock item", name || out.name, ""];
+      if (b === "locations") return [A, method === "POST" ? "Added location" : "Edited location", name || out.name, out.active === false ? "Closed" : ""];
+      if (b === "moves" && d === "reverse") return [A, "Undid a stock movement", name, aud.detail || ""];
+      if (b === "moves") return [A, { in: "Received stock", out: "Issued stock", transfer: "Transferred stock", adjust: "Adjusted stock" }[out.kind] || "Stock movement", out.docNo || out.ref || "", aud.detail || ""];
+      if (b === "reserve") return [A, "Reserved stock on quotation", name, aud.detail || "Reservation released"];
+      if (b === "import") return [A, "Imported stock from Excel", "", aud.detail || ""];
+    }
     if (a === "access") {
       if (b === "users" && method === "PUT") return ["Team access", "Changed access", c, (out.sections || []).join(", ") || "No sections"];
       if (b === "users" && method === "DELETE") return ["Team access", "Removed access", c, ""];
     }
-    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", books: "Books", hr: "HR & Payroll", access: "Team access", alerts: "Alerts" };
+    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", books: "Books", hr: "HR & Payroll", inv: "Inventory", access: "Team access", alerts: "Alerts" };
     if (method === "GET") return [AREA[a] || "Other", b ? "Opened a record" : "Opened the list", b || "", ""];
     return [AREA[a] || "Other", method + " /" + seg.join("/"), "", ""];
   }

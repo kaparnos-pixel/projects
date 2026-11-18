@@ -602,6 +602,7 @@ async function docView(id) {
   page(`${docTitle(d)} ${d.number || ""}`.trim(), `${PLURAL[tp]} · ${d.contactName || ""}`, `<a class="btn" href="#/${ROUTE_OF[tp]}">← ${PLURAL[tp]}</a>`,
     `<div class="dv">${showPaper}<aside class="side">
       <section class="card"><header><h2>${st(d.view)}</h2><span class="muted" style="font-size:12px">${d.sentAt ? "Sent " + fd(d.sentAt) : ""}</span></header><div class="bd acts2">${A.map(([l, k, p, x]) => `<button type="button" data-a="${k}" class="${p ? "primary" : x ? "danger" : ""}">${esc(l)}</button>`).join("")}</div></section>
+      ${D.perms.inventory && ["quote", "dc", "invoice"].includes(d.type) && d.status !== "void" ? `<section class="card" id="stockCard"><header><h2>Stock</h2></header><div class="bd hint">Checking stock…</div></section>` : ""}
       ${attachCard(d)}
       ${W ? "" : `<div class="note" style="margin-bottom:14px"><b>View only</b>You can open, preview and download this document but not change it.</div>`}<section class="card"${W ? "" : " hidden"}><header><h2>Internal notes<span>team only, never printed</span></h2></header><div class="bd" style="display:grid;gap:8px"><textarea id="inote" rows="3" maxlength="3000" placeholder="e.g. Customer asked for delivery on Sunday; PO copy received by email">${esc(d.internalNote || "")}</textarea>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="hint" style="margin:0">${d.internalBy ? `Last edited by ${esc(String(d.internalBy).split("@")[0])} on ${fd(d.internalAt)}` : "Editable at any time, even after issue."}</span><button type="button" id="inoteSave">Save note</button></div></div></section>
@@ -612,6 +613,7 @@ async function docView(id) {
       <section class="card"><header><h2>History</h2></header><div class="bd" style="font-size:12px;color:var(--muted)">Created by ${esc(d.createdBy)} on ${fd(d.createdAt)}${d.issuedAt ? `<br>Issued by ${esc(d.issuedBy)} on ${fd(d.issuedAt)}` : ""}<br>Last changed by ${esc(d.updatedBy)} on ${fd(d.updatedAt)}${d.voidedBy ? `<br>Voided by ${esc(d.voidedBy)}` : ""}<br><span>Every change is in the Activity log.</span></div></section>
     </aside></div>`, ROUTE_OF[tp]);
   wireAttach(d, async () => { await load(); docView(id); });
+  if ($("stockCard") && window.BKSTOCK) BKSTOCK.mount(d, $("stockCard"));
   $("inoteSave").onclick = async e => { busy(e.target, true); try { await api("PUT", `docs/${id}/internal`, { internalNote: $("inote").value }); await load(); toast("Note saved."); docView(id); } catch (err) { toast(err.message, 1); busy(e.target, false); } };
   const pdfName = `${docTitle(d)} ${d.number || "draft"} ${d.contactName || ""}.pdf`;
   const build = () => BKPDF.doc(d);
@@ -689,6 +691,7 @@ function dcView(d) {
   page(`Delivery challan ${d.number || ""}`.trim(), `Delivery challans · ${d.contactName || ""}`, `<a class="btn" href="#/challans">← Delivery challans</a>`,
     `<div class="dv">${paper}<aside class="side">
       <section class="card"><header><h2>${st(d.view)}</h2></header><div class="bd acts2">${A.map(([l, k, p, x]) => `<button type="button" data-a="${k}" class="${p ? "primary" : x ? "danger" : ""}">${esc(l)}</button>`).join("")}</div></section>
+      ${D.perms.inventory && ["quote", "dc", "invoice"].includes(d.type) && d.status !== "void" ? `<section class="card" id="stockCard"><header><h2>Stock</h2></header><div class="bd hint">Checking stock…</div></section>` : ""}
       ${attachCard(d)}
       ${W ? "" : `<div class="note" style="margin-bottom:14px"><b>View only</b>You can open, preview and download this challan but not change it.</div>`}
       <section class="card"${W ? "" : " hidden"}><header><h2>Internal notes<span>team only, never printed</span></h2></header><div class="bd" style="display:grid;gap:8px"><textarea id="inote" rows="3" maxlength="2000">${esc(d.internalNote || "")}</textarea><div style="display:flex;justify-content:flex-end"><button type="button" id="inoteSave">Save note</button></div></div></section>
@@ -696,6 +699,7 @@ function dcView(d) {
       <section class="card"><header><h2>History</h2></header><div class="bd" style="font-size:12px;color:var(--muted)">Created by ${esc(d.createdBy)} on ${fd(d.createdAt)}<br>Last changed by ${esc(d.updatedBy)} on ${fd(d.updatedAt)}</div></section>
     </aside></div>`, "challans");
   wireAttach(d, async () => { await load(); docView(id); });
+  if ($("stockCard") && window.BKSTOCK) BKSTOCK.mount(d, $("stockCard"));
   if ($("inoteSave")) $("inoteSave").onclick = async e => { busy(e.target, true); try { await api("PUT", `docs/${id}/internal`, { internalNote: $("inote").value }); await load(); toast("Note saved."); docView(id); } catch (err) { toast(err.message, 1); busy(e.target, false); } };
   const pdfName = `Delivery Challan ${d.number || "draft"} ${d.contactName || ""}.pdf`;
   const build = () => BKPDF.doc(d);

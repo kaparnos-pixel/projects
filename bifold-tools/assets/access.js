@@ -150,6 +150,7 @@
     completion: I('<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8.5 14.5l2.5 2.5 4.5-5"/>'),
     campaigns: I('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
     books: I('<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3M8 7h7M8 10.5h4M14.5 12.5l1.5 1.5 3-3.5"/>'),
+    inventory: I('<path d="M3 7.5L12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9M7.5 5.2l9 4.6"/>'),
     hr: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M15.5 4.8a3.3 3.3 0 0 1 0 6.4M17.5 14.8c2.2.6 3.6 2.4 4 5.2"/>'),
     bell: I('<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/>'),
     search: I('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>'),
@@ -173,12 +174,13 @@
       { href: "/pdc/", label: "PDC & Guarantees", icon: "pdc", need: ["pdc"] }] },
     { group: "People", items: [{ href: "/hr/", label: "HR & Payroll", icon: "hr", need: ["hr"], subs: [["#/dashboard", "Dashboard", ["hr"]], ["#/employees", "Employees", ["hr"]], ["#/leave", "Leave", ["hr"]], ["#/payroll", "Payroll runs", ["hr"]], ["#/gratuity", "End of service", ["hr"]], ["#/documents", "Documents and expiry", ["hr"]], ["#/settings", "Settings", ["hr"]]] }] },
     { group: "Service", items: [{ href: "/amc/", label: "AMC Tracker", icon: "amc", need: ["amc", "visits"], subs: [["#overview", "Overview", []], ["#amcs", "Contracts & proposals", ["amc"]], ["#visits", "Maintenance visits", ["amc", "visits"]]] },
-      { href: "/completion/", label: "Completion Reports", icon: "completion", need: ["completion"] }] },
+      { href: "/completion/", label: "Completion Reports", icon: "completion", need: ["completion"] },
+      { href: "/inventory/", label: "Inventory", icon: "inventory", need: ["inventory"], subs: [["#/stock", "Stock", ["inventory"]], ["#/moves", "Movements", ["inventory"]], ["#/items", "Items", ["inventory"]], ["#/locations", "Locations", ["inventory"]], ["#/reserved", "Reserved on quotations", ["inventory"]]] }] },
     { group: "Marketing", items: [{ href: "/campaigns/", label: "Email Campaigns", icon: "campaigns", need: ["campaigns"], subs: [["#campaigns", "Campaigns", ["campaigns"]], ["#contacts", "Contacts & lists", ["campaigns"]], ["#media", "Image library", ["campaigns"]]] }] },
     { group: "Master data", items: [{ href: "/customers/", label: "Customers", icon: "customers", need: ["customers"] }, { href: "/suppliers/", label: "Suppliers & Vendors", icon: "suppliers", need: ["suppliers", "pdc"], subs: [["#dir", "Directory", []], ["#what", "Who supplies what", []], ["#people", "All contacts", []]] }] },
     { group: "Administration", items: [{ href: "/access/", label: "Team access", icon: "access", need: ["manager"] }, { href: "/activity/", label: "Activity log", icon: "log", need: ["manager"] }] },
   ];
-  const SECTION_NAMES = { books: "Books (full)", quotes: "Quotations", pnl: "PnL", pipeline: "Pipeline", pdc: "PDC", customers: "Customers", suppliers: "Suppliers", amc: "AMC proposals", visits: "Visits", campaigns: "Campaigns", completion: "Completion", hr: "HR & Payroll", bk_sales: "Books: Sales", bk_purch: "Books: Purchases", bk_bank: "Books: Banking", bk_reports: "Books: Reports" };
+  const SECTION_NAMES = { books: "Books (full)", quotes: "Quotations", pnl: "PnL", pipeline: "Pipeline", pdc: "PDC", customers: "Customers", suppliers: "Suppliers", amc: "AMC proposals", visits: "Visits", campaigns: "Campaigns", completion: "Completion", inventory: "Inventory", hr: "HR & Payroll", bk_sales: "Books: Sales", bk_purch: "Books: Purchases", bk_bank: "Books: Banking", bk_reports: "Books: Reports" };
   const allowed = (m, keys) => !keys.length || keys.some(k => k === "manager" ? m.isManager : m.isManager || (m.sections || []).includes(k));
   const path = location.pathname.replace(/index\.html$/, "");
   const initials = e => { const p = String(e).split("@")[0].split(/[._-]+/).filter(Boolean); return ((p[0] || "?")[0] + (p[1] ? p[1][0] : (p[0] || "")[1] || "")).toUpperCase(); };

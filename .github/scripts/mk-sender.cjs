@@ -27,6 +27,6 @@ async function getOrNull(t, pk, rk) { try { return await t.getEntity(pk, rk); } 
 
 const minutes = Math.max(1, Number(env.MK_RUN_MINUTES) || 8);
 makeSender({ table, getOrNull, log: console })
-  .pump({ deadline: Date.now() + minutes * 60000, dryRun: env.DRY_RUN === "1" })
+  .pump({ source: "job", deadline: Date.now() + minutes * 60000, dryRun: env.DRY_RUN === "1" })
   .then(r => { console.log(`Run finished: ${r.campaigns} campaign(s), ${r.sent} sent, ${r.failed} failed, ${r.skipped} skipped${r.stoppedBy ? "; stopped by " + r.stoppedBy : ""}.`); })
   .catch(e => { console.log(`::error::${e.message}`); process.exit(1); });

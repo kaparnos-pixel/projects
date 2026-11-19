@@ -180,8 +180,47 @@ module.exports = function makeSender(H) {
     return out;
   }
 
-  async function pump({ deadline, dryRun } = {}) {
-    deadline = deadline || Date.now() + 8 * 60000;
+  // ---------- one sender at a time, and a heartbeat so the site can show the scheduler is alive ----------
+  // The sender can be started by the GitHub job and by the site's tick address; a lease row stops two runs
+  // from working through the same queue at once (which would send someone the same email twice).
+  async function lease(until, holder) {
+    const t = await table("mkmeta");
+    const cur = await getOrNull(t, "lock", "sender");
+    if (cur && cur.holder !== holder && Date.parse(cur.until || 0) > Date.now()) return false;
+    const row = { partitionKey: "lock", rowKey: "sender", until: new Date(until).toISOString(), holder };
+    try {
+      if (cur) await t.updateEntity(row, "Replace", { etag: cur.etag });
+      else await t.createEntity(row);
+      return true;
+    } catch (e) { if (e.statusCode === 412 || e.statusCode === 409) return false; throw e; }
+  }
+  async function release(holder) {
+    const t = await table("mkmeta"); const cur = await getOrNull(t, "lock", "sender");
+    if (cur && cur.holder === holder) { try { await t.updateEntity({ partitionKey: "lock", rowKey: "sender", until: new Date(0).toISOString(), holder: "" }, "Replace", { etag: cur.etag }); } catch {} }
+  }
+  async function heartbeat(source, r) {
+    try { await (await table("mkmeta")).upsertEntity({ partitionKey: "run", rowKey: source, at: new Date().toISOString(), result: JSON.stringify(r).slice(0, 1000) }, "Replace"); } catch {}
+  }
+  async function scheduler() {
+    const out = {};
+    for await (const e of (await table("mkmeta")).listEntities({ queryOptions: { filter: "PartitionKey eq 'run'" } })) out[e.rowKey] = { at: e.at, result: (() => { try { return JSON.parse(e.result); } catch { return {}; } })() };
+    return out;
+  }
+
+  async function pump(opts = {}) {
+    const source = opts.source || "job";
+    const deadline = opts.deadline || Date.now() + 8 * 60000;
+    const holder = source + ":" + crypto.randomBytes(4).toString("hex");
+    if (!opts.dryRun && !(await lease(deadline + 60000, holder))) {
+      log.log("Another sender run is working right now; leaving it to finish.");
+      const r = { campaigns: 0, sent: 0, failed: 0, skipped: 0, stoppedBy: "another run is sending" };
+      await heartbeat(source, r); return r;
+    }
+    try { const r = await pumpInner({ ...opts, deadline }); if (!opts.dryRun) await heartbeat(source, r); return r; }
+    finally { if (!opts.dryRun) await release(holder); }
+  }
+
+  async function pumpInner({ deadline, dryRun } = {}) {
     const report = { campaigns: 0, sent: 0, failed: 0, skipped: 0, stoppedBy: "" };
     const ct = await table("mkcampaigns");
     const nowIso = new Date().toISOString();
@@ -255,6 +294,6 @@ module.exports = function makeSender(H) {
   const chunks = e => { let s = ""; for (let i = 0; i < (e.dataChunks || 0); i++) s += e["data" + i] || ""; return s; };
   const safeJson = (s, d) => { try { return JSON.parse(s || ""); } catch { return d; } };
 
-  return { status, senderFor, publicUrl, unsubLinks, checkToken, settings, brand, sendOne, compose, countSends, usedLastHour, pump, counts, contactKey, NAMES, ADDRESSES, WEBSITES, SOCIALS, perHour, perMinute };
+  return { status, scheduler, senderFor, publicUrl, unsubLinks, checkToken, settings, brand, sendOne, compose, countSends, usedLastHour, pump, counts, contactKey, NAMES, ADDRESSES, WEBSITES, SOCIALS, perHour, perMinute };
 };
 module.exports.contactKey = contactKey;

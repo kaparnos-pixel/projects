@@ -344,12 +344,13 @@ module.exports = function makeMk(H) {
     const co = user.co === "all" ? user.homeCo : user.co;
     const [settings, brand] = await Promise.all([S.settings(co), S.brand(co)]);
     let used = 0; try { used = await S.usedLastHour(); } catch {}
+    let sched = {}; try { sched = await S.scheduler(); } catch {}
     // Contact totals and list sizes, for the KPIs and the audience picker.
     const stats = { subscribed: 0, unsubscribed: 0, total: 0 }; const tags = {};
     for await (const e of (await table("mkcontacts")).listEntities({ queryOptions: { filter: `PartitionKey eq '${co}'`, select: ["status", "tags"] } })) {
       stats.total++; if ((e.status || "subscribed") === "subscribed") { stats.subscribed++; tagList(e.tags).forEach(t => { tags[t] = (tags[t] || 0) + 1; }); } else stats.unsubscribed++;
     }
-    return { co, readOnly: user.co === "all", isManager: user.isManager, me: user.email, sending: { ...S.status(co), usedLastHour: used }, ai: !!process.env.ANTHROPIC_API_KEY, settings, brand,
+    return { co, readOnly: user.co === "all", isManager: user.isManager, me: user.email, sending: { ...S.status(co), usedLastHour: used, scheduler: sched, tick: String(process.env.MK_CRON_KEY || "").length >= 16 }, ai: !!process.env.ANTHROPIC_API_KEY, settings, brand,
       contacts: stats, tags: Object.entries(tags).map(([name, n]) => ({ name, n })).sort((a, b) => a.name.localeCompare(b.name)) };
   }
 
@@ -482,6 +483,15 @@ Reply with ONLY one JSON object: {"name": internal campaign name, "subject": bes
   // ---------- public routes (no sign-in): unsubscribe and email images ----------
   async function publicRoute(method, seg, ip) {
     const [a] = seg;
+    // Scheduler tick: an outside scheduler (cron-job.org, an Azure Logic App) calls
+    // /api/public/tick/<MK_CRON_KEY> every few minutes so scheduled campaigns go out on time.
+    if (a === "tick") {
+      const want = String(process.env.MK_CRON_KEY || ""), got = String(seg[1] || "");
+      if (want.length < 16) fail(404, "Not found.");
+      if (got.length !== want.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want))) fail(403, "Not allowed.");
+      const r = await S.pump({ source: "tick", deadline: Date.now() + 30000 });
+      return { ok: true, ...r, at: now() };
+    }
     if (a === "m" && method === "GET") {
       const [, co, file] = seg;
       if (!/^(bifold|techhub)$/.test(co) || !/^[a-f0-9]{16}\.(png|jpg|gif|webp)$/.test(file || "")) fail(404, "Not found.");

@@ -698,7 +698,13 @@
         ${li(!!s.sender, s.sender ? `Campaigns are sent from <b>${esc(s.sender)}</b>.` : `No sender address yet. Add <code>${envName}</code> (a verified address on your sending subdomain).`)}
         ${li(true, `Unsubscribe links and images use <b>${esc(s.publicUrl)}</b>.`)}
         ${li(s.perHour > 100, `Sending limit: <b>${num(s.perMinute)}</b> a minute, <b>${num(s.perHour)}</b> an hour (${num(s.usedLastHour)} used in the last hour).${s.perHour <= 100 ? " This is Azure's starting quota; ask Microsoft to raise it before big sends." : ""}`)}
-        ${li(true, "Scheduled campaigns are picked up every 10 minutes.")}
+        ${(() => {
+          const runs = Object.values(s.scheduler || {}).map(r => r.at).filter(Boolean).sort();
+          const last = runs[runs.length - 1]; const age = last ? (Date.now() - Date.parse(last)) / 60000 : Infinity;
+          const t = s.scheduler && s.scheduler.tick && s.scheduler.tick.at;
+          if (age <= 20) return li(true, `Scheduler is running: last check ${esc(rel(last))}${t ? " (site tick)" : ""}. Scheduled campaigns go out within a few minutes of their time.`);
+          return li(false, `Scheduler ${last ? "last checked " + esc(rel(last)) : "has not run yet"}. ${s.tick ? "The tick address is set up but nothing is calling it." : "Add <code>MK_CRON_KEY</code> to the Static Web App settings"}, then have a scheduler (cron-job.org or an Azure Logic App) open <code>${esc(s.publicUrl)}/api/public/tick/&lt;MK_CRON_KEY&gt;</code> every 5 minutes. Without it, campaigns can go out hours late.`);
+        })()}
       </ul></div>
       <div class="panel"><h3 class="ph">Claude drafting</h3><ul class="chk">${li(BOOT.ai, BOOT.ai ? "Claude is connected: Write it with Claude, subject suggestions and Improve are available." : "Not connected. Add <code>ANTHROPIC_API_KEY</code> to the Static Web App settings to turn it on.")}</ul></div>
       </div>

@@ -63,3 +63,15 @@ table.pcl{min-width:900px}table.pcl td{vertical-align:top}
 h3.sec2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:22px 0 10px}
 .clip svg{width:12px;height:12px}
 .card .mi>span:first-child{min-width:0}.card .mi .t{display:block}
+.cbook input{width:100%;min-width:0}
+.cbook .addrow td{background:var(--sunk);border-top:2px solid var(--line)}
+.cbook .addrow input{padding:7px 9px;font-size:13px}
+.cbook .addrow button{padding:7px 12px;font-size:13px}
+.cbook td.qerr{padding:0 12px;color:var(--bad);font-size:12px;border:0}
+.cbook td.qerr:empty{display:none}
+.cbook .neg{color:var(--bad)}
+.cbook tr.cnt-row td{color:var(--muted)}
+.cbook input.r{text-align:right}
+dialog.wide:has(table.cbook){width:min(1040px,96vw);max-width:96vw}
+dialog table.cbook{min-width:0;width:100%}
+dialog table.cbook th:first-child,dialog table.cbook td:first-child{width:150px}

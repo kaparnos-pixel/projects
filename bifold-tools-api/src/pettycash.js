@@ -21,7 +21,9 @@
 const crypto = require("crypto");
 const { BlobServiceClient } = require("@azure/storage-blob");
 
-const KINDS = { expense: "Expense", topup: "Top-up", return: "Cash returned", count: "Cash count" };
+const KINDS = { expense: "Expense", cashin: "Cash in", topup: "Top-up", return: "Cash returned", count: "Cash count" };
+const IN_TYPES = ["income", "other_income", "current_liability", "equity"];
+const invOf = s => { const m = /\bINV-?\d{2,4}-?\d{2,6}\b|\bINV-?\d{3,8}\b/i.exec(String(s || "")); return m ? m[0].toUpperCase() : ""; };
 const METHODS = ["Cash withdrawal", "Bank transfer", "Cheque", "Cash from office"];
 const CAT_TYPES = ["expense", "cogs", "other_expense", "fixed_asset", "current_asset"];
 const FILE_MAX = 10 * 1048576, FILES_MAX = 10;
@@ -47,7 +49,7 @@ module.exports = function makePettyCash(H) {
   const txOut = e => ({ id: e.rowKey, floatId: e.floatId, kind: e.kind, number: e.number || "", date: e.date, amount: num(e.amount),
     payee: e.payee || "", payeeTrn: e.payeeTrn || "", receiptNo: e.receiptNo || "", category: e.category || "", description: e.description || "",
     vatAmt: num(e.vatAmt), project: e.project || "", bankAccount: e.bankAccount || "", method: e.method || "", ref: e.ref || "",
-    expected: num(e.expected), note: e.note || "", files: j(e.files, []),
+    expected: num(e.expected), note: e.note || "", files: j(e.files, []), invoiceNo: e.invoiceNo || "",
     booksId: e.booksId || "", booksNo: e.booksNo || "", postedAt: e.postedAt || "", postedBy: e.postedBy || "", vatClaimed: !!e.vatClaimed,
     createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, etag: e.etag });
 
@@ -57,7 +59,7 @@ module.exports = function makePettyCash(H) {
     return { floats: fl.map(floatOut), entries: tx.map(txOut) };
   }
   // Cash in each float: opening + top-ups - expenses - cash returned. Cash counts don't move the balance.
-  const effect = x => x.kind === "topup" ? x.amount : x.kind === "expense" || x.kind === "return" ? -x.amount : 0;
+  const effect = x => x.kind === "topup" || x.kind === "cashin" ? x.amount : x.kind === "expense" || x.kind === "return" ? -x.amount : 0;
   function withBalances(floats, entries) {
     return floats.map(f => {
       const mine = entries.filter(x => x.floatId === f.id);
@@ -90,6 +92,8 @@ module.exports = function makePettyCash(H) {
       categories: acct.filter(a => CAT_TYPES.includes(a.type) && !["1400", "1200"].includes(a.code)).map(a => ({ code: a.code, name: a.name, type: a.type })),
       banks: acct.filter(a => a.type === "bank" || a.type === "cash").map(a => ({ code: a.code, name: a.name, type: a.type })),
       cashAccounts: acct.filter(a => a.type === "cash").map(a => ({ code: a.code, name: a.name, usedBy: (D0.floats.find(f => f.account === a.code && f.status === "active") || {}).name || "" })),
+      incomeAccounts: acct.filter(a => IN_TYPES.includes(a.type)).map(a => ({ code: a.code, name: a.name, type: a.type })),
+      invoices: D.entries.some(x => x.kind === "cashin") || isAdmin(user) ? (await books().pcInvoices(co).catch(() => [])).filter(i => i.balance > 0.004 || D.entries.some(x => x.invoiceNo === i.number)).map(i => ({ number: i.number, customer: i.contactName, total: i.total, balance: i.balance, date: i.date })) : [],
       vatRegistered: bi.vatRegistered, lockDate: bi.lockDate, cashVatThreshold: bi.cashVatThreshold, kinds: KINDS, methods: METHODS,
     };
   }
@@ -179,6 +183,7 @@ module.exports = function makePettyCash(H) {
   }
 
   /* ---------- entries ---------- */
+  const numberFor = (co, kind) => kind === "expense" ? nextNo(co, "PCV") : kind === "cashin" ? nextNo(co, "PCI") : kind === "count" ? "" : nextNo(co, "PCT");
   async function nextNo(co, prefix) {
     const t = await table(T);
     for (let i = 0; i < 8; i++) {
@@ -219,13 +224,16 @@ module.exports = function makePettyCash(H) {
     if (kind === "expense") {
       Object.assign(f, { payee: clean(b.payee, 150), receiptNo: clean(b.receiptNo, 60), category: clean(b.category, 10), description: clean(b.description, 500),
         vatAmt: r2(Math.max(0, num(b.vatAmt))), payeeTrn: clean(b.payeeTrn, 20).replace(/\s+/g, ""), project: clean(b.project, 150) });
-      if (!f.payee) fail(400, "Enter who was paid (the shop, supplier or person).");
       if (!f.description) fail(400, "Say what the money was spent on.");
-      const bi = await info(co);
-      const cat = bi.accounts.find(a => a.code === f.category && CAT_TYPES.includes(a.type));
-      if (!cat) fail(400, "Choose the expense category.");
+      if (f.category) { const cat = (await info(co)).accounts.find(a => a.code === f.category && CAT_TYPES.includes(a.type)); if (!cat) fail(400, "Choose the expense category."); }
       if (f.vatAmt) vatSplit(f.amount, f.vatAmt);
       if (f.payeeTrn && !trnOk(f.payeeTrn)) fail(400, "A TRN is 15 digits. Check the receipt, or leave it blank.");
+    }
+    if (kind === "cashin") {
+      Object.assign(f, { description: clean(b.description, 500), category: clean(b.category, 10), project: clean(b.project, 150) });
+      f.invoiceNo = clean(b.invoiceNo, 40).toUpperCase() || invOf(f.description);
+      if (!f.description) fail(400, "Say where the cash came from (for example: Cash sales INV-2026-00068).");
+      if (f.category) { const a = (await info(co)).accounts.find(x => x.code === f.category && IN_TYPES.includes(x.type)); if (!a) fail(400, "Choose an income account."); }
     }
     if (kind === "topup" || kind === "return") {
       Object.assign(f, { bankAccount: clean(b.bankAccount, 10), method: METHODS.includes(b.method) ? b.method : METHODS[0], ref: clean(b.ref, 80) });
@@ -244,9 +252,10 @@ module.exports = function makePettyCash(H) {
     const floats = await all(t, "fl-" + co);
     const { f, fl } = await entryIn(user, co, b, null, floats);
     const bal = await balanceOf(co, fl.rowKey);
-    if ((f.kind === "expense" || f.kind === "return") && f.amount > bal + 0.004) fail(400, `${fl.name} only holds ${fmt(bal)}. ${f.kind === "expense" ? "Ask for a top-up first, or check the amount." : "Check the amount."}`);
+    // Spending may take the book below zero for a while (cash sales logged later, as in a paper cash book); cash can't be returned beyond what is there.
+    if (f.kind === "return" && f.amount > bal + 0.004) fail(400, `${fl.name} only holds ${fmt(bal)}. Check the amount.`);
     if (f.kind === "count") f.expected = bal;
-    f.number = f.kind === "expense" ? await nextNo(co, "PCV") : f.kind === "count" ? "" : await nextNo(co, "PCT");
+    f.number = await numberFor(co, f.kind);
     const files = [];
     const e = { partitionKey: "tx-" + co, rowKey: crypto.randomUUID(), ...f, files: "[]", booksId: "", booksNo: "", createdBy: user.email, createdAt: nowIso(), updatedBy: user.email, updatedAt: nowIso() };
     await t.createEntity(e);
@@ -259,6 +268,46 @@ module.exports = function makePettyCash(H) {
     const out = txOut(await t.getEntity("tx-" + co, e.rowKey));
     if (b.post && isAdmin(user) && f.kind !== "count") { try { return { ...(await postOne(user, co, out.id)), posted: true }; } catch (err) { return { ...out, postError: err.message }; } }
     return out;
+  }
+  // Simple cash-book posting: many rows of date, description, amount in or out, saved together (for example pasted from
+  // Excel). The book may dip below zero part-way through the period, but the float can't end up below zero.
+  async function bulkCreate(user, b) {
+    const co = coOf(user); const t = await table(T);
+    const floats = await all(t, "fl-" + co);
+    const fl = floats.find(f => f.rowKey === clean(b.floatId, 60));
+    if (!fl) fail(400, "Choose the petty cash float.");
+    const rows = (Array.isArray(b.rows) ? b.rows : []).slice(0, 500);
+    if (!rows.length) fail(400, "There are no rows to save.");
+    const opening = r2(num(b.opening));
+    const D = await loadAll(co);
+    const hasEntries = D.entries.some(x => x.floatId === fl.rowKey);
+    if (opening) {
+      if (!isAdmin(user)) fail(403, "Only managers and full Books users can set the opening cash. Leave out the cash-in-hand row, or ask them.");
+      if (hasEntries || num(fl.opening)) fail(400, "This float already has entries, so the opening cash can't be set. Remove the cash-in-hand row.");
+      if (!isDate(b.openingDate)) fail(400, "Enter the date of the opening cash.");
+    }
+    const out = [];
+    for (const [i, r] of rows.entries()) {
+      const inA = r2(num(r.in)), outA = r2(num(r.out));
+      if ((inA > 0) === (outA > 0)) fail(400, `Row ${i + 1} (${clean(r.description, 60) || "no description"}): enter an amount in or an amount out, not both.`);
+      try {
+        const kind = r.kind === "topup" && inA > 0 ? "topup" : inA > 0 ? "cashin" : "expense";
+        const { f } = await entryIn(user, co, { kind, floatId: fl.rowKey, date: r.date, amount: inA || outA, description: r.description, category: r.category, note: r.note || (kind === "topup" ? r.description : ""), bankAccount: r.bankAccount, method: "Cash from office" }, null, floats.map(x => x.rowKey === fl.rowKey && opening ? { ...x, openingDate: "" } : x));
+        out.push(f);
+      } catch (err) { fail(err.status || 400, `Row ${i + 1} (${clean(r.description, 60) || "no description"}): ${err.message}`); }
+    }
+    const start = opening || r2(num(fl.opening) + D.entries.filter(x => x.floatId === fl.rowKey).reduce((a, x) => a + effect(x), 0));
+    const end = r2(start + out.reduce((a, f) => a + (f.kind === "cashin" ? f.amount : -f.amount), 0));
+    if (opening) await t.updateEntity({ partitionKey: "fl-" + co, rowKey: fl.rowKey, opening, openingDate: b.openingDate, updatedBy: user.email, updatedAt: nowIso() }, "Merge");
+    out.sort((a, c) => a.date.localeCompare(c.date) || (a.kind === "topup" ? -1 : c.kind === "topup" ? 1 : 0));
+    const made = [];
+    for (const f of out) {
+      f.number = await numberFor(co, f.kind);
+      const e = { partitionKey: "tx-" + co, rowKey: crypto.randomUUID(), ...f, files: "[]", booksId: "", booksNo: "", createdBy: user.email, createdAt: nowIso(), updatedBy: user.email, updatedAt: nowIso() };
+      await t.createEntity(e); made.push(e.rowKey);
+    }
+    if (user.aud) { user.aud.name = `${made.length} row${made.length === 1 ? "" : "s"} into ${fl.name}`; user.aud.detail = `${out.filter(f => f.kind !== "expense").length} in, ${out.filter(f => f.kind === "expense").length} out${opening ? `, opening cash ${fmt(opening)}` : ""}`; }
+    return { count: made.length, ids: made };
   }
   async function loadEntry(user, co, id) {
     const e = await getOrNull(await table(T), "tx-" + co, id);
@@ -275,7 +324,7 @@ module.exports = function makePettyCash(H) {
     const floats = await all(t, "fl-" + co);
     const { f, fl } = await entryIn(user, co, { ...b, floatId: b.floatId || cur.floatId }, cur, floats);
     const bal = await balanceOf(co, fl.rowKey, id);
-    if ((f.kind === "expense" || f.kind === "return") && f.amount > bal + 0.004) fail(400, `${fl.name} only holds ${fmt(bal)} without this entry. Check the amount.`);
+    if (f.kind === "return" && f.amount > bal + 0.004) fail(400, `${fl.name} only holds ${fmt(bal)} without this entry. Check the amount.`);
     if (f.kind === "count") f.expected = bal;
     const next = { partitionKey: "tx-" + co, rowKey: id, ...f, updatedBy: user.email, updatedAt: nowIso() };
     if (user.aud) { user.aud.name = cur.number || KINDS[cur.kind]; user.aud.changes = diff(cur, next); }
@@ -360,7 +409,16 @@ module.exports = function makePettyCash(H) {
     const x = txOut(e), bi = await info(co);
     const notes = `Petty cash ${x.number}, ${fl.name} (held by ${fl.custodian}). Logged by ${x.createdBy}.${x.project ? " Project / customer: " + x.project + "." : ""}${x.note ? " " + x.note : ""}`.slice(0, 3000);
     let body, claimed = false;
-    if (x.kind === "expense") {
+    if (x.kind === "expense" && !x.category) fail(400, `Choose the Books category for ${x.number} (${x.description}).`);
+    if (x.kind === "cashin") {
+      const inv = x.invoiceNo ? (await books().pcInvoices(co)).find(i => i.number.toUpperCase() === x.invoiceNo) : null;
+      if (x.invoiceNo && !inv) fail(400, `${x.invoiceNo} isn't an issued invoice in Books. Correct the invoice number, or clear it and choose an income account.`);
+      if (inv) {
+        const amt = Math.min(x.amount, Math.max(0, inv.balance));
+        body = { type: "receipt", date: x.date, contactId: inv.contactId, amount: x.amount, account: fl.account, method: "Cash", bankRef: x.number, notes, allocs: amt > 0.004 ? [{ id: inv.id, amt: r2(amt) }] : [] };
+      } else if (x.category) body = { type: "journal", date: x.date, notes: `Cash received into petty cash: ${x.description}. ${notes}`.slice(0, 3000), lines: [{ account: fl.account, debit: x.amount, memo: x.description.slice(0, 200) }, { account: x.category, credit: x.amount, memo: x.description.slice(0, 200) }] };
+      else fail(400, `${x.number} (${x.description}): enter the Books invoice number it pays, or choose an income account.`);
+    } else if (x.kind === "expense") {
       const lines = [];
       if (x.vatAmt > 0 && bi.vatRegistered) {
         const { taxable, other } = vatSplit(x.amount, x.vatAmt);
@@ -368,7 +426,7 @@ module.exports = function makePettyCash(H) {
         lines.push({ name: x.description, qty: 1, rate: taxable, vat: "SR", account: x.category, blocked: !claimed });
         if (other > 0.004) lines.push({ name: x.description + " (no VAT)", qty: 1, rate: other, vat: "OS", account: x.category });
       } else lines.push({ name: x.description, qty: 1, rate: x.amount, vat: "OS", account: x.category });
-      body = { type: "expense", date: x.date, account: fl.account, payee: x.payee, payeeTrn: claimed ? x.payeeTrn : "", ref: x.receiptNo || x.number, notes, lines };
+      body = { type: "expense", date: x.date, account: fl.account, payee: x.payee || x.description.slice(0, 150), payeeTrn: claimed ? x.payeeTrn : "", ref: x.receiptNo || x.number, notes, lines };
     } else if (x.kind === "topup") body = { type: "transfer", date: x.date, amount: x.amount, account: x.bankAccount, toAccount: fl.account, ref: x.ref || x.number, notes: `${x.method} to ${notes}` };
     else body = { type: "transfer", date: x.date, amount: x.amount, account: fl.account, toAccount: x.bankAccount, ref: x.ref || x.number, notes: `Cash returned: ${notes}` };
     // Claim the entry first, so two people posting at once can't make two Books documents.
@@ -394,9 +452,24 @@ module.exports = function makePettyCash(H) {
     needAdmin(user); const co = coOf(user);
     const ids = (Array.isArray(b.ids) ? b.ids : []).map(x => clean(x, 60)).filter(Boolean).slice(0, 200);
     if (!ids.length) fail(400, "Choose the entries to post.");
+    // Categories, income accounts and invoice numbers chosen in the posting window.
+    const asg = b.assign && typeof b.assign === "object" ? b.assign : {};
+    const t = await table(T), bi = await info(co);
+    for (const id of ids) {
+      const v = asg[id]; if (!v || typeof v !== "object") continue;
+      const e = await getOrNull(t, "tx-" + co, id); if (!e || e.booksId) continue;
+      const upd = {};
+      if (v.category !== undefined) {
+        const c = clean(v.category, 10), a = bi.accounts.find(x => x.code === c);
+        if (c && (!a || !(e.kind === "cashin" ? IN_TYPES : CAT_TYPES).includes(a.type))) fail(400, `${e.number}: choose a valid account.`);
+        upd.category = c;
+      }
+      if (v.invoiceNo !== undefined && e.kind === "cashin") upd.invoiceNo = clean(v.invoiceNo, 40).toUpperCase();
+      if (Object.keys(upd).length) await t.updateEntity({ partitionKey: "tx-" + co, rowKey: id, ...upd, updatedBy: user.email, updatedAt: nowIso() }, "Merge");
+    }
     const D = await loadAll(co);
     // Oldest first, top-ups before expenses on the same day, so the cash account never dips below zero in Books.
-    const order = { topup: 0, expense: 1, return: 2 };
+    const order = { topup: 0, cashin: 1, expense: 2, return: 3 };
     const list = D.entries.filter(x => ids.includes(x.id) && !x.booksId && x.kind !== "count").sort((a, b) => a.date.localeCompare(b.date) || order[a.kind] - order[b.kind] || a.createdAt.localeCompare(b.createdAt));
     const done = [], failed = [];
     for (const x of list) {
@@ -453,6 +526,7 @@ module.exports = function makePettyCash(H) {
     }
     if (a === "entries") {
       if (!id && method === "POST") return createEntry(user, body);
+      if (id === "bulk" && !sub && method === "POST") return bulkCreate(user, body);
       if (id && !sub && method === "PUT") return updateEntry(user, id, body);
       if (id && !sub && method === "DELETE") return deleteEntry(user, id);
       if (id && sub === "release" && method === "POST") return release(user, id);

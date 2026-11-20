@@ -15,7 +15,7 @@ const nameOf = e => String(e || "").split("@")[0].split(/[._-]+/).filter(Boolean
 const ini = e => { const p = String(e || "").split("@")[0].split(/[._-]+/).filter(Boolean); return ((p[0] || "?")[0] + (p[1] ? p[1][0] : (p[0] || "")[1] || "")).toUpperCase(); };
 const monthName = ym => new Date(ym + "-01T00:00:00Z").toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
 
-let D = null, FL = new Map(), CAT = new Map(), BANK = new Map();
+let D = null, FL = new Map(), CAT = new Map(), BANK = new Map(), INC = new Map();
 
 /* ---------- plumbing ---------- */
 function toast(m, e) { const t = document.createElement("div"); t.className = "toast" + (e ? " err" : ""); t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), e ? 6500 : 2600); }
@@ -30,7 +30,7 @@ async function api(method, path, body) {
 }
 async function load() {
   D = await api("GET", "bootstrap");
-  FL = new Map(D.floats.map(f => [f.id, f])); CAT = new Map(D.categories.map(c => [c.code, c])); BANK = new Map(D.banks.map(b => [b.code, b]));
+  FL = new Map(D.floats.map(f => [f.id, f])); CAT = new Map(D.categories.map(c => [c.code, c])); BANK = new Map(D.banks.map(b => [b.code, b])); INC = new Map(D.incomeAccounts.map(a => [a.code, a]));
 }
 const refresh = async () => { await load(); route(); };
 function go(h) { if (location.hash === h) route(); else location.hash = h; }
@@ -61,12 +61,17 @@ const BR = () => window.BIFOLD_BRAND || {};
 const admin = () => !!(D && D.admin);
 const mine = f => f && f.custodian === D.me;
 const floatName = id => (FL.get(id) || {}).name || "";
-const catName = c => c ? (CAT.get(c) ? CAT.get(c).name : c) : "";
+const catName = c => c ? (CAT.get(c) ? CAT.get(c).name : (INC.get(c) || {}).name || c) : "";
 const kindTag = x => `<span class="kd ${x.kind}">${esc(D.kinds[x.kind])}</span>`;
 const inBooks = x => x.kind === "count" ? `<span class="muted sm">Not posted</span>` : x.booksId && x.booksId !== "pending" ? `<a class="bk-ok" href="/books/#/doc/${esc(x.booksId)}">${esc(x.booksNo)}</a>` : `<span class="bk-no">Not in Books</span>`;
 const PAPERCLIP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg>`;
 const clip = x => x.kind !== "expense" ? "" : x.files.length ? `<span class="clip">${PAPERCLIP}${x.files.length} receipt${x.files.length === 1 ? "" : "s"}</span>` : `<span class="clip miss">No receipt</span>`;
-const signed = x => x.kind === "topup" ? x.amount : x.kind === "count" ? 0 : -x.amount;
+const isIn = x => x.kind === "topup" || x.kind === "cashin", isOut = x => x.kind === "expense" || x.kind === "return";
+const signed = x => isIn(x) ? x.amount : isOut(x) ? -x.amount : 0;
+const bankName = c => (BANK.get(c) || {}).name || c;
+// The one-line description used in the cash book.
+const descOf = x => x.kind === "expense" || x.kind === "cashin" ? x.description : x.kind === "topup" ? `Top-up from ${bankName(x.bankAccount)}${x.ref ? " (" + x.ref + ")" : ""}` : x.kind === "return" ? `Cash returned to ${bankName(x.bankAccount)}${x.ref ? " (" + x.ref + ")" : ""}` : `Cash count: counted ${aed(x.amount)}, expected ${aed(x.expected)}`;
+const subOf = x => [x.number, x.kind === "expense" ? [x.payee && x.payee !== x.description ? x.payee : "", x.category ? catName(x.category) : "No category yet", x.vatAmt ? "VAT " + aed(x.vatAmt) : ""].filter(Boolean).join(" · ") : x.kind === "cashin" ? (x.invoiceNo ? "Pays " + x.invoiceNo : x.category ? catName(x.category) : "") : ""].filter(Boolean).join(" · ");
 const fileUrl = (x, f, dl) => `/api/pc/entries/${encodeURIComponent(x.id)}/files/${encodeURIComponent(f.id)}${dl ? "/download" : ""}`;
 // What the VAT on an expense will do in Books.
 function vatState(x) {
@@ -146,7 +151,7 @@ function floatsView() {
       <div class="card"><header><h2>Spending by category <span>${esc(monthName(ym))}</span></h2><a href="#/entries?month=${ym}&kind=expense">All</a></header>
         ${cats.length ? `<div class="catbars">${cats.slice(0, 8).map(([c, v]) => `<div class="r0"><span>${esc(catName(c))}</span><span class="n">AED ${aed(v)}</span><span class="tr"><i style="width:${(v / cmax * 100).toFixed(1)}%"></i></span></div>`).join("")}</div>` : `<div class="empty">No spending logged this month.</div>`}
         <header style="border-top:1px solid var(--line)"><h2>Recent</h2><a href="#/entries">All entries</a></header>
-        ${D.entries.slice(0, 6).map(x => `<a class="mi" href="#/entries?open=${esc(x.id)}"><span><b>${esc(x.kind === "expense" ? x.payee : D.kinds[x.kind])}</b><span class="t">${fd(x.date)} · ${esc(floatName(x.floatId))}</span></span><span class="amt ${x.kind === "topup" ? "in" : ""}">${x.kind === "count" ? "" : (x.kind === "topup" ? "+" : "−") + aed(x.amount)}</span></a>`).join("") || `<div class="empty">Nothing logged yet.</div>`}
+        ${D.entries.slice(0, 6).map(x => `<a class="mi" href="#/entries?open=${esc(x.id)}"><span><b>${esc(descOf(x))}</b><span class="t">${fd(x.date)} · ${esc(floatName(x.floatId))}</span></span><span class="amt ${isIn(x) ? "in" : ""}">${x.kind === "count" ? "" : (isIn(x) ? "+" : "−") + aed(x.amount)}</span></a>`).join("") || `<div class="empty">Nothing logged yet.</div>`}
       </div>
     </div>
     ${closed.length ? `<h3 class="sec2">Closed floats</h3><div class="floats">${closed.map(floatCard).join("")}</div>` : ""}`, "floats");
@@ -177,52 +182,193 @@ function floatView(id) {
   const f = FL.get(id);
   const months = [...new Set(D.entries.filter(x => x.floatId === id).map(x => x.date.slice(0, 7)).concat(D.today.slice(0, 7)))].sort().reverse();
   const canLog = f.status === "active" && (mine(f) || admin());
+  const unposted = D.entries.filter(x => x.floatId === id && x.kind !== "count" && !x.booksId);
   const acts = [
-    canLog ? `<button type="button" data-a="count">Cash count</button>` : "",
-    f.status === "active" && admin() ? `<button type="button" data-a="return">Cash returned</button><button type="button" data-a="topup">Top up</button>` : "",
+    canLog ? `<button type="button" id="paste">Paste from Excel</button>` : "",
+    f.status === "active" && admin() ? `<button type="button" data-a="topup">Top up</button>` : "",
     f.status === "active" && !admin() && mine(f) ? `<button type="button" data-a="request">${f.request ? "Change top-up request" : "Request top-up"}</button>` : "",
-    canLog ? `<button type="button" class="primary" data-a="expense">Log expense</button>` : "",
+    admin() && unposted.length ? `<button type="button" class="primary" id="postAll">Post ${unposted.length} to Books</button>` : "",
   ].join("");
   const pct = f.limit > 0 ? Math.max(0, Math.min(100, f.balance / f.limit * 100)) : 0;
-  page(f.name, "Petty cash float", acts, `
+  page(f.name, "Petty cash book", acts, `
     <div class="fhead">
       <div><div class="muted sm">Cash in hand now</div><div class="bal"><small>AED</small>${aed(f.balance)}</div>
         <div class="gauge ${f.balance <= 0 ? "out" : f.low ? "low" : ""}" style="max-width:420px;margin-top:8px"><i style="width:${pct.toFixed(1)}%"></i></div>
-        <div class="facts"><span>Held by <b>${esc(nameOf(f.custodian))}</b> (${esc(f.custodian)})</span><span>Float <b class="mono">AED ${aed(f.limit)}</b></span><span>Top-up to full <b class="mono">AED ${aed(Math.max(0, f.limit - f.balance))}</b></span><span>Books account <b>${esc(f.account)}</b></span>${f.lastCount ? `<span>Last count <b>${fd(f.lastCount.date)}</b>: ${Math.abs(f.lastCount.diff) > 0.004 ? `<b style="color:var(--bad)">${f.lastCount.diff > 0 ? "over" : "short"} by AED ${aed(Math.abs(f.lastCount.diff))}</b>` : "matched"}</span>` : ""}</div>
+        <div class="facts"><span>Held by <b>${esc(nameOf(f.custodian))}</b></span><span>Float <b class="mono">AED ${aed(f.limit)}</b></span><span>Books account <b>${esc(f.account)}</b></span>${f.lastCount ? `<span>Last count <b>${fd(f.lastCount.date)}</b>: ${Math.abs(f.lastCount.diff) > 0.004 ? `<b style="color:var(--bad)">${f.lastCount.diff > 0 ? "over" : "short"} by AED ${aed(Math.abs(f.lastCount.diff))}</b>` : "matched"}</span>` : ""}</div>
         ${f.request ? `<div class="note" style="margin-top:10px"><b>Top-up requested: AED ${aed(f.request.amount)}</b>${esc(f.request.note || "")} <span class="muted">(${esc(nameOf(f.request.by))}, ${fdt(f.request.at)})</span></div>` : ""}
         ${f.status === "closed" ? `<div class="note warn" style="margin-top:10px"><b>This float is closed.</b>Reopen it to log against it again.</div>` : ""}
       </div>
-      ${admin() ? `<div class="btnrow" style="justify-content:flex-end"><button type="button" id="edF">Edit float</button><button type="button" id="stF">${f.status === "closed" ? "Reopen float" : "Close float"}</button></div>` : ""}
+      <div class="btnrow" style="justify-content:flex-end">${canLog ? `<button type="button" data-a="count">Cash count</button>` : ""}${admin() ? `${f.status === "active" ? `<button type="button" data-a="return">Cash returned</button>` : ""}<button type="button" id="edF">Edit float</button><button type="button" id="stF">${f.status === "closed" ? "Reopen float" : "Close float"}</button>` : ""}</div>
     </div>
-    <div class="tools"><label class="sm muted" for="pm">Statement for</label><select id="pm"><option value="all">All time</option>${months.map(m => `<option value="${m}">${esc(monthName(m))}</option>`).join("")}</select>
+    <div class="tools"><label class="sm muted" for="pm">Month</label><select id="pm"><option value="all">All time</option>${months.map(m => `<option value="${m}">${esc(monthName(m))}</option>`).join("")}</select>
       <span class="cnt" id="cnt"></span></div>
-    <div class="panel listpanel"><div class="tblwrap"><table class="list pcl"><thead><tr><th>Date</th><th>Voucher</th><th>Details</th><th class="r">In</th><th class="r">Out</th><th class="r">Balance</th><th>Books</th></tr></thead><tbody id="rows"></tbody><tfoot id="foot"></tfoot></table></div></div>
+    <div class="panel listpanel"><div class="tblwrap"><table class="list pcl cbook"><thead><tr><th style="width:110px">Date</th><th>Description</th><th class="r" style="width:120px">Amount in</th><th class="r" style="width:120px">Amount out</th><th class="r" style="width:120px">Balance</th><th style="width:110px">Books</th></tr></thead>
+      <tbody id="rows"></tbody>
+      ${canLog ? `<tbody class="addrow"><tr><td><input type="date" id="qd" max="${esc(D.today)}" aria-label="Date"></td><td><input id="qs" maxlength="500" placeholder="Description, e.g. Water coupons or Cash sales INV-2026-00068" aria-label="Description" list="qsl"></td><td><input id="qi" type="number" min="0" step="0.01" inputmode="decimal" class="r" placeholder="In" aria-label="Amount in"></td><td><input id="qo" type="number" min="0" step="0.01" inputmode="decimal" class="r" placeholder="Out" aria-label="Amount out"></td><td colspan="2"><button type="button" class="primary" id="qa">Add</button> <button type="button" id="qm" title="Add with receipt photo, VAT and category">More…</button></td></tr><tr><td colspan="6" class="qerr" id="qe"></td></tr></tbody>` : ""}
+      <tfoot id="foot"></tfoot></table></div></div>
+    <datalist id="qsl">${[...new Set(D.entries.filter(x => x.description).map(x => x.description))].slice(0, 80).map(p => `<option value="${esc(p)}">`).join("")}</datalist>
     <div class="btnrow" style="margin-top:12px"><button type="button" id="xl">Export to Excel</button><button type="button" id="pv">Preview statement</button><button type="button" class="primary" id="pdf">Download statement (PDF)</button></div>`, "float");
-  document.querySelectorAll("header.top [data-a]").forEach(b => b.onclick = () => act(b.dataset.a, id));
+  document.querySelectorAll("header.top [data-a], .fhead [data-a]").forEach(b => b.onclick = () => act(b.dataset.a, id));
   if ($("edF")) $("edF").onclick = () => floatForm(f);
   if ($("stF")) $("stF").onclick = () => setStatus(f);
+  if ($("paste")) $("paste").onclick = () => pasteDialog(f);
+  if ($("postAll")) $("postAll").onclick = () => postDialog(unposted.map(x => x.id));
   const sel = $("pm"); sel.value = months.includes(D.today.slice(0, 7)) ? D.today.slice(0, 7) : "all";
   const period = () => sel.value === "all" ? ["", ""] : [sel.value + "-01", sel.value + "-31"];
   const draw = () => {
     const [from, to] = period(); const S = statementRows(f, from, to);
-    const ins = S.rows.reduce((a, r) => a + (r.x.kind === "topup" ? r.x.amount : 0), 0), outs = S.rows.reduce((a, r) => a + (["expense", "return"].includes(r.x.kind) ? r.x.amount : 0), 0);
-    $("rows").innerHTML = `<tr class="nohov"><td colspan="5" class="muted">Opening balance${from ? " on " + fd(from) : ""}</td><td class="r mono">${aed(S.opening)}</td><td></td></tr>` + S.rows.map(({ x, bal }) => `<tr data-id="${esc(x.id)}" tabindex="0">
-      <td>${fd(x.date)}</td><td><div class="t mono">${esc(x.number || "")}</div>${kindTag(x)}</td>
-      <td>${x.kind === "expense" ? `<div class="t">${esc(x.payee)}</div><div class="s">${esc(x.description)} · ${esc(catName(x.category))}${x.vatAmt ? ` · VAT ${aed(x.vatAmt)}` : ""}</div>${clip(x)}` : x.kind === "count" ? `<div class="t">Counted AED ${aed(x.amount)}</div><div class="s">${Math.abs(x.amount - x.expected) > 0.004 ? `<b style="color:var(--bad)">${x.amount > x.expected ? "Over" : "Short"} by AED ${aed(Math.abs(x.amount - x.expected))}</b>` : "Matched the balance"}${x.note ? " · " + esc(x.note) : ""}</div>` : `<div class="t">${esc(x.method)}</div><div class="s">${x.kind === "topup" ? "From" : "To"} ${esc(x.bankAccount)} ${esc((BANK.get(x.bankAccount) || {}).name || "")}${x.ref ? " · " + esc(x.ref) : ""}</div>`}</td>
-      <td class="r mono in">${x.kind === "topup" ? aed(x.amount) : ""}</td><td class="r mono">${["expense", "return"].includes(x.kind) ? aed(x.amount) : ""}</td><td class="r mono">${aed(bal)}</td><td>${inBooks(x)}</td></tr>`).join("");
-    $("foot").innerHTML = `<tr><td colspan="3">Closing balance${to && to < D.today ? " on " + fd(to.slice(0, 7) + "-" + new Date(Date.UTC(+to.slice(0, 4), +to.slice(5, 7), 0)).getUTCDate()) : ""}</td><td class="r mono">${aed(ins)}</td><td class="r mono">${aed(outs)}</td><td class="r mono">${aed(S.closing)}</td><td></td></tr>`;
+    const ins = S.rows.reduce((a, r) => a + (isIn(r.x) ? r.x.amount : 0), 0), outs = S.rows.reduce((a, r) => a + (isOut(r.x) ? r.x.amount : 0), 0);
+    $("rows").innerHTML = `<tr class="nohov"><td class="muted">${from ? fd(from) : ""}</td><td class="muted">Cash in hand${from ? " brought forward" : " at the start"}</td><td class="r mono">${S.opening ? aed(S.opening) : ""}</td><td></td><td class="r mono">${aed(S.opening)}</td><td></td></tr>` + S.rows.map(({ x, bal }) => `<tr data-id="${esc(x.id)}" tabindex="0" class="${x.kind === "count" ? "cnt-row" : ""}">
+      <td>${fd(x.date)}</td><td><div class="t">${esc(descOf(x))} ${x.kind === "topup" || x.kind === "return" ? kindTag(x) : ""}</div><div class="s">${esc(subOf(x))} ${clip(x)}</div></td>
+      <td class="r mono in">${isIn(x) ? aed(x.amount) : ""}</td><td class="r mono">${isOut(x) ? aed(x.amount) : ""}</td><td class="r mono ${bal < 0 ? "neg" : ""}">${aed(bal)}</td><td>${inBooks(x)}</td></tr>`).join("");
+    $("foot").innerHTML = `<tr><td colspan="2">Total</td><td class="r mono">${aed(r2(ins + S.opening))}</td><td class="r mono">${aed(outs)}</td><td class="r mono">${aed(S.closing)}</td><td></td></tr>`;
     $("cnt").textContent = `${S.rows.length} entr${S.rows.length === 1 ? "y" : "ies"}`;
     $("rows").querySelectorAll("tr[data-id]").forEach(tr => { tr.onclick = e => { if (!e.target.closest("a")) entryView(tr.dataset.id); }; tr.onkeydown = e => { if (e.key === "Enter") entryView(tr.dataset.id); }; });
   };
   sel.onchange = draw; draw();
+  // One-line add: date, description, amount in or out.
+  if ($("qa")) {
+    const lastDate = (D.entries.find(x => x.floatId === id) || {}).date;
+    $("qd").value = sel.value !== "all" && sel.value !== D.today.slice(0, 7) && lastDate && lastDate.startsWith(sel.value) ? lastDate : D.today;
+    const add = async () => {
+      const inA = num($("qi").value), outA = num($("qo").value), desc = $("qs").value.trim();
+      $("qe").textContent = "";
+      if (!desc) { $("qe").textContent = "Enter a description."; return $("qs").focus(); }
+      if ((inA > 0) === (outA > 0)) { $("qe").textContent = "Enter an amount in or an amount out (one of them)."; return $("qi").focus(); }
+      const guess = guessCat(desc, inA > 0 ? "cashin" : "expense");
+      busy($("qa"), true);
+      try {
+        await api("POST", "entries", { kind: inA > 0 ? "cashin" : "expense", floatId: id, date: $("qd").value, amount: inA || outA, description: desc, category: guess });
+        const keep = $("qd").value; await load(); route(); $("qd").value = keep; $("qs").focus();
+      } catch (e) { $("qe").textContent = e.message; busy($("qa"), false); }
+    };
+    $("qa").onclick = add;
+    ["qs", "qi", "qo"].forEach(i => $(i).addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } }));
+    $("qi").addEventListener("input", () => { if ($("qi").value) $("qo").value = ""; });
+    $("qo").addEventListener("input", () => { if ($("qo").value) $("qi").value = ""; });
+    $("qm").onclick = () => entryForm(num($("qi").value) > 0 ? "cashin" : "expense", { floatId: id, date: $("qd").value, description: $("qs").value, amount: $("qi").value || $("qo").value });
+  }
   const label = () => sel.value === "all" ? "all time" : monthName(sel.value);
   const build = () => { const [from, to] = period(); return statementPdf(f, from, to, label()); };
   const fname = () => safe(`${f.name} statement ${label()}`) + ".pdf";
   $("pv").onclick = () => window.BXPdf.preview(build, fname());
   $("pdf").onclick = async e => { busy(e.target, true); try { saveBlob(await build(), fname()); } catch (err) { toast(err.message, true); } finally { busy(e.target, false); } };
   $("xl").onclick = () => { const [from, to] = period(); const S = statementRows(f, from, to);
-    exportSheet(`${f.name} ${label()}`, [["Statement", [[f.name, "", "", "", "Held by " + f.custodian], ["Period", label()], [], ["Date", "Voucher", "Type", "Paid to / method", "Details", "Category", "VAT (AED)", "In (AED)", "Out (AED)", "Balance (AED)", "Books"], ["", "", "", "", "Opening balance", "", "", "", "", S.opening, ""],
-      ...S.rows.map(({ x, bal }) => [x.date, x.number, D.kinds[x.kind], x.kind === "expense" ? x.payee : x.method, x.kind === "count" ? `Counted ${aed(x.amount)} (expected ${aed(x.expected)})` : x.description || x.ref, catName(x.category), x.vatAmt || "", x.kind === "topup" ? x.amount : "", ["expense", "return"].includes(x.kind) ? x.amount : "", bal, x.booksNo || ""])], [11, 12, 12, 22, 34, 22, 9, 11, 11, 12, 11]]]); };
+    const ins = S.rows.reduce((a, r) => a + (isIn(r.x) ? r.x.amount : 0), 0), outs = S.rows.reduce((a, r) => a + (isOut(r.x) ? r.x.amount : 0), 0);
+    exportSheet(`${f.name} ${label()}`, [["Cash book", [[f.name + " · " + label()], [], ["Date", "Description", "Amount In", "Amount Out", "Balance", "Voucher", "Category / invoice", "Books"], ["", "Cash in hand", S.opening || "", "", S.opening, "", "", ""],
+      ...S.rows.map(({ x, bal }) => [x.date, descOf(x), isIn(x) ? x.amount : "", isOut(x) ? x.amount : "", bal, x.number, x.kind === "cashin" ? x.invoiceNo || catName(x.category) : catName(x.category), x.booksNo || ""]),
+      [], ["", "Total", r2(ins + S.opening), r2(outs), S.closing, "", "", ""]], [12, 40, 12, 12, 12, 12, 26, 12]]]); };
+}
+// The category used last time for the same description, so repeat items (water coupons, car wash) fill themselves.
+function guessCat(desc, kind) {
+  const d = String(desc || "").trim().toLowerCase(); if (!d) return "";
+  const hit = D.entries.find(x => x.kind === kind && x.category && x.description.trim().toLowerCase() === d);
+  return hit ? hit.category : "";
+}
+
+/* ---------- paste a month from Excel ---------- */
+function parseDate(s, year) {
+  s = String(s || "").trim(); if (!s) return "";
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s); if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/.exec(s); if (m) { const y = m[3].length === 2 ? "20" + m[3] : m[3]; return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+  m = /^(\d{1,2})[ \-]([A-Za-z]{3,})[ \-,]*(\d{2,4})?$/.exec(s); if (m) { const mo = "janfebmaraprmayjunjulaugsepoctnovdec".indexOf(m[2].slice(0, 3).toLowerCase()) / 3 + 1; if (mo > 0) return `${m[3] ? (m[3].length === 2 ? "20" + m[3] : m[3]) : year}-${String(mo).padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+  if (/^\d{5}$/.test(s)) { const d = new Date(Date.UTC(1899, 11, 30) + +s * 864e5); return d.toISOString().slice(0, 10); } // Excel serial date
+  return "";
+}
+const money = s => { const t = String(s || "").replace(/[^\d.\-]/g, ""); return t ? r2(+t) : 0; };
+function parseSheet(text) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n").map(l => l.split("\t")).filter(c => c.some(x => x.trim()));
+  if (!lines.length) return { rows: [], opening: null };
+  // Columns: Date, Description, Amount in, Amount out (a Balance column after them is ignored). A header row is skipped.
+  let rows = [], opening = null, cur = "";
+  const yr = D.today.slice(0, 4);
+  for (const c0 of lines) {
+    const c = c0.length >= 4 ? c0 : c0.length === 3 ? ["", ...c0] : c0;
+    const [d, desc0, a, b] = c.map(x => (x || "").trim()); const desc = desc0 || "";
+    if (/^date$/i.test(d) || /^description$/i.test(desc)) continue;
+    if (/^(total|grand total|balance c\/?f|closing)/i.test(desc) || /^total$/i.test(d)) continue;
+    const dt = parseDate(d, yr); if (dt) cur = dt;
+    const inA = money(a), outA = money(b);
+    if (!inA && !outA) continue; // month headings such as "June"
+    if (!opening && !rows.length && inA && /cash in hand|opening|b\/?f|brought forward|balance/i.test(desc)) { opening = { amount: inA, date: dt }; continue; }
+    rows.push({ date: dt || "", description: desc, in: inA || "", out: outA ? outA : "" });
+  }
+  // Rows without a date take the date above them; leading undated rows take the 1st of the first month.
+  const first = rows.find(r => r.date) || (opening && opening.date ? opening : null);
+  let last = first ? (first.date || "").slice(0, 8) + "01" : D.today;
+  rows.forEach(r => { if (r.date) last = r.date; else r.date = last; });
+  if (opening && !opening.date) opening.date = rows.length ? rows[0].date.slice(0, 8) + "01" : D.today;
+  return { rows, opening };
+}
+async function pasteDialog(f) {
+  const hasEntries = D.entries.some(x => x.floatId === f.id) || f.opening;
+  const r = await dialog(`<form novalidate><h3>Paste from Excel</h3>
+    <p class="hint" style="margin:0">In Excel, select the rows (Date, Description, Amount In, Amount Out) and copy. Paste them below. Rows without a date take the date above them; headings, the Balance column and the Total row are ignored.</p>
+    <textarea id="tx" rows="6" placeholder="Paste here" style="font-family:var(--f-num);font-size:12px"></textarea>
+    <div id="pvw"></div>
+    <div class="err" id="err"></div>
+    <div class="foot"><button type="button" data-x>Cancel</button><button type="submit" class="primary" id="sv" disabled>Add rows</button></div></form>`, { wide: true, onOpen: (d, done) => {
+      const q = s => d.querySelector(s); let P = { rows: [], opening: null };
+      const seen = new Set(D.entries.filter(x => x.floatId === f.id).map(x => [x.date, r2(x.amount), isIn(x) ? "in" : "out", x.description.trim().toLowerCase()].join("|")));
+      const draw = () => {
+        if (!P.rows.length && !P.opening) { q("#pvw").innerHTML = q("#tx").value.trim() ? `<div class="vat-hint warn">No rows with an amount were found. Copy the Date, Description, Amount In and Amount Out columns together.</div>` : ""; q("#sv").disabled = true; return; }
+        const useOpen = P.opening && !hasEntries && admin();
+        let bal = useOpen ? P.opening.amount : f.balance;
+        const dup = r => seen.has([r.date, r2(num(r.in) || num(r.out)), num(r.in) ? "in" : "out", r.description.trim().toLowerCase()].join("|"));
+        q("#pvw").innerHTML = `${P.opening ? `<div class="vat-hint ${useOpen ? "ok" : "warn"}">${useOpen ? `<b>Cash in hand AED ${aed(P.opening.amount)} on ${fd(P.opening.date)}.</b> <label style="display:inline"><select id="opm" style="width:auto;display:inline-block;margin:4px 0"><option value="topup" ${P.mode !== "books" ? "selected" : ""}>Post it to Books as a top-up from</option><option value="books" ${P.mode === "books" ? "selected" : ""}>It is already in Books account ${esc(f.account)}</option></select></label> <select id="opb" style="width:auto;display:${P.mode === "books" ? "none" : "inline-block"}">${D.banks.filter(b => b.code !== f.account).map(b => `<option value="${esc(b.code)}" ${P.bank === b.code ? "selected" : ""}>${esc(b.code)} ${esc(b.name)}</option>`).join("")}</select>` : hasEntries ? `The cash-in-hand row (AED ${aed(P.opening.amount)}) is left out: this float already has a balance of AED ${aed(f.balance)}.` : `The cash-in-hand row (AED ${aed(P.opening.amount)}) is left out: only managers set opening cash. Ask them, or record it as a top-up.`}</div>` : ""}
+          <div class="tblwrap" style="max-height:340px;overflow:auto;margin-top:8px"><table class="list cbook"><thead><tr><th>Date</th><th>Description</th><th class="r">In</th><th class="r">Out</th><th class="r">Balance</th><th></th></tr></thead><tbody>${P.rows.map((r, i) => { bal = r2(bal + num(r.in) - num(r.out)); return `<tr><td><input type="date" data-i="${i}" data-k="date" value="${esc(r.date)}"></td><td><input data-i="${i}" data-k="description" value="${esc(r.description)}"></td><td><input class="r" type="number" step="0.01" data-i="${i}" data-k="in" value="${r.in}"></td><td><input class="r" type="number" step="0.01" data-i="${i}" data-k="out" value="${r.out}"></td><td class="r mono ${bal < 0 ? "neg" : ""}">${aed(bal)}</td><td>${dup(r) ? `<span class="flag low" title="Same date, amount and description as an entry already in this float">Already in</span>` : ""}<button type="button" class="x" data-del="${i}" aria-label="Remove row">×</button></td></tr>`; }).join("")}</tbody></table></div>
+          <div class="hint">${P.rows.length} rows: AED ${aed(P.rows.reduce((a, r) => a + num(r.in), 0))} in, AED ${aed(P.rows.reduce((a, r) => a + num(r.out), 0))} out. Closing balance AED ${aed(bal)}.${P.rows.some(dup) ? " Rows marked Already in look like duplicates; remove them unless they really happened twice." : ""}</div>`;
+        q("#sv").disabled = !P.rows.length && !useOpen; q("#sv").textContent = `Add ${P.rows.length} row${P.rows.length === 1 ? "" : "s"}`;
+        if (q("#opm")) { q("#opm").onchange = () => { P.mode = q("#opm").value; draw(); }; q("#opb").onchange = () => { P.bank = q("#opb").value; }; if (!P.bank) P.bank = q("#opb").value; }
+        d.querySelectorAll("[data-i]").forEach(el => el.onchange = () => { P.rows[+el.dataset.i][el.dataset.k] = el.value; draw(); });
+        d.querySelectorAll("[data-del]").forEach(el => el.onclick = () => { P.rows.splice(+el.dataset.del, 1); draw(); });
+      };
+      q("#tx").addEventListener("input", () => { const keep = { mode: P.mode, bank: P.bank }; P = { ...parseSheet(q("#tx").value), ...keep }; draw(); });
+      q("form").onsubmit = async e => { e.preventDefault(); const b = q("#sv"); busy(b, true); q("#err").textContent = "";
+        const useOpen = P.opening && !hasEntries && admin();
+        const rows = P.rows.map(r => ({ ...r, category: guessCat(r.description, num(r.in) ? "cashin" : "expense") }));
+        if (useOpen && P.mode !== "books") rows.unshift({ kind: "topup", date: P.opening.date, description: "Cash in hand (opening)", in: P.opening.amount, bankAccount: P.bank });
+        try { done(await api("POST", "entries/bulk", { floatId: f.id, rows, ...(useOpen && P.mode === "books" ? { opening: P.opening.amount, openingDate: P.opening.date } : {}) })); }
+        catch (err) { q("#err").textContent = err.message; busy(b, false); } };
+      setTimeout(() => q("#tx").focus(), 50);
+    } });
+  if (r) { const m = (D.entries.find(x => x.floatId === f.id) || {}).date; await load(); route(); toast(`Added ${r.count} row${r.count === 1 ? "" : "s"}.`); }
+}
+
+/* ---------- post to Books: choose the accounts in one place ---------- */
+async function postDialog(ids) {
+  const list = D.entries.filter(x => ids.includes(x.id) && !x.booksId && x.kind !== "count").sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+  if (!list.length) return toast("Nothing to post.");
+  const invs = new Map(D.invoices.map(i => [i.number.toUpperCase(), i]));
+  const catOpts = (sel) => `<option value="">Choose category…</option>${D.categories.map(c => `<option value="${esc(c.code)}" ${sel === c.code ? "selected" : ""}>${esc(c.name)}</option>`).join("")}`;
+  const incOpts = (sel) => `<option value="">Choose income account…</option>${D.incomeAccounts.map(c => `<option value="${esc(c.code)}" ${sel === c.code ? "selected" : ""}>${esc(c.code)} ${esc(c.name)}</option>`).join("")}`;
+  const r = await dialog(`<form novalidate><h3>Post ${list.length} entr${list.length === 1 ? "y" : "ies"} to Books</h3>
+    <p class="hint" style="margin:0">Money out posts as an expense paid from the float's cash account. Cash in that names an invoice posts as a payment against it; other cash in needs an income account. Top-ups and cash returned post as transfers.</p>
+    <div class="tblwrap" style="max-height:420px;overflow:auto"><table class="list cbook"><thead><tr><th>Date</th><th>Description</th><th class="r">In</th><th class="r">Out</th><th style="min-width:230px">Goes to in Books</th></tr></thead><tbody>
+    ${list.map(x => `<tr><td>${fd(x.date)}</td><td><div class="t">${esc(descOf(x))}</div><div class="s">${esc(x.number)}${x.kind === "expense" && x.vatAmt ? " · VAT " + aed(x.vatAmt) : ""}</div></td><td class="r mono in">${isIn(x) ? aed(x.amount) : ""}</td><td class="r mono">${isOut(x) ? aed(x.amount) : ""}</td>
+      <td>${x.kind === "expense" ? `<select data-cat="${esc(x.id)}">${catOpts(x.category || guessCat(x.description, "expense"))}</select>`
+        : x.kind === "cashin" ? `<input data-inv="${esc(x.id)}" list="invl" placeholder="Invoice no., e.g. INV-2026-00068" value="${esc(x.invoiceNo)}"><div class="s" data-invs="${esc(x.id)}"></div><select data-inc="${esc(x.id)}" style="margin-top:4px">${incOpts(x.category || guessCat(x.description, "cashin"))}</select>`
+        : `<span class="s">Transfer ${x.kind === "topup" ? "from" : "to"} ${esc(bankName(x.bankAccount))}</span>`}</td></tr>`).join("")}
+    </tbody></table></div>
+    <datalist id="invl">${D.invoices.map(i => `<option value="${esc(i.number)}">${esc(i.customer)}, AED ${aed(i.balance)} due</option>`).join("")}</datalist>
+    <div class="err" id="err"></div>
+    <div class="foot"><button type="button" data-x>Cancel</button><button type="submit" class="primary">Post to Books</button></div></form>`, { wide: true, onOpen: (d, done) => {
+      const q = s => d.querySelector(s);
+      const invHint = id => { const v = d.querySelector(`[data-inv="${id}"]`).value.trim().toUpperCase(); const i = invs.get(v); const el = d.querySelector(`[data-invs="${id}"]`); const inc = d.querySelector(`[data-inc="${id}"]`);
+        el.innerHTML = !v ? "" : i ? `<span style="color:var(--good)">${esc(i.customer)}: payment against ${esc(i.number)} (AED ${aed(i.balance)} due)</span>` : `<span style="color:var(--bad)">Not an issued invoice in Books</span>`; inc.hidden = !!(v && i); };
+      d.querySelectorAll("[data-inv]").forEach(el => { el.addEventListener("input", () => invHint(el.dataset.inv)); invHint(el.dataset.inv); });
+      q("form").onsubmit = async e => { e.preventDefault(); const b = e.submitter; busy(b, true); q("#err").textContent = "";
+        const assign = {};
+        d.querySelectorAll("[data-cat]").forEach(el => { assign[el.dataset.cat] = { category: el.value }; });
+        d.querySelectorAll("[data-inv]").forEach(el => { const id = el.dataset.inv, v = el.value.trim().toUpperCase(); assign[id] = { invoiceNo: v, category: invs.has(v) ? "" : d.querySelector(`[data-inc="${id}"]`).value }; });
+        const miss = list.filter(x => (x.kind === "expense" && !assign[x.id].category) || (x.kind === "cashin" && !invs.has(assign[x.id].invoiceNo) && !assign[x.id].category));
+        if (miss.length) { q("#err").textContent = `Choose where ${miss.length === 1 ? miss[0].number + " goes" : miss.length + " entries go"} in Books (category, invoice or income account).`; busy(b, false); return; }
+        try { done(await api("POST", "post", { ids: list.map(x => x.id), assign })); } catch (err) { q("#err").textContent = err.message; busy(b, false); } };
+    } });
+  if (!r) return;
+  await load(); route();
+  if (r.failed.length) await dialog(`<form method="dialog"><h3>${r.done.length} posted, ${r.failed.length} not posted</h3><div style="display:grid;gap:6px;font-size:13px">${r.failed.map(f => `<div><b>${esc(f.number)}</b>: ${esc(f.reason)}</div>`).join("")}</div><div class="foot"><button type="button" class="primary" data-x>OK</button></div></form>`);
+  else toast(`Posted ${r.done.length} to Books.`);
 }
 
 /* ---------- all entries ---------- */
@@ -254,16 +400,16 @@ function entriesView(q) {
   const drawBulk = () => {
     if (!admin()) return;
     const n = [...sel].filter(id => D.entries.some(x => x.id === id && !x.booksId)).length;
-    $("bulk").innerHTML = n ? `<div class="bulk"><b>${n} selected</b><span class="sp"></span><span class="muted">Each expense posts as a Books expense with its receipts; top-ups and cash returned post as transfers.</span><button type="button" class="primary" id="postSel">Post ${n} to Books</button></div>` : "";
-    if (n) $("postSel").onclick = e => postIds([...sel], e.target);
+    $("bulk").innerHTML = n ? `<div class="bulk"><b>${n} selected</b><span class="sp"></span><span class="muted">You choose the category, invoice or income account for each one before posting.</span><button type="button" class="primary" id="postSel">Post ${n} to Books</button></div>` : "";
+    if (n) $("postSel").onclick = () => postDialog([...sel]);
   };
   const draw = () => {
     segs(); const L = list();
-    const tot = L.reduce((a, x) => a + (x.kind === "count" ? 0 : x.kind === "topup" ? 0 : x.amount), 0);
+    const tot = L.reduce((a, x) => a + (isOut(x) ? x.amount : 0), 0);
     $("rows").innerHTML = L.map(x => `<tr data-id="${esc(x.id)}" tabindex="0">${admin() ? `<td class="ck">${x.kind !== "count" && !x.booksId ? `<input type="checkbox" data-ck="${esc(x.id)}" ${sel.has(x.id) ? "checked" : ""} aria-label="Select ${esc(x.number)}">` : ""}</td>` : ""}
       <td>${fd(x.date)}</td><td><div class="t mono">${esc(x.number || "")}</div>${kindTag(x)}</td><td><div class="s">${esc(floatName(x.floatId))}</div></td>
-      <td>${x.kind === "expense" ? `<div class="t">${esc(x.payee)}</div><div class="s">${esc(x.description)} · ${esc(catName(x.category))}${x.project ? " · " + esc(x.project) : ""}</div>${clip(x)}` : x.kind === "count" ? `<div class="t">Cash count</div><div class="s">Counted AED ${aed(x.amount)}, expected AED ${aed(x.expected)}</div>` : `<div class="t">${esc(x.method)}</div><div class="s">${x.kind === "topup" ? "From" : "To"} ${esc((BANK.get(x.bankAccount) || {}).name || x.bankAccount)}${x.ref ? " · " + esc(x.ref) : ""}</div>`}</td>
-      <td class="r mono">${x.vatAmt ? aed(x.vatAmt) : ""}</td><td class="r mono ${x.kind === "topup" ? "in" : ""}">${x.kind === "count" ? "" : (x.kind === "topup" ? "+" : "") + aed(x.amount)}</td><td>${inBooks(x)}</td></tr>`).join("");
+      <td><div class="t">${esc(descOf(x))}</div><div class="s">${esc(subOf(x).replace(x.number + " · ", "").replace(x.number, ""))}${x.project ? " · " + esc(x.project) : ""}</div>${clip(x)}</td>
+      <td class="r mono">${x.vatAmt ? aed(x.vatAmt) : ""}</td><td class="r mono ${isIn(x) ? "in" : ""}">${x.kind === "count" ? "" : (isIn(x) ? "+" : "") + aed(x.amount)}</td><td>${inBooks(x)}</td></tr>`).join("");
     $("foot").innerHTML = L.length ? `<tr>${admin() ? "<td></td>" : ""}<td colspan="4">Spent and returned (${L.filter(x => x.kind === "expense").length} expenses)</td><td class="r mono">${aed(L.filter(x => x.kind === "expense").reduce((a, x) => a + x.vatAmt, 0))}</td><td class="r mono">${aed(tot)}</td><td></td></tr>` : "";
     $("empty").hidden = L.length > 0; $("empty").textContent = D.entries.length ? "Nothing matches these filters." : "Nothing logged yet.";
     $("cnt").textContent = `${L.length} entr${L.length === 1 ? "y" : "ies"}`;
@@ -275,23 +421,13 @@ function entriesView(q) {
   ["q", "ff", "fk", "fm"].forEach(i => $(i).addEventListener(i === "q" ? "input" : "change", draw));
   document.querySelectorAll("#fs button").forEach(b => b.onclick = () => { show = b.dataset.v; draw(); });
   draw();
-  $("xl").onclick = () => exportSheet(`Petty cash entries ${D.company.name}`, [["Entries", [["Date", "Voucher", "Type", "Float", "Held by", "Paid to / method", "Description", "Category", "Project / customer", "Receipt no.", "Supplier TRN", "Amount (AED)", "VAT (AED)", "VAT claimed", "Books", "Receipts", "Logged by"],
-    ...list().map(x => [x.date, x.number, D.kinds[x.kind], floatName(x.floatId), (FL.get(x.floatId) || {}).custodian || "", x.kind === "expense" ? x.payee : x.method, x.kind === "count" ? `Counted ${aed(x.amount)}, expected ${aed(x.expected)}` : x.description || x.ref, catName(x.category), x.project, x.receiptNo, x.payeeTrn, x.kind === "count" ? "" : x.amount, x.vatAmt || "", x.vatClaimed ? "Yes" : "", x.booksNo, x.files.length, x.createdBy])], [11, 12, 12, 20, 24, 22, 32, 22, 18, 12, 17, 12, 10, 10, 11, 8, 24]]]);
+  $("xl").onclick = () => exportSheet(`Petty cash entries ${D.company.name}`, [["Entries", [["Date", "Voucher", "Type", "Float", "Held by", "Paid to / invoice / method", "Description", "Category", "Project / customer", "Receipt no.", "Supplier TRN", "Amount (AED)", "VAT (AED)", "VAT claimed", "Books", "Receipts", "Logged by"],
+    ...list().map(x => [x.date, x.number, D.kinds[x.kind], floatName(x.floatId), (FL.get(x.floatId) || {}).custodian || "", x.kind === "expense" ? x.payee : x.kind === "cashin" ? x.invoiceNo : x.method, descOf(x), catName(x.category), x.project, x.receiptNo, x.payeeTrn, x.kind === "count" ? "" : x.amount, x.vatAmt || "", x.vatClaimed ? "Yes" : "", x.booksNo, x.files.length, x.createdBy])], [11, 12, 12, 20, 24, 22, 32, 22, 18, 12, 17, 12, 10, 10, 11, 8, 24]]]);
   if (q.get("open")) entryView(q.get("open"));
 }
-async function postIds(ids, btn) {
-  busy(btn, true);
-  try {
-    const r = await api("POST", "post", { ids });
-    await load(); route();
-    if (r.failed.length) await dialog(`<form method="dialog"><h3>${r.done.length} posted, ${r.failed.length} not posted</h3><div style="display:grid;gap:6px;font-size:13px">${r.failed.map(f => `<div><b>${esc(f.number)}</b>: ${esc(f.reason)}</div>`).join("")}</div><div class="foot"><button type="button" class="primary" data-x>OK</button></div></form>`);
-    else toast(`Posted ${r.done.length} to Books.`);
-  } catch (e) { toast(e.message, true); busy(btn, false); }
-}
-
 /* ---------- actions ---------- */
 function act(a, floatId) {
-  if (a === "expense" || a === "topup" || a === "return" || a === "count") return entryForm(a, { floatId });
+  if (a === "expense" || a === "cashin" || a === "topup" || a === "return" || a === "count") return entryForm(a, { floatId });
   if (a === "request") return requestForm(FL.get(floatId));
 }
 async function setStatus(f) {
@@ -363,8 +499,8 @@ async function entryForm(kind, pre = {}, cur) {
   if (!options.length) return toast(admin() ? "Set up a float first." : "You don't hold an active petty cash float.", true);
   const fid = (cur && cur.floatId) || pre.floatId || (options.find(mine) || options[0]).id;
   const fl = FL.get(fid);
-  const v = cur || { date: D.today, amount: kind === "topup" && fl ? r2(Math.max(0, fl.limit - fl.balance)) || "" : kind === "return" && fl ? fl.balance : "", vatAmt: "", method: "Cash withdrawal" };
-  const T = { expense: edit ? `Edit ${cur.number}` : "Log an expense", topup: edit ? `Edit top-up ${cur.number}` : "Top up a float", return: edit ? `Edit ${cur.number}` : "Cash returned to the bank", count: edit ? "Edit cash count" : "Cash count" }[kind];
+  const v = cur || { date: pre.date || D.today, description: pre.description || "", amount: pre.amount || (kind === "topup" && fl ? r2(Math.max(0, fl.limit - fl.balance)) || "" : kind === "return" && fl ? fl.balance : ""), vatAmt: "", method: "Cash withdrawal" };
+  const T = { expense: edit ? `Edit ${cur.number}` : "Log an expense", cashin: edit ? `Edit ${cur.number}` : "Cash in (cash sales and other cash received)", topup: edit ? `Edit top-up ${cur.number}` : "Top up a float", return: edit ? `Edit ${cur.number}` : "Cash returned to the bank", count: edit ? "Edit cash count" : "Cash count" }[kind];
   const lastBank = (D.entries.find(x => x.kind === "topup") || {}).bankAccount || (D.banks.find(b => b.type === "bank") || {}).code;
   const files = [];
   const r = await dialog(`<form novalidate><h3>${esc(T)}</h3>
@@ -373,14 +509,20 @@ async function entryForm(kind, pre = {}, cur) {
     ${kind === "expense" ? `
     <div class="fields"><label><span class="lbl">Total paid (AED) *</span><input id="amt" type="number" min="0.01" step="0.01" inputmode="decimal" value="${v.amount}"><span class="hint">Including any VAT, as on the receipt.</span></label>
       <label><span class="lbl">VAT on the receipt (AED)</span><input id="vat" type="number" min="0" step="0.01" inputmode="decimal" value="${v.vatAmt || ""}" placeholder="0.00"><span class="quick"><button type="button" id="v5">5% included</button><button type="button" id="v0">No VAT</button></span></label></div>
-    <div class="fields"><label><span class="lbl">Paid to *</span><input id="py" maxlength="150" list="pys" value="${esc(v.payee || "")}" placeholder="Shop, supplier or person"></label>
-      <label><span class="lbl">Category *</span><select id="ct"><option value="">Choose…</option>${D.categories.map(c => `<option value="${esc(c.code)}" ${v.category === c.code ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>
+    <div class="fields"><label><span class="lbl">Paid to</span><input id="py" maxlength="150" list="pys" value="${esc(v.payee || "")}" placeholder="Shop, supplier or person"></label>
+      <label><span class="lbl">Category</span><select id="ct"><option value="">Choose now or when posting…</option>${D.categories.map(c => `<option value="${esc(c.code)}" ${v.category === c.code ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>
     <label><span class="lbl">What was it for? *</span><input id="ds" maxlength="500" value="${esc(v.description || "")}" placeholder="e.g. Patch cords for the Al Garhoud site"></label>
     <div class="fields three"><label><span class="lbl">Receipt / invoice no.</span><input id="rn" maxlength="60" value="${esc(v.receiptNo || "")}"></label>
       <label><span class="lbl">Supplier TRN</span><input id="trn" maxlength="20" inputmode="numeric" value="${esc(v.payeeTrn || "")}" placeholder="15 digits, if shown"></label>
       <label><span class="lbl">Project / customer</span><input id="pj" maxlength="150" list="pjs" value="${esc(v.project || "")}" placeholder="Optional"></label></div>
     <div class="vat-hint" id="vh"></div>
     ${edit ? "" : `<div><span class="lbl">Receipt photos or PDF</span><div class="files" id="fls"><label class="addfile">+ Add receipt<input type="file" id="fi" accept="image/*,application/pdf" multiple hidden></label></div></div>`}
+    ` : kind === "cashin" ? `
+    <div class="fields"><label><span class="lbl">Amount received (AED) *</span><input id="amt" type="number" min="0.01" step="0.01" inputmode="decimal" value="${v.amount}"></label>
+      <label><span class="lbl">Invoice it pays</span><input id="inv" maxlength="40" list="invl" value="${esc(v.invoiceNo || "")}" placeholder="e.g. INV-2026-00068"><span class="hint" id="ih"></span></label></div>
+    <label><span class="lbl">Description *</span><input id="ds" maxlength="500" value="${esc(v.description || "")}" placeholder="e.g. Cash sales INV-2026-00068"></label>
+    <label id="incw"><span class="lbl">Income account (when there's no invoice)</span><select id="ct"><option value="">Choose now or when posting…</option>${D.incomeAccounts.map(c => `<option value="${esc(c.code)}" ${v.category === c.code ? "selected" : ""}>${esc(c.code)} ${esc(c.name)}</option>`).join("")}</select></label>
+    <datalist id="invl">${D.invoices.map(i => `<option value="${esc(i.number)}">${esc(i.customer)}, AED ${aed(i.balance)} due</option>`).join("")}</datalist>
     ` : kind === "count" ? `
     <div class="fields"><label><span class="lbl">Cash counted (AED) *</span><input id="amt" type="number" min="0" step="0.01" inputmode="decimal" value="${edit ? v.amount : ""}"></label><div><span class="lbl">Balance per the tool</span><div class="mono" id="exp" style="padding-top:8px;font-size:16px"></div></div></div>
     <div class="vat-hint" id="ch"></div>
@@ -392,12 +534,14 @@ async function entryForm(kind, pre = {}, cur) {
     ${admin() && kind !== "count" && !edit ? `<label class="chk"><input type="checkbox" id="pb" ${kind !== "expense" ? "checked" : ""}> Post to Books now</label>` : ""}
     <datalist id="pys">${[...new Set(D.entries.filter(x => x.payee).map(x => x.payee))].slice(0, 60).map(p => `<option value="${esc(p)}">`).join("")}</datalist>
     <datalist id="pjs">${[...new Set(D.entries.filter(x => x.project).map(x => x.project))].slice(0, 60).map(p => `<option value="${esc(p)}">`).join("")}</datalist>
-    <div class="err" id="err"></div><div class="foot"><button type="button" data-x>Cancel</button><button type="submit" class="primary">${edit ? "Save" : kind === "expense" ? "Save expense" : kind === "count" ? "Save count" : kind === "topup" ? "Record top-up" : "Record"}</button></div></form>`,
+    <div class="err" id="err"></div><div class="foot"><button type="button" data-x>Cancel</button><button type="submit" class="primary">${edit ? "Save" : kind === "expense" ? "Save expense" : kind === "cashin" ? "Save cash in" : kind === "count" ? "Save count" : kind === "topup" ? "Record top-up" : "Record"}</button></div></form>`,
     { wide: kind === "expense", onOpen: (d, done) => {
       const q = s => d.querySelector(s);
       const flNow = () => FL.get(q("#fl").value);
       const hint = () => {
         if (kind === "expense") { const s = vatState({ vatAmt: num(q("#vat").value), payeeTrn: q("#trn").value.replace(/\s+/g, ""), receiptNo: q("#rn").value.trim() }); q("#vh").className = "vat-hint " + s.cls; q("#vh").textContent = s.text; }
+        if (kind === "cashin") { const raw = q("#inv").value.trim() || ((/\bINV-?[\d-]{3,}\b/i.exec(q("#ds").value) || [])[0] || ""); const i = D.invoices.find(x => x.number.toUpperCase() === raw.toUpperCase());
+          q("#ih").textContent = !raw ? "" : i ? `${i.customer}, AED ${aed(i.balance)} due. Posts as a payment against it.` : "Not found among issued invoices in Books."; q("#incw").hidden = !!i; }
         if (kind === "count") { const f = flNow(); const exp = edit ? cur.expected : f.balance; q("#exp").textContent = "AED " + aed(exp); const a = q("#amt").value; const df = r2(num(a) - exp);
           q("#ch").className = "vat-hint " + (a === "" ? "" : Math.abs(df) < 0.005 ? "ok" : "warn"); q("#ch").textContent = a === "" ? "Count the notes and coins in the box, then enter the total." : Math.abs(df) < 0.005 ? "The cash matches the balance." : `The cash is ${df > 0 ? "over" : "short"} by AED ${aed(Math.abs(df))}. Check for expenses not logged yet.`; }
         if (kind === "topup" || kind === "return") { const f = flNow(); q("#ah").textContent = kind === "topup" ? `Holds AED ${aed(f.balance)}; AED ${aed(Math.max(0, f.limit - f.balance))} brings it to the float.` : `Holds AED ${aed(f.balance)}.`; }
@@ -417,6 +561,7 @@ async function entryForm(kind, pre = {}, cur) {
         e.preventDefault(); const b = e.submitter; busy(b, true); q("#err").textContent = "";
         const body = { kind, floatId: q("#fl").value, date: q("#dt").value, amount: q("#amt").value, note: q("#nt").value };
         if (kind === "expense") Object.assign(body, { vatAmt: q("#vat").value, payee: q("#py").value, category: q("#ct").value, description: q("#ds").value, receiptNo: q("#rn").value, payeeTrn: q("#trn").value, project: q("#pj").value, files: files.map(({ name, type, data }) => ({ name, type, data })) });
+        if (kind === "cashin") Object.assign(body, { description: q("#ds").value, invoiceNo: q("#inv").value, category: q("#ct").value });
         if (kind === "topup" || kind === "return") Object.assign(body, { bankAccount: q("#bk").value, method: q("#mt").value, ref: q("#rf").value });
         if (q("#pb")) body.post = q("#pb").checked;
         if (edit) body.etag = cur.etag;
@@ -437,11 +582,13 @@ async function entryView(id) {
     <div class="dl2">
       <div><span>Date</span><b>${fd(x.date)}</b></div><div><span>Float</span><b>${esc(f.name || "")}</b></div>
       <div><span>${x.kind === "count" ? "Cash counted" : "Amount"}</span><b class="mono">AED ${aed(x.amount)}</b></div>
-      ${x.kind === "expense" ? `<div><span>Paid to</span><b>${esc(x.payee)}</b></div><div><span>Category</span><b>${esc(catName(x.category))}</b></div><div><span>VAT</span><b class="mono">${x.vatAmt ? "AED " + aed(x.vatAmt) : "None"}</b></div>
+      ${x.kind === "expense" ? `<div><span>Paid to</span><b>${esc(x.payee || "-")}</b></div><div><span>Category</span><b>${esc(catName(x.category) || "Not chosen yet")}</b></div><div><span>VAT</span><b class="mono">${x.vatAmt ? "AED " + aed(x.vatAmt) : "None"}</b></div>
         <div><span>Receipt no.</span><b>${esc(x.receiptNo || "-")}</b></div><div><span>Supplier TRN</span><b class="mono">${esc(x.payeeTrn || "-")}</b></div>${x.project ? `<div><span>Project / customer</span><b>${esc(x.project)}</b></div>` : ""}` : ""}
+      ${x.kind === "cashin" ? `<div><span>Invoice it pays</span><b>${esc(x.invoiceNo || "-")}</b></div><div><span>Income account</span><b>${esc(x.invoiceNo ? "-" : catName(x.category) || "Not chosen yet")}</b></div>` : ""}
       ${x.kind === "count" ? `<div><span>Balance per the tool</span><b class="mono">AED ${aed(x.expected)}</b></div><div><span>Difference</span><b class="mono" style="color:${Math.abs(x.amount - x.expected) > 0.004 ? "var(--bad)" : "var(--good)"}">${aed(x.amount - x.expected)}</b></div>` : ""}
       ${["topup", "return"].includes(x.kind) ? `<div><span>${x.kind === "topup" ? "From" : "To"}</span><b>${esc(x.bankAccount)} ${esc((BANK.get(x.bankAccount) || {}).name || "")}</b></div><div><span>How</span><b>${esc(x.method)}</b></div><div><span>Reference</span><b>${esc(x.ref || "-")}</b></div>` : ""}
     </div>
+    ${x.kind === "cashin" ? `<div><span class="lbl">Description</span>${esc(x.description)}</div>` : ""}
     ${x.kind === "expense" ? `<div><span class="lbl">For</span>${esc(x.description)}</div><div class="vat-hint ${st.cls}">${esc(st.text)}</div>` : ""}
     ${x.note ? `<div><span class="lbl">Note</span>${esc(x.note)}</div>` : ""}
     ${x.kind === "expense" ? `<div><span class="lbl">Receipts</span><div class="files" id="fls">${x.files.map(fl => `<a class="fthumb" href="${fileUrl(x, fl)}" target="_blank" rel="noopener" title="${esc(fl.name)}">${fl.type.startsWith("image/") && !/hei[cf]/.test(fl.type) ? `<img src="${fileUrl(x, fl)}" alt="${esc(fl.name)}" loading="lazy">` : `<span>PDF<br>${esc(fl.name)}</span>`}${canEdit && (admin() || fl.by === D.me) ? `<button type="button" data-rm="${esc(fl.id)}" aria-label="Remove ${esc(fl.name)}">×</button>` : ""}</a>`).join("")}${canEdit ? `<label class="addfile">+ Add receipt<input type="file" id="fi" accept="image/*,application/pdf" multiple hidden></label>` : ""}${!x.files.length && !canEdit ? `<span class="muted sm">None attached.</span>` : ""}</div>${x.booksId && x.booksId !== "pending" && x.files.length ? `<div class="hint">Copies are attached to ${esc(x.booksNo)} in Books.</div>` : ""}</div>` : ""}
@@ -455,9 +602,9 @@ async function entryView(id) {
     </div></form>`, { wide: true, onOpen: (d, done) => {
       const q = s => d.querySelector(s); const err = m => { q("#err").textContent = m; };
       if (q("#ed")) q("#ed").onclick = () => done("edit");
-      if (q("#epv")) q("#epv").onclick = () => window.BXPdf.preview(() => voucherPdf(x), safe(`${x.number} ${x.payee}`) + ".pdf");
-      if (q("#vpdf")) q("#vpdf").onclick = async e => { busy(e.target, true); try { saveBlob(await voucherPdf(x), safe(`${x.number} ${x.payee}`) + ".pdf"); } catch (er) { err(er.message); } finally { busy(e.target, false); } };
-      if (q("#post")) q("#post").onclick = async e => { busy(e.target, true); try { const r = await api("POST", "post", { ids: [x.id] }); if (r.failed.length) { err(r.failed[0].reason); busy(e.target, false); } else done("posted"); } catch (er) { err(er.message); busy(e.target, false); } };
+      if (q("#epv")) q("#epv").onclick = () => window.BXPdf.preview(() => voucherPdf(x), safe(`${x.number} ${x.payee || x.description}`) + ".pdf");
+      if (q("#vpdf")) q("#vpdf").onclick = async e => { busy(e.target, true); try { saveBlob(await voucherPdf(x), safe(`${x.number} ${x.payee || x.description}`) + ".pdf"); } catch (er) { err(er.message); } finally { busy(e.target, false); } };
+      if (q("#post")) q("#post").onclick = () => done("post");
       if (q("#rel")) q("#rel").onclick = async e => { busy(e.target, true); try { await api("POST", `entries/${x.id}/release`); done("released"); } catch (er) { err(er.message); busy(e.target, false); } };
       if (q("#del")) q("#del").onclick = async e => { if (!confirm(`Delete ${x.number || "this entry"}? This can't be undone.`)) return; busy(e.target, true); try { await api("DELETE", "entries/" + x.id); done("deleted"); } catch (er) { err(er.message); busy(e.target, false); } };
       d.querySelectorAll("[data-rm]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation(); try { await api("DELETE", `entries/${x.id}/files/${b.dataset.rm}`); done("files"); } catch (er) { err(er.message); } });
@@ -467,6 +614,7 @@ async function entryView(id) {
   await load(); route();
   if (res === "edit") return entryForm(x.kind, {}, D.entries.find(e => e.id === id));
   if (res === "files") return entryView(id);
+  if (res === "post") return postDialog([id]);
   toast({ posted: "Posted to Books.", released: "Released. You can edit and post it again.", deleted: "Deleted." }[res] || "Saved.");
 }
 
@@ -498,7 +646,7 @@ async function voucherPdf(x) {
   const C = await brandHead(doc, "PETTY CASH VOUCHER", `${x.number}  ·  ${fd(x.date)}`, W);
   const net = r2(x.amount - x.vatAmt);
   doc.autoTable({ startY: 33, margin: { left: M, right: M }, theme: "plain", styles: { fontSize: 9.5, cellPadding: 1.8, textColor: 30 }, columnStyles: { 0: { cellWidth: 38, textColor: 110 }, 2: { cellWidth: 34, textColor: 110 } },
-    body: [["Paid to", x.payee, "Voucher no.", x.number], ["Supplier TRN", x.payeeTrn || "-", "Date", fd(x.date)], ["Receipt / invoice no.", x.receiptNo || "-", "Float", f.name || ""], ["Project / customer", x.project || "-", "Books", x.booksNo || "Not posted yet"]] });
+    body: [["Paid to", x.payee || "-", "Voucher no.", x.number], ["Supplier TRN", x.payeeTrn || "-", "Date", fd(x.date)], ["Receipt / invoice no.", x.receiptNo || "-", "Float", f.name || ""], ["Project / customer", x.project || "-", "Books", x.booksNo || "Not posted yet"]] });
   doc.autoTable({ startY: doc.lastAutoTable.finalY + 4, margin: { left: M, right: M }, theme: "grid", head: [["Description", "Category", "Amount (AED)"]],
     body: [[x.description + (x.note ? "\n" + x.note : ""), catName(x.category), { content: aed(net), styles: { halign: "right" } }]],
     foot: [[{ content: "VAT", colSpan: 2, styles: { halign: "right" } }, { content: aed(x.vatAmt), styles: { halign: "right" } }], [{ content: "Total paid", colSpan: 2, styles: { halign: "right" } }, { content: aed(x.amount), styles: { halign: "right" } }]],
@@ -529,13 +677,13 @@ async function statementPdf(f, from, to, label) {
   const S = statementRows(f, from, to);
   doc.setFontSize(9); doc.setTextColor(60); doc.text(`Held by ${nameOf(f.custodian)} (${f.custodian})  ·  Float AED ${aed(f.limit)}  ·  Books account ${f.account}`, M, 33);
   const ex = S.rows.filter(r => r.x.kind === "expense").map(r => r.x);
-  doc.autoTable({ startY: 37, margin: { left: M, right: M, bottom: 16 }, theme: "grid", head: [["Date", "Voucher", "Details", "In", "Out", "Balance", "Books"]],
-    body: [["", "", { content: "Opening balance", styles: { fontStyle: "bold" } }, "", "", aed(S.opening), ""], ...S.rows.map(({ x, bal }) => [fd(x.date), x.number || D.kinds[x.kind],
-      x.kind === "expense" ? `${x.payee}: ${x.description}\n${catName(x.category)}${x.vatAmt ? "  ·  VAT " + aed(x.vatAmt) : ""}${x.files.length ? "" : "  ·  no receipt"}` : x.kind === "count" ? `Cash count: ${aed(x.amount)} counted, ${aed(x.expected)} expected` : `${D.kinds[x.kind]}: ${x.method}${x.ref ? ", " + x.ref : ""}`,
-      x.kind === "topup" ? aed(x.amount) : "", ["expense", "return"].includes(x.kind) ? aed(x.amount) : "", aed(bal), x.booksNo || (x.kind === "count" ? "" : "Not posted")])],
-    foot: [[{ content: "Closing balance", colSpan: 3 }, aed(S.rows.reduce((a, r) => a + (r.x.kind === "topup" ? r.x.amount : 0), 0)), aed(S.rows.reduce((a, r) => a + (["expense", "return"].includes(r.x.kind) ? r.x.amount : 0), 0)), aed(S.closing), ""]],
-    headStyles: { fillColor: C.p, textColor: 255, fontSize: 8.4 }, footStyles: { fillColor: C.soft, textColor: 20, fontStyle: "bold", fontSize: 8.6 }, styles: { fontSize: 8.2, cellPadding: 1.8, lineColor: [220, 226, 232], lineWidth: 0.15, textColor: 30, valign: "top" },
-    columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 22 }, 3: { halign: "right", cellWidth: 20 }, 4: { halign: "right", cellWidth: 20 }, 5: { halign: "right", cellWidth: 22 }, 6: { cellWidth: 20 } } });
+  const tIn = S.rows.reduce((a, r) => a + (isIn(r.x) ? r.x.amount : 0), 0), tOut = S.rows.reduce((a, r) => a + (isOut(r.x) ? r.x.amount : 0), 0);
+  doc.autoTable({ startY: 37, margin: { left: M, right: M, bottom: 16 }, theme: "grid", head: [["Date", "Description", "Amount In", "Amount Out", "Balance"]],
+    body: [[from ? fd(from) : "", { content: "Cash in hand" + (from ? " brought forward" : ""), styles: { fontStyle: "bold" } }, S.opening ? aed(S.opening) : "", "", aed(S.opening)], ...S.rows.map(({ x, bal }) => [fd(x.date),
+      descOf(x) + (subOf(x) ? "\n" + subOf(x) + (x.booksNo ? " · Books " + x.booksNo : "") : ""), isIn(x) ? aed(x.amount) : "", isOut(x) ? aed(x.amount) : "", aed(bal)])],
+    foot: [["", "Total", aed(r2(tIn + S.opening)), aed(tOut), aed(S.closing)]],
+    headStyles: { fillColor: C.p, textColor: 255, fontSize: 8.6 }, footStyles: { fillColor: C.soft, textColor: 20, fontStyle: "bold", fontSize: 8.8 }, styles: { fontSize: 8.4, cellPadding: 1.9, lineColor: [220, 226, 232], lineWidth: 0.15, textColor: 30, valign: "top" },
+    columnStyles: { 0: { cellWidth: 24 }, 2: { halign: "right", cellWidth: 25 }, 3: { halign: "right", cellWidth: 25 }, 4: { halign: "right", cellWidth: 25 } } });
   if (ex.length) {
     const by = {}; ex.forEach(x => { const k = catName(x.category); by[k] = by[k] || [0, 0]; by[k][0] = r2(by[k][0] + x.amount - x.vatAmt); by[k][1] = r2(by[k][1] + x.vatAmt); });
     doc.autoTable({ startY: doc.lastAutoTable.finalY + 8, margin: { left: M, right: M, bottom: 16 }, theme: "grid", head: [["Spending by category", "Before VAT", "VAT", "Total"]],

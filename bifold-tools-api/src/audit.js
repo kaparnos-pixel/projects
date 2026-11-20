@@ -223,7 +223,8 @@ module.exports = function makeAudit(H) {
         if (method === "PUT") return [A, "Edited petty cash float", name, ch];
       }
       if (b === "entries") {
-        const K = { expense: "expense", topup: "top-up", return: "cash returned", count: "cash count" }[out.kind || ""] || "entry";
+        const K = { expense: "expense", cashin: "cash in", topup: "top-up", return: "cash returned", count: "cash count" }[out.kind || ""] || "entry";
+        if (c === "bulk") return [A, "Added cash book rows", name, det];
         if (d === "files") return [A, method === "POST" ? "Attached receipt" : method === "DELETE" ? "Removed receipt" : seg[5] === "download" ? "Downloaded receipt" : "Opened receipt", name, det];
         if (d === "release") return [A, "Released entry after Books void", name, det];
         if (!c && method === "POST") return [A, (out.posted ? "Recorded and posted " : "Recorded ") + K, name, det];

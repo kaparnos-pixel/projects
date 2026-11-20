@@ -1229,5 +1229,7 @@ module.exports = function makeBooks(H) {
   // Petty cash: the accounts and VAT settings it needs (read by anyone with petty cash access, without Books access).
   async function pcInfo(co) { const [s, accounts] = await Promise.all([loadSettings(co), listAccounts(co)]); return { accounts, vatRegistered: s.vatRegistered, lockDate: s.lockDate, cashVatThreshold: s.cashVatThreshold }; }
   async function docStatus(co, id) { const e = await getOrNull(await table(T), dPK(co), id); return e ? e.status : null; }
-  return { route, alerts, TYPES, invoicesForAmc, orgProfile, challansFor, stockDocs, stockDoc, pcInfo, docStatus };
+  // Petty cash: issued invoices, so cash sales logged in petty cash can be posted as payments against them.
+  async function pcInvoices(co) { return decorate(await allDocs(co)).filter(d => d.type === "invoice" && d.status === "posted").map(d => ({ id: d.id, number: d.number, date: d.date, contactId: d.contactId, contactName: d.contactName, total: d.total, balance: d.balance })); }
+  return { route, alerts, TYPES, invoicesForAmc, orgProfile, challansFor, stockDocs, stockDoc, pcInfo, docStatus, pcInvoices };
 };

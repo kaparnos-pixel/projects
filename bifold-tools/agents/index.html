@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Agent Inbox · Bifold Tools</title>
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
+<style>
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:18px}
+header.top .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.lastrun{font-size:12px;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0;box-shadow:var(--shadow)}
+.kpi .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.kpi .v{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:24px;font-weight:600;margin-top:2px}
+.kpi .s{font-size:12px;color:var(--muted)}
+.kpi.alert .v{color:var(--bad)}
+.tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface);flex-wrap:wrap}
+.seg button{border:0;border-radius:0;background:none;padding:7px 12px;color:var(--muted);box-shadow:none}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.seg button[aria-pressed="true"]:hover{color:var(--on-accent)}
+.seg em{font-style:normal;font-family:var(--f-num);font-size:11px;margin-left:5px;opacity:.8}
+.tools select,.tools input{width:auto}
+.tools input[type=search]{flex:1 1 200px;max-width:320px}
+.tools .cnt{margin-left:auto;font-size:13px;color:var(--muted)}
+.cards{display:grid;gap:12px}
+.card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px 14px 22px;box-shadow:var(--shadow);min-width:0}
+.card::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:4px;border-radius:0 3px 3px 0;background:var(--accent)}
+.card.high::before{background:var(--bad)}.card.medium::before{background:var(--warn)}
+.card.closed{opacity:.78}.card.closed::before{background:var(--line)}
+.meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
+.ag{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:2px 7px;background:var(--accent-soft);color:var(--accent)}
+.ag.a2{background:var(--good-soft);color:var(--good)}.ag.a3{background:var(--bad-soft);color:var(--bad)}.ag.a4{background:var(--warn-soft);color:var(--warn)}
+.sev{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.sev.high{color:var(--bad)}.sev.medium{color:var(--warn)}
+.card h3{margin:6px 0 4px;font-size:16px;line-height:1.35}
+.card p.sum{margin:0 0 10px;color:var(--fg);max-width:95ch}
+dl.facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 18px;margin:0 0 12px;padding:10px 12px;background:var(--sunk);border-radius:8px}
+dl.facts div{min-width:0}
+dl.facts dt{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+dl.facts dd{margin:0;font-size:13px;overflow-wrap:anywhere}
+.acts2{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.acts2 .sp{flex:1}
+.acts2 select{width:auto;padding:6px 8px}
+.state{font-size:12.5px;color:var(--muted)}
+.state b{color:var(--fg)}
+.src{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:99px;padding:2px 8px;background:var(--sunk);color:var(--muted)}
+.src.claude{background:var(--accent-soft);color:var(--accent)}
+#draftDlg{width:min(760px,calc(100% - 24px))}
+#setDlg{width:min(680px,calc(100% - 24px))}
+#draftDlg textarea{font-family:var(--f-body);line-height:1.55;resize:vertical}
+.dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.full{grid-column:1/-1}
+dialog .foot{justify-content:space-between}
+dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.toggles{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}
+.tg{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer}
+.tg input{width:auto;margin-top:3px;flex:0 0 auto}
+.tg b{display:block}.tg span{font-size:12px;color:var(--muted)}
+.qr{display:flex;flex-wrap:wrap;gap:6px}
+.qr button{font-size:12px;padding:4px 9px;font-weight:500}
+.note{font-size:12px;color:var(--muted);margin-top:14px;max-width:90ch}
+.banner{border:1px solid var(--line);background:var(--surface);border-left:4px solid var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px}
+@media (max-width:640px){.kpis{grid-template-columns:1fr 1fr;gap:8px}.kpi .v{font-size:18px}.card{padding:14px 14px 12px 18px}}
+</style>
+<script src="/assets/access.js"></script>
+</head>
+<body>
+<div class="brandbar"><div class="in">
+  <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
+  <nav><a href="/">All tools</a><a href="/pipeline/">Sales Pipeline</a><a href="/amc/">AMC Tracker</a><span id="who"></span><a href="/.auth/logout">Sign out</a></nav>
+</div></div>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1><span class="tag">Bifold Tools</span>Agent Inbox</h1>
+      <p class="sub">Every morning the agents check renewals, quiet deals, quotation margins and unpaid invoices, and leave drafts and alerts here. Nothing reaches a customer until you send it.</p>
+    </div>
+    <div class="acts">
+      <span class="lastrun" id="lastRun"></span>
+      <button type="button" id="setBtn" hidden>Agent settings</button>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <section class="kpis" aria-label="Summary">
+    <div class="kpi" id="kOpenBox"><div class="k" id="kOpenK">Waiting for you</div><div class="v" id="kOpen">–</div><div class="s" id="kOpenS"></div></div>
+    <div class="kpi" id="kHighBox"><div class="k">High priority</div><div class="v" id="kHigh">–</div><div class="s">Overdue, below cost or expiring</div></div>
+    <div class="kpi"><div class="k">Acted on, last 30 days</div><div class="v" id="kDone">–</div><div class="s" id="kDoneS"></div></div>
+    <div class="kpi"><div class="k">Drafts written by Claude</div><div class="v" id="kDraft">–</div><div class="s" id="kDraftS"></div></div>
+  </section>
+
+  <div class="tools">
+    <div class="seg" role="group" aria-label="Agent" id="agSeg">
+      <button type="button" data-v="" aria-pressed="true">All<em id="c_"></em></button>
+      <button type="button" data-v="a1" aria-pressed="false">Renewals &amp; warranty<em id="c_a1"></em></button>
+      <button type="button" data-v="a2" aria-pressed="false">Follow-ups<em id="c_a2"></em></button>
+      <button type="button" data-v="a3" aria-pressed="false">Margin<em id="c_a3"></em></button>
+      <button type="button" data-v="a4" aria-pressed="false">Collections<em id="c_a4"></em></button>
+    </div>
+    <select id="stF" aria-label="Status">
+      <option value="open">Open</option>
+      <option value="snoozed">Snoozed</option>
+      <option value="sent">Sent</option>
+      <option value="closed">Done or dismissed</option>
+      <option value="resolved">Closed by the agent</option>
+      <option value="">Everything</option>
+    </select>
+    <select id="ownF" aria-label="Owner" hidden></select>
+    <input id="q" type="search" placeholder="Search customer, invoice, deal" aria-label="Search">
+    <span class="cnt" id="cnt"></span>
+  </div>
+
+  <div class="cards" id="cards"></div>
+  <div class="panel empty" id="empty">Loading…</div>
+  <p class="note">The agents run at about 6:15 Dubai time every day and email each person a short digest of what is new. When the reason for an item goes away (a renewal is started, a deal moves on, an invoice is paid, a quotation is repriced) the agent closes it by itself. Dismissing an item with a reason helps tune the agents.</p>
+</div>
+
+<dialog id="draftDlg">
+  <form id="draftForm" novalidate>
+    <div class="dhead"><div><h3 id="dTitle">Review and send</h3><div class="meta" id="dMeta"></div></div><button type="button" class="x" id="dX" aria-label="Close">×</button></div>
+    <div class="fields">
+      <label class="full"><span class="lbl">To</span><input id="d_to" autocomplete="off" placeholder="customer@example.com"></label>
+      <label class="full"><span class="lbl">Cc</span><input id="d_cc" autocomplete="off" placeholder="Optional"></label>
+      <label class="full"><span class="lbl">Subject</span><input id="d_subject" autocomplete="off"></label>
+      <label class="full"><span class="lbl">Message</span><textarea id="d_body" rows="15"></textarea></label>
+    </div>
+    <div class="hint" id="dHint"></div>
+    <div class="err" id="dErr" role="alert"></div>
+    <div class="foot">
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="dCopy">Copy</button><button type="button" id="dMailto">Open in Outlook</button></div>
+      <div class="r2"><button type="button" id="dSave">Save draft</button><button type="submit" class="primary" id="dSend">Send email</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="disDlg">
+  <form id="disForm" novalidate>
+    <div class="dhead"><h3>Dismiss this item</h3><button type="button" class="x" id="disX" aria-label="Close">×</button></div>
+    <p class="hint" style="margin:0">Why isn't it needed? The reason is kept and used to tune the agents.</p>
+    <div class="qr" id="disQuick">
+      <button type="button">Already handled by phone or in person</button><button type="button">Customer has asked us to wait</button><button type="button">Pricing approved by a manager</button><button type="button">Not relevant for this customer</button><button type="button">Wrong contact or details</button>
+    </div>
+    <textarea id="disReason" rows="3" placeholder="Reason"></textarea>
+    <div class="err" id="disErr" role="alert"></div>
+    <div class="foot"><div class="r2"><button type="button" id="disCancel">Cancel</button><button type="submit" class="primary">Dismiss</button></div></div>
+  </form>
+</dialog>
+
+<dialog id="asgDlg">
+  <form id="asgForm" novalidate>
+    <div class="dhead"><h3>Reassign</h3><button type="button" class="x" id="asgX" aria-label="Close">×</button></div>
+    <label><span class="lbl">New owner's email</span><input id="asgEmail" type="email" autocomplete="off" list="ownList"></label>
+    <datalist id="ownList"></datalist>
+    <div class="err" id="asgErr" role="alert"></div>
+    <div class="foot"><div class="r2"><button type="button" id="asgCancel">Cancel</button><button type="submit" class="primary">Reassign</button></div></div>
+  </form>
+</dialog>
+
+<dialog id="setDlg">
+  <form id="setForm" novalidate>
+    <div class="dhead"><h3>Agent settings</h3><button type="button" class="x" id="setX" aria-label="Close">×</button></div>
+    <p class="hint" style="margin:0" id="setCo"></p>
+    <div class="toggles" id="setAgents"></div>
+    <div class="fields">
+      <label><span class="lbl">Renewal alerts start (days before AMC end)</span><select id="s_renewalDays"><option>30</option><option>45</option><option>60</option><option>90</option><option>120</option></select></label>
+      <label><span class="lbl">Warranty alerts start (days before end)</span><select id="s_warrantyDays"><option>30</option><option>60</option><option>90</option><option>120</option></select></label>
+      <label><span class="lbl">Follow up proposals quiet for (days)</span><input id="s_followupDays" class="num" type="number" min="2" max="30"></label>
+      <label><span class="lbl">Follow up site surveys quiet for (days)</span><input id="s_surveyDays" class="num" type="number" min="2" max="30"></label>
+      <label><span class="lbl">Margin floor on quotations (%)</span><input id="s_marginFloor" class="num" type="number" min="0" max="80" step="0.5"></label>
+      <label><span class="lbl">Claude drafts per month (cap)</span><input id="s_monthlyDrafts" class="num" type="number" min="0" max="5000"></label>
+      <label class="full"><span class="lbl">Collections and cash outlook go to</span><input id="s_financeEmail" type="email" placeholder="Leave empty to send each reminder to the person who issued the invoice"></label>
+      <label class="full tg" style="cursor:pointer"><input type="checkbox" id="s_digest"><div><b>Morning digest email</b><span>Each person gets one email listing their new items. Nothing goes to customers.</span></div></label>
+    </div>
+    <div class="err" id="setErr" role="alert"></div>
+    <div class="foot"><div class="r2"><button type="button" id="setCancel">Cancel</button><button type="submit" class="primary">Save settings</button></div></div>
+  </form>
+</dialog>
+
+<script>
+const $=id=>document.getElementById(id);
+const AGDESC={a1:"Awarded AMCs nearing their end date, and finished projects whose warranty is ending for customers with no AMC.",a2:"Deals left quiet in Site survey, Proposal sent or Negotiation.",a3:"Open quotations under the margin floor, or with a line priced below cost.",a4:"Unpaid invoices before and after the due date, and a Monday cash outlook."};
+const AGSHORT={a1:"Renewal & warranty",a2:"Follow-up",a3:"Margin guard",a4:"Collections"};
+let D=null,EDIT=null,BUSY=false;
+const F={ag:"",st:"open",own:"",q:""};
+const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
+function toast(m,e){const t=el("div","toast"+(e?" err":""),m);t.setAttribute("role","status");document.body.appendChild(t);setTimeout(()=>t.remove(),e?6000:2600)}
+async function api(method,path,body){
+  let r;try{r=await fetch("/api/"+path,{method,headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,cache:"no-store"})}catch{throw new Error("Can't reach the server. Check your connection and try again.")}
+  const ct=r.headers.get("content-type")||"";
+  if(r.redirected||(r.ok&&r.status!==204&&!ct.includes("json")))throw new Error("Your session has ended. Reload the page to sign in again.");
+  let j=null;if(r.status!==204){try{j=await r.json()}catch{}}
+  if(!r.ok){const e=new Error((j&&j.error)||"The request failed.");e.status=r.status;throw e}return j;
+}
+const today=()=>new Date(Date.now()+4*3600e3).toISOString().slice(0,10);
+const fdate=s=>{if(!s)return "";const d=new Date(String(s).length>10?s:s+"T00:00:00Z");return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric",timeZone:"Asia/Dubai"})};
+const ftime=s=>new Date(s).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Dubai"});
+const nameOf=e=>String(e||"").split("@")[0].split(/[._-]+/).filter(Boolean).map(w=>w[0].toUpperCase()+w.slice(1)).join(" ");
+const closedSt=s=>s==="done"||s==="dismissed";
+
+function matches(i){
+  if(F.ag&&i.agent!==F.ag)return false;
+  if(F.st==="closed"?!closedSt(i.status):F.st&&i.status!==F.st)return false;
+  if(F.own==="__me"&&i.owner!==D.me)return false;
+  if(F.own==="__none"&&i.owner)return false;
+  if(F.own&&!F.own.startsWith("__")&&i.owner!==F.own)return false;
+  const q=F.q.trim().toLowerCase();
+  if(q&&![i.title,i.summary,i.owner,...i.facts.map(f=>f[1]),i.draft&&i.draft.to].join(" ").toLowerCase().includes(q))return false;
+  return true;
+}
+function kpis(){
+  const mine=D.items.filter(i=>D.isManager&&F.own===""?true:i.owner===D.me);
+  const open=mine.filter(i=>i.status==="open");
+  $("kOpenK").textContent=D.isManager&&F.own===""?"Open, whole team":"Waiting for you";
+  $("kOpen").textContent=open.length;
+  $("kOpenS").textContent=open.filter(i=>i.draft).length+" with an email draft";
+  const high=open.filter(i=>i.severity==="high").length;$("kHigh").textContent=high;$("kHighBox").classList.toggle("alert",high>0);
+  const cut=new Date(Date.now()-30*864e5).toISOString();
+  const acted=mine.filter(i=>["sent","done","dismissed"].includes(i.status)&&i.decidedAt>=cut);
+  $("kDone").textContent=acted.length;
+  const sent=acted.filter(i=>i.status==="sent").length,dis=acted.filter(i=>i.status==="dismissed").length;
+  $("kDoneS").textContent=`${sent} sent · ${acted.length-sent-dis} done · ${dis} dismissed`;
+  $("kDraft").textContent=D.draftsThisMonth;
+  $("kDraftS").textContent=D.claudeReady?`This month, cap ${D.settings.monthlyDrafts}`:"Claude isn't connected: templates are used";
+}
+function counts(){
+  const base=D.items.filter(i=>{const a=F.ag;F.ag="";const m=matches(i);F.ag=a;return m});
+  $("c_").textContent=base.length||"";
+  ["a1","a2","a3","a4"].forEach(a=>{$("c_"+a).textContent=base.filter(i=>i.agent===a).length||""});
+}
+function render(){
+  kpis();counts();
+  const list=D.items.filter(matches);
+  const rank={high:0,medium:1,low:2};
+  list.sort((a,b)=>(a.status==="open"?0:1)-(b.status==="open"?0:1)||rank[a.severity]-rank[b.severity]||String(a.due).localeCompare(String(b.due))||String(b.createdAt).localeCompare(String(a.createdAt)));
+  const box=$("cards");box.textContent="";
+  $("cnt").textContent=list.length+" item"+(list.length===1?"":"s");
+  $("empty").hidden=list.length>0;
+  if(!list.length)$("empty").textContent=D.items.length?(F.st==="open"?"Nothing waiting. The agents will add new items at about 6:15 tomorrow morning.":"Nothing matches these filters."):"No items yet. The agents run every morning; the first items appear after their next run.";
+  for(const i of list)box.append(card(i));
+}
+function card(i){
+  const closed=!["open","snoozed"].includes(i.status);
+  const c=el("article","card "+i.severity+(closed?" closed":""));
+  const m=el("div","meta");
+  m.append(el("span","ag "+i.agent,AGSHORT[i.agent]||i.agentName));
+  if(i.severity!=="low")m.append(el("span","sev "+i.severity,i.severity==="high"?"High priority":"Medium"));
+  if(i.owner&&(D.isManager||i.owner!==D.me))m.append(el("span",null,"Owner: "+nameOf(i.owner)));
+  if(!i.owner)m.append(el("span",null,"No owner yet"));
+  m.append(el("span",null,"Added "+fdate(i.createdAt)));
+  if(i.draft)m.append(el("span","src"+(i.draft.source==="claude"?" claude":""),i.draft.source==="claude"?"Drafted by Claude":"Template draft"));
+  c.append(m,el("h3",null,i.title),el("p","sum",i.summary));
+  if(i.facts.length){const dl=el("dl","facts");i.facts.forEach(([k,v])=>{const d=el("div");d.append(el("dt",null,k),el("dd",null,v));dl.append(d)});c.append(dl)}
+  const a=el("div","acts2");
+  if(!closed){
+    if(i.draft){const b=el("button","primary","Review & send");b.type="button";b.onclick=()=>openDraft(i);a.append(b)}
+    if(i.href){const l=el("a","btn","Open record");l.href=i.href;a.append(l)}
+    const done=el("button",null,i.draft?"Done, handled":"Done");done.type="button";done.onclick=()=>setStatus(i,{status:"done"},"Marked done");a.append(done);
+    const sn=el("select");sn.setAttribute("aria-label","Snooze");[["","Snooze…"],["1","1 day"],["3","3 days"],["7","1 week"],["14","2 weeks"],["30","30 days"]].forEach(([v,t])=>{const o=el("option",null,t);o.value=v;sn.append(o)});
+    sn.onchange=()=>{if(sn.value)setStatus(i,{status:"snoozed",days:Number(sn.value)},"Snoozed")};a.append(sn);
+    const dis=el("button","danger","Dismiss");dis.type="button";dis.onclick=()=>openDismiss(i);a.append(dis);
+    a.append(el("span","sp"));
+    if(D.isManager){const r=el("button",null,"Reassign");r.type="button";r.onclick=()=>openAssign(i);a.append(r)}
+    if(i.status==="snoozed")a.append(el("span","state","Snoozed until "+fdate(i.snoozeUntil)));
+  }else{
+    const s=el("span","state");
+    const who=i.decidedBy==="agent"?"the agent":nameOf(i.decidedBy);
+    s.innerHTML="";s.append(el("b",null,{sent:"Sent",done:"Done",dismissed:"Dismissed",resolved:"Closed automatically"}[i.status]||i.status));
+    s.append(document.createTextNode(` · ${i.status==="sent"?"to "+i.sentTo+" · ":""}${who?"by "+who+" · ":""}${fdate(i.decidedAt)}${i.note?" · "+i.note:""}`));
+    a.append(s,el("span","sp"));
+    if(i.href){const l=el("a","btn","Open record");l.href=i.href;a.append(l)}
+    if(i.status!=="resolved"&&i.status!=="sent"){const re=el("button",null,"Reopen");re.type="button";re.onclick=()=>setStatus(i,{status:"open"},"Reopened");a.append(re)}
+  }
+  c.append(a);
+  return c;
+}
+function replace(item){const k=D.items.findIndex(x=>x.id===item.id);if(k>=0)D.items[k]=item;else D.items.push(item);render()}
+async function setStatus(i,body,msg){try{replace(await api("POST","agents/items/"+encodeURIComponent(i.id)+"/status",body));toast(msg)}catch(e){toast(e.message,true)}}
+
+/* draft dialog */
+function draftBody(){return{to:$("d_to").value.trim(),cc:$("d_cc").value.trim(),subject:$("d_subject").value.trim(),body:$("d_body").value,etag:EDIT.etag}}
+function openDraft(i){
+  EDIT=i;const d=i.draft||{};
+  $("dTitle").textContent=i.title;
+  const m=$("dMeta");m.textContent="";m.append(el("span","src"+(d.source==="claude"?" claude":""),d.source==="claude"?"Drafted by Claude":"Template draft"));if(d.edited)m.append(el("span",null,"Edited"));
+  $("d_to").value=d.to||"";$("d_cc").value=d.cc||"";$("d_subject").value=d.subject||"";$("d_body").value=d.body||"";
+  $("dHint").textContent=D.mailReady?`Sends from the ${D.company} mailbox, with you in copy and as the reply-to address. Check the facts before sending: the agent only used what is in the tools.`:"Email isn't set up for your company, so use Copy or Open in Outlook, send it yourself, then mark the item done.";
+  $("dSend").disabled=!D.mailReady;$("dErr").textContent="";
+  if(!d.to)$("dErr").textContent="No email address on file for this customer. Add one before sending.";
+  $("draftDlg").showModal();
+}
+$("dX").onclick=()=>$("draftDlg").close();
+$("dSave").onclick=async()=>{if(BUSY)return;BUSY=true;try{const it=await api("PUT","agents/items/"+encodeURIComponent(EDIT.id),draftBody());EDIT=it;replace(it);toast("Draft saved")}catch(e){$("dErr").textContent=e.message}finally{BUSY=false}};
+$("dCopy").onclick=async()=>{const b=draftBody();try{await navigator.clipboard.writeText(`Subject: ${b.subject}\n\n${b.body}`);toast("Copied")}catch{toast("Copy didn't work in this browser. Select the text and copy it.",true)}};
+$("dMailto").onclick=()=>{const b=draftBody();location.href=`mailto:${encodeURIComponent(b.to).replace(/%2C/g,",")}?${b.cc?"cc="+encodeURIComponent(b.cc)+"&":""}subject=${encodeURIComponent(b.subject)}&body=${encodeURIComponent(b.body)}`};
+$("draftForm").addEventListener("submit",async ev=>{
+  ev.preventDefault();if(BUSY)return;const b=draftBody();
+  if(!b.to)return $("dErr").textContent="Add the customer's email address.";
+  if(!b.subject||b.body.trim().length<20)return $("dErr").textContent="Write a subject and a message first.";
+  BUSY=true;$("dSend").disabled=true;$("dSend").textContent="Sending…";
+  try{replace(await api("POST","agents/items/"+encodeURIComponent(EDIT.id)+"/send",b));$("draftDlg").close();toast("Email sent to "+b.to)}
+  catch(e){$("dErr").textContent=e.message}
+  finally{BUSY=false;$("dSend").disabled=!D.mailReady;$("dSend").textContent="Send email"}
+});
+
+/* dismiss */
+function openDismiss(i){EDIT=i;$("disReason").value="";$("disErr").textContent="";$("disDlg").showModal();$("disReason").focus()}
+$("disQuick").onclick=e=>{const b=e.target.closest("button");if(b)$("disReason").value=b.textContent};
+$("disX").onclick=$("disCancel").onclick=()=>$("disDlg").close();
+$("disForm").addEventListener("submit",async ev=>{ev.preventDefault();const r=$("disReason").value.trim();if(!r)return $("disErr").textContent="Give a short reason.";
+  try{replace(await api("POST","agents/items/"+encodeURIComponent(EDIT.id)+"/status",{status:"dismissed",reason:r}));$("disDlg").close();toast("Dismissed")}catch(e){$("disErr").textContent=e.message}});
+
+/* reassign */
+function openAssign(i){EDIT=i;$("asgEmail").value=i.owner||"";$("asgErr").textContent="";const dl=$("ownList");dl.textContent="";[...new Set(D.items.map(x=>x.owner).filter(Boolean))].forEach(o=>{const op=el("option");op.value=o;dl.append(op)});$("asgDlg").showModal()}
+$("asgX").onclick=$("asgCancel").onclick=()=>$("asgDlg").close();
+$("asgForm").addEventListener("submit",async ev=>{ev.preventDefault();try{replace(await api("POST","agents/items/"+encodeURIComponent(EDIT.id)+"/assign",{owner:$("asgEmail").value.trim()}));$("asgDlg").close();toast("Reassigned")}catch(e){$("asgErr").textContent=e.message}});
+
+/* settings */
+const SET_FIELDS=["renewalDays","warrantyDays","followupDays","surveyDays","marginFloor","monthlyDrafts","financeEmail"];
+function openSettings(){
+  const s=D.settings;$("setCo").textContent=`Settings for ${D.company}. Changes apply from the next morning run.`;
+  const box=$("setAgents");box.textContent="";
+  Object.entries(D.agents).forEach(([k,n])=>{const l=el("label","tg");const c=el("input");c.type="checkbox";c.checked=!!s.enabled[k];c.dataset.k=k;const d=el("div");d.append(el("b",null,n),el("span",null,AGDESC[k]));l.append(c,d);box.append(l)});
+  SET_FIELDS.forEach(k=>$("s_"+k).value=s[k]??"");$("s_digest").checked=!!s.digest;$("setErr").textContent="";$("setDlg").showModal();
+}
+$("setBtn").onclick=openSettings;
+$("setX").onclick=$("setCancel").onclick=()=>$("setDlg").close();
+$("setForm").addEventListener("submit",async ev=>{
+  ev.preventDefault();const b={enabled:{},digest:$("s_digest").checked};
+  $("setAgents").querySelectorAll("input[data-k]").forEach(c=>b.enabled[c.dataset.k]=c.checked);
+  SET_FIELDS.forEach(k=>b[k]=$("s_"+k).value.trim());
+  try{D.settings=await api("PUT","agents/settings",b);$("setDlg").close();toast("Settings saved");render()}catch(e){$("setErr").textContent=e.message}
+});
+
+/* filters */
+$("agSeg").onclick=e=>{const b=e.target.closest("button[data-v]");if(!b)return;F.ag=b.dataset.v;for(const x of $("agSeg").children)x.setAttribute("aria-pressed",String(x===b));render()};
+$("stF").onchange=e=>{F.st=e.target.value;render()};
+$("ownF").onchange=e=>{F.own=e.target.value;render()};
+$("q").oninput=e=>{F.q=e.target.value;render()};
+
+async function load(){
+  try{D=await api("GET","agents")}catch(e){$("empty").textContent=e.message;return}
+  $("who").textContent=D.me;
+  $("setBtn").hidden=!D.isManager;
+  if(D.isManager){
+    const o=$("ownF");o.hidden=false;o.textContent="";
+    const owners=[...new Set(D.items.map(i=>i.owner).filter(Boolean))].sort();
+    [["","Everyone"],["__me","Mine"],...owners.filter(x=>x!==D.me).map(x=>[x,nameOf(x)]),["__none","No owner"]].forEach(([v,t])=>{const op=el("option",null,t);op.value=v;o.append(op)});
+    o.value=F.own;
+  }
+  const r=D.runs[0];
+  $("lastRun").textContent=r?`Last run ${ftime(r.at)} · ${r.created} new, ${r.resolved} closed`:"The agents haven't run yet";
+  const off=Object.entries(D.settings.enabled).filter(([,v])=>!v).map(([k])=>D.agents[k]);
+  const notes=[];
+  if(off.length)notes.push(`Switched off: ${off.join(", ")}.`);
+  if(!D.mailReady)notes.push("Email isn't set up for your company yet, so drafts can be copied or opened in Outlook but not sent from here.");
+  if(D.isManager&&!D.settings.financeEmail)notes.push("Tip: set a collections contact in Agent settings so invoice reminders and the Monday cash outlook go to finance.");
+  $("banner").hidden=!notes.length;$("banner").textContent=notes.join(" ");
+  render();
+}
+load();
+</script>
+</body>
+</html>

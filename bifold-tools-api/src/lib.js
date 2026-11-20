@@ -706,6 +706,10 @@ const pc = () => pcMod || (pcMod = require("./pettycash")({ table, getOrNull, al
 let hrMod;
 const hr = () => hrMod || (hrMod = require("./hr")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, diff: (a, b) => audit().diff(a, b), books }));
 
+// ---------- Agent Inbox (src/agents.js; the agents themselves run daily from .github/scripts/agents-run.cjs) ----------
+let agentsMod;
+const agents = () => agentsMod || (agentsMod = require("./agents")({ table, getOrNull, fail, clean, CO, writeCo, mailReadyFor, sameCoEmail, emailOk, dealNote: addDealNote }));
+
 // ---------- team access (src/access.js) ----------
 let accessMod;
 let auditMod;
@@ -751,6 +755,7 @@ async function alerts(user) {
   if (has("hr")) jobs.push(hr().alerts(user).then(l => out.push(...l)).catch(() => {}));
   if (has("pettycash") || has("books")) jobs.push(pc().alerts(user).then(l => out.push(...l)).catch(() => {}));
   if (has("inventory")) jobs.push(inv().alerts(user).then(l => out.push(...l)).catch(() => {}));
+  jobs.push(agents().alerts(user).then(l => out.push(...l)).catch(() => {}));
   await Promise.all(jobs);
   const rank = { high: 0, medium: 1, low: 2 };
   out.sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.when).localeCompare(String(b.when)));
@@ -849,6 +854,7 @@ async function route(method, seg, user, body) {
   if (a === "hr") return hr().route(method, seg.slice(1), user, body);
   if (a === "inv") return inv().route(method, seg.slice(1), user, body);
   if (a === "pc") return pc().route(method, seg.slice(1), user, body);
+  if (a === "agents") return agents().route(method, seg.slice(1), user, body);
   if (a === "alerts" && method === "GET") return alerts(user);
   if (a === "audit" && method === "GET") return audit().list(user, id);
   if (a === "me" && method === "GET") { if (access().touch(user.email) && user.aud) { user.aud.signin = true; user.aud.noAccess = !user.isManager && !user.sections.length; }

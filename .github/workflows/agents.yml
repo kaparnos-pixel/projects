@@ -1,0 +1,51 @@
+name: Agents (Phase 1)
+
+on:
+  schedule:
+    - cron: "17 2 * * *" # 06:17 Dubai time, every day
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only list what the agents would create"
+        type: boolean
+        default: false
+      only:
+        description: "Run only these agents (e.g. a1,a3); empty runs all"
+        type: string
+        default: ""
+      no_digest:
+        description: "Skip the digest emails"
+        type: boolean
+        default: false
+
+concurrency:
+  group: agents
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install storage client
+        run: npm ci --omit=dev --prefix bifold-tools-api
+      - name: Run agents
+        env:
+          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION || secrets.BUSINESSTOOLSSTORE }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          GRAPH_TENANT_ID: ${{ secrets.GRAPH_TENANT_ID }}
+          GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
+          GRAPH_CLIENT_SECRET: ${{ secrets.GRAPH_CLIENT_SECRET }}
+          MAIL_SENDER: ${{ secrets.MAIL_SENDER }}
+          TECHHUB_MAIL_SENDER: ${{ secrets.TECHHUB_MAIL_SENDER }}
+          AGENTS_URL: ${{ vars.AGENTS_URL }}
+          TECHHUB_AGENTS_URL: ${{ vars.TECHHUB_AGENTS_URL }}
+          AGENTS_ONLY: ${{ inputs.only }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          NO_DIGEST: ${{ inputs.no_digest && '1' || '0' }}
+        run: node .github/scripts/agents-run.cjs

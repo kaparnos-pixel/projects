@@ -65,6 +65,7 @@ module.exports = function makeAccess(H) {
   function need(method, seg, body) {
     const [a, b, c] = seg;
     if (a === "me" || a === "alerts") return null;
+    if (a === "agents") return "any"; // agents.js shows each person only their own items (managers: everyone's)
     if (a === "access" || a === "audit") return "manager";
     if (a === "customers") {
       if (method === "GET") return "any";

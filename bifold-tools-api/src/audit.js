@@ -214,11 +214,29 @@ module.exports = function makeAudit(H) {
       if (b === "reserve") return [A, "Reserved stock on quotation", name, aud.detail || "Reservation released"];
       if (b === "import") return [A, "Imported stock from Excel", "", aud.detail || ""];
     }
+    if (a === "pc") {
+      const A = "Petty cash", det = aud.detail || "";
+      if (b === "floats") {
+        if (!c && method === "POST") return [A, "Set up petty cash float", name || out.name, det];
+        if (d === "status") return [A, det === "closed" ? "Closed petty cash float" : "Reopened petty cash float", name, ""];
+        if (d === "request") return [A, det === "cancelled" ? "Cancelled top-up request" : "Asked for a top-up", name, det === "cancelled" ? "" : det];
+        if (method === "PUT") return [A, "Edited petty cash float", name, ch];
+      }
+      if (b === "entries") {
+        const K = { expense: "expense", topup: "top-up", return: "cash returned", count: "cash count" }[out.kind || ""] || "entry";
+        if (d === "files") return [A, method === "POST" ? "Attached receipt" : method === "DELETE" ? "Removed receipt" : seg[5] === "download" ? "Downloaded receipt" : "Opened receipt", name, det];
+        if (d === "release") return [A, "Released entry after Books void", name, det];
+        if (!c && method === "POST") return [A, (out.posted ? "Recorded and posted " : "Recorded ") + K, name, det];
+        if (method === "PUT") return [A, "Edited " + K, name, ch];
+        if (method === "DELETE") return [A, "Deleted petty cash entry", name, det];
+      }
+      if (b === "post") return [A, "Posted petty cash to Books", name, det];
+    }
     if (a === "access") {
       if (b === "users" && method === "PUT") return ["Team access", "Changed access", c, (out.sections || []).join(", ") || "No sections"];
       if (b === "users" && method === "DELETE") return ["Team access", "Removed access", c, ""];
     }
-    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", books: "Books", hr: "HR & Payroll", inv: "Inventory", access: "Team access", alerts: "Alerts" };
+    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", books: "Books", hr: "HR & Payroll", inv: "Inventory", pc: "Petty cash", access: "Team access", alerts: "Alerts" };
     if (method === "GET") return [AREA[a] || "Other", b ? "Opened a record" : "Opened the list", b || "", ""];
     return [AREA[a] || "Other", method + " /" + seg.join("/"), "", ""];
   }

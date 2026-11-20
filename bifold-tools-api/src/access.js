@@ -22,6 +22,7 @@ const SECTIONS = [
   { key: "bk_bank", name: "Books: Banking & journals", hint: "Bank and cash accounts, transfers and manual journals; can see every transaction" },
   { key: "bk_reports", name: "Books: Reports & VAT (view only)", hint: "Financial reports, VAT return and corporate tax, and the documents behind them; no changes" },
   { key: "quotes", name: "Books: Quotations only", hint: "Create and send quotations only (no access to the accounts)" },
+  { key: "pettycash", name: "Petty cash", hint: "Log spending from the petty cash this person holds, with receipts, and ask for top-ups (managers and full Books users also run floats and post to Books)" },
   { key: "inventory", name: "Inventory", hint: "Stock items, locations, receiving and issuing stock, and reserving or issuing it on quotations, challans and invoices" },
   { key: "hr", name: "HR & Payroll", hint: "Employees, salaries, leave, payroll runs, WPS file, payslips and gratuity (sensitive)" },
   { key: "campaigns", name: "Email Campaigns", hint: "Design, schedule and send marketing emails; import and manage contacts" },
@@ -77,6 +78,7 @@ module.exports = function makeAccess(H) {
     if (a === "suppliers") return method === "GET" ? ["suppliers", "pdc", "books", "bk_purch", "bk_bank", "bk_reports"] : "suppliers";
     if (a === "hr") return "hr";
     if (a === "inv") return "inventory";
+    if (a === "pc") return ["pettycash", "books"];
     if (a === "books") return BOOKS_KEYS; // books.js narrows each person to their areas
     if (a === "amc") {
       if (b === "bootstrap" || b === "files") return ["amc", "visits"];

@@ -162,10 +162,11 @@ const ICON={
   suppliers:I('<path d="M3 9l1.5-5h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v8h14v-8M10 21v-5h4v5"/>'),
   books:I('<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3M8 7h7M8 10.5h4M14.5 12.5l1.5 1.5 3-3.5"/>'),
   inventory:I('<path d="M3 7.5L12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9M7.5 5.2l9 4.6"/>'),
+  pettycash:I('<rect x="2.5" y="7" width="19" height="13" rx="2"/><path d="M2.5 11h19M6 7V5.5A1.5 1.5 0 0 1 7.5 4h9A1.5 1.5 0 0 1 18 5.5V7"/><circle cx="12" cy="15.5" r="2"/>'),
   hr:I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M15.5 4.8a3.3 3.3 0 0 1 0 6.4M17.5 14.8c2.2.6 3.6 2.4 4 5.2"/>'),
   access:I('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4M12 15v2"/>'),plus:I('<path d="M12 5v14M5 12h14"/>'),
 };
-const FN={hr:"finance",books:"finance",pipeline:"sales",pnl:"sales",amc:"service",visits:"service",pdc:"finance",campaigns:"marketing",completion:"service",inventory:"service",customers:"master",suppliers:"master",access:"admin",activity:"admin"};
+const FN={pettycash:"finance",hr:"finance",books:"finance",pipeline:"sales",pnl:"sales",amc:"service",visits:"service",pdc:"finance",campaigns:"marketing",completion:"service",inventory:"service",customers:"master",suppliers:"master",access:"admin",activity:"admin"};
 const aed=n=>Math.round(n||0).toLocaleString("en-US");
 const short=n=>{n=+n||0;return n>=1e6?(n/1e6).toFixed(n>=1e7?1:2)+"M":n>=1e4?Math.round(n/1e3)+"K":aed(n)};
 const dubai=()=>new Date(Date.now()+4*3600e3);
@@ -211,6 +212,7 @@ function apps(m){
     ["pnl","/pnl/","Sales","PnL Calculator","Profit on each PO before you commit, saved and shared with colleagues.",["pnl"]],
     ["books","/books/","Finance","Books & VAT","Quotations, tax invoices, bills, payments, banking, VAT 201 return and financial reports.",["books","bk_sales","bk_purch","bk_bank","bk_reports","quotes"]],
     ["pdc","/pdc/","Finance","PDC & Guarantees","Post-dated cheques, security deposits and advance payment guarantees.",["pdc"]],
+    ["pettycash","/pettycash/","Finance","Petty Cash","Cash floats held by staff: log spending with receipt photos, top up, count the cash and post to Books with the right VAT.",["pettycash","books"]],
     ["hr","/hr/","People","HR & Payroll","Employees, leave, monthly payroll, WPS salary file, payslips, salary receipts and gratuity.",["hr"]],
     ["amc","/amc/","Service","AMC Tracker","Branded AMC proposals, awards, expiry alerts and maintenance visits.",["amc","visits"]],
     ["inventory","/inventory/","Service","Inventory","Stock in every location with serial numbers: receive, issue, transfer and count, reserve on quotations and issue on challans and invoices.",["inventory"]],
@@ -226,7 +228,7 @@ function apps(m){
 const st=(k,t)=>{const e=$("st_"+k);if(e)e.textContent=t};
 
 function feed(a){
-  const TOOL={hr:["hr","People"],pdc:["pdc","Finance"],pipeline:["pipeline","Sales"],amc:["amc","Service"],visits:["visits","Service"]};
+  const TOOL={pettycash:["pettycash","Finance"],hr:["hr","People"],pdc:["pdc","Finance"],pipeline:["pipeline","Sales"],amc:["amc","Service"],visits:["visits","Service"]};
   const items=a.items.slice(0,8);
   $("attCount").textContent=a.count?` ${a.count} open`:"";
   $("feed").innerHTML=items.map(x=>{const[t,g]=TOOL[x.tool]||["amc",""];return `<a class="fi ${FN[t]}" href="${esc(x.href)}"><span class="tic" style="background:var(--cs);color:var(--c)">${ICON[t]}</span><span><b>${esc(x.title)}</b><span class="t">${esc(g)} · ${esc(x.text)}</span></span><span class="pill ${esc(x.severity)}">${x.severity==="high"?"Urgent":x.severity==="medium"?"Due":"Upcoming"}</span></a>`}).join("")
@@ -251,6 +253,7 @@ async function load(m){
       $("funnelCard").hidden=false;
     }).catch(()=>failK(k));
   }
+  if(m.co!=="all"&&(can(m,"pettycash")||can(m,"books")))api("pc/bootstrap").then(d=>{const a=d.floats.filter(f=>f.status==="active");if(!a.length)return st("pettycash",d.admin?"No floats set up yet":"");const h=a.reduce((s,f)=>s+f.balance,0),lo=a.filter(f=>f.low).length,un=d.entries.filter(x=>x.kind!=="count"&&!x.booksId).length;st("pettycash",`AED ${short(h)} held in ${a.length} float${a.length===1?"":"s"}${lo?` · ${lo} low`:""}${d.admin&&un?` · ${un} to post`:""}`)}).catch(()=>{});
   if(can(m,"inventory"))api("inv/bootstrap").then(d=>{const low=d.items.filter(i=>i.active&&i.minQty>0&&(d.stock.find(s=>s.itemId===i.id)||{onHand:0}).onHand<=i.minQty).length;st("inventory",`${d.stock.filter(s=>s.onHand>0).length} items in stock${low?` · ${low} to reorder`:""}`)}).catch(()=>{});
   if(can(m,"completion"))api("pcr/reports").then(l=>{const w=l.filter(r=>r.status==="awaiting").length,d=l.filter(r=>r.status==="draft").length;st("completion",`${d} draft${d===1?"":"s"} · ${w} awaiting signature`)}).catch(()=>{});
   if(can(m,"amc")||can(m,"visits")){

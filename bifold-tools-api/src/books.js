@@ -1226,5 +1226,8 @@ module.exports = function makeBooks(H) {
   }
   // Company letterhead details for other modules' documents (HR payslips).
   async function orgProfile(co) { const s = await loadSettings(co); return { legalName: s.legalName, tradeName: s.tradeName, address: s.address, emirate: s.emirate, phone: s.phone, email: s.email, website: s.website, licenceNo: s.licenceNo, trn: s.vatRegistered ? s.trn : "" }; }
-  return { route, alerts, TYPES, invoicesForAmc, orgProfile, challansFor, stockDocs, stockDoc };
+  // Petty cash: the accounts and VAT settings it needs (read by anyone with petty cash access, without Books access).
+  async function pcInfo(co) { const [s, accounts] = await Promise.all([loadSettings(co), listAccounts(co)]); return { accounts, vatRegistered: s.vatRegistered, lockDate: s.lockDate, cashVatThreshold: s.cashVatThreshold }; }
+  async function docStatus(co, id) { const e = await getOrNull(await table(T), dPK(co), id); return e ? e.status : null; }
+  return { route, alerts, TYPES, invoicesForAmc, orgProfile, challansFor, stockDocs, stockDoc, pcInfo, docStatus };
 };

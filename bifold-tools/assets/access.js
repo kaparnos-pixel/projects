@@ -151,6 +151,7 @@
     campaigns: I('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>'),
     books: I('<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3M8 7h7M8 10.5h4M14.5 12.5l1.5 1.5 3-3.5"/>'),
     inventory: I('<path d="M3 7.5L12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9M7.5 5.2l9 4.6"/>'),
+    pettycash: I('<rect x="2.5" y="7" width="19" height="13" rx="2"/><path d="M2.5 11h19M6 7V5.5A1.5 1.5 0 0 1 7.5 4h9A1.5 1.5 0 0 1 18 5.5V7"/><circle cx="12" cy="15.5" r="2"/>'),
     hr: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M15.5 4.8a3.3 3.3 0 0 1 0 6.4M17.5 14.8c2.2.6 3.6 2.4 4 5.2"/>'),
     bell: I('<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/>'),
     search: I('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>'),
@@ -171,7 +172,8 @@
         [null, "Accountant", BK.items], ["#/banking", "Banking", BK.ledger], ["#/journals", "Manual journals", BK.ledger], ["#/accounts", "Chart of accounts", BK.ledger], ["#/items", "Items", BK.items],
         [null, "Tax and reports", BK.reports], ["#/vat", "VAT return", BK.reports], ["#/report/ct", "Corporate tax", BK.reports], ["#/reports", "All reports", BK.reports],
         [null, "Setup", ["books"]], ["#/settings", "Settings", ["books"]]] },
-      { href: "/pdc/", label: "PDC & Guarantees", icon: "pdc", need: ["pdc"] }] },
+      { href: "/pdc/", label: "PDC & Guarantees", icon: "pdc", need: ["pdc"] },
+      { href: "/pettycash/", label: "Petty Cash", icon: "pettycash", need: ["pettycash", "books"], subs: [["#/floats", "Floats", []], ["#/entries", "All entries", []]] }] },
     { group: "People", items: [{ href: "/hr/", label: "HR & Payroll", icon: "hr", need: ["hr"], subs: [["#/dashboard", "Dashboard", ["hr"]], ["#/employees", "Employees", ["hr"]], ["#/leave", "Leave", ["hr"]], ["#/payroll", "Payroll runs", ["hr"]], ["#/gratuity", "End of service", ["hr"]], ["#/documents", "Documents and expiry", ["hr"]], ["#/settings", "Settings", ["hr"]]] }] },
     { group: "Service", items: [{ href: "/amc/", label: "AMC Tracker", icon: "amc", need: ["amc", "visits"], subs: [["#overview", "Overview", []], ["#amcs", "Contracts & proposals", ["amc"]], ["#visits", "Maintenance visits", ["amc", "visits"]]] },
       { href: "/completion/", label: "Completion Reports", icon: "completion", need: ["completion"] },
@@ -180,7 +182,7 @@
     { group: "Master data", items: [{ href: "/customers/", label: "Customers", icon: "customers", need: ["customers"] }, { href: "/suppliers/", label: "Suppliers & Vendors", icon: "suppliers", need: ["suppliers", "pdc"], subs: [["#dir", "Directory", []], ["#what", "Who supplies what", []], ["#people", "All contacts", []]] }] },
     { group: "Administration", items: [{ href: "/access/", label: "Team access", icon: "access", need: ["manager"] }, { href: "/activity/", label: "Activity log", icon: "log", need: ["manager"] }] },
   ];
-  const SECTION_NAMES = { books: "Books (full)", quotes: "Quotations", pnl: "PnL", pipeline: "Pipeline", pdc: "PDC", customers: "Customers", suppliers: "Suppliers", amc: "AMC proposals", visits: "Visits", campaigns: "Campaigns", completion: "Completion", inventory: "Inventory", hr: "HR & Payroll", bk_sales: "Books: Sales", bk_purch: "Books: Purchases", bk_bank: "Books: Banking", bk_reports: "Books: Reports" };
+  const SECTION_NAMES = { books: "Books (full)", quotes: "Quotations", pnl: "PnL", pipeline: "Pipeline", pdc: "PDC", customers: "Customers", suppliers: "Suppliers", amc: "AMC proposals", visits: "Visits", campaigns: "Campaigns", completion: "Completion", inventory: "Inventory", pettycash: "Petty cash", hr: "HR & Payroll", bk_sales: "Books: Sales", bk_purch: "Books: Purchases", bk_bank: "Books: Banking", bk_reports: "Books: Reports" };
   const allowed = (m, keys) => !keys.length || keys.some(k => k === "manager" ? m.isManager : m.isManager || (m.sections || []).includes(k));
   const path = location.pathname.replace(/index\.html$/, "");
   const initials = e => { const p = String(e).split("@")[0].split(/[._-]+/).filter(Boolean); return ((p[0] || "?")[0] + (p[1] ? p[1][0] : (p[0] || "")[1] || "")).toUpperCase(); };
@@ -274,7 +276,7 @@
         const el = document.createElement(rest.length ? "a" : "b"); el.dataset.root = "1"; el.dataset.label = root.dataset.label; el.textContent = root.dataset.label; if (rest.length) el.href = (parts[0] && parts[0][1]) || "#"; root.replaceWith(el);
         rest.forEach(([t], i) => { const sep = document.createElement("i"); sep.textContent = "/"; const x = document.createElement(i === rest.length - 1 ? "b" : "span"); x.textContent = t; box.append(sep, x); }); },
     });
-    const syncSub = () => /^\/(books|hr)\//.test(path) ? null : side.querySelectorAll("a.sub").forEach(a => { const h = (location.hash || (path.startsWith("/campaigns/") ? "#campaigns" : path.startsWith("/suppliers/") ? "#dir" : path.startsWith("/books/") ? "#/dashboard" : "#overview")).replace(/^#(edit|report)\/.*$/, "#campaigns").replace(/^(#\/[a-z]+).*$/, "$1"); a.classList.toggle("on", h === a.dataset.hash); });
+    const syncSub = () => /^\/(books|hr)\//.test(path) ? null : side.querySelectorAll("a.sub").forEach(a => { const h = (location.hash || (path.startsWith("/campaigns/") ? "#campaigns" : path.startsWith("/suppliers/") ? "#dir" : path.startsWith("/books/") ? "#/dashboard" : path.startsWith("/pettycash/") ? "#/floats" : "#overview")).replace(/^#(edit|report)\/.*$/, "#campaigns").replace(/^(#\/[a-z]+).*$/, "$1"); a.classList.toggle("on", h === a.dataset.hash); });
     syncSub(); addEventListener("hashchange", syncSub);
     top.querySelector(".bx-burger").onclick = () => document.body.classList.toggle("bx-open");
     side.addEventListener("click", e => { if (e.target.closest("a")) document.body.classList.remove("bx-open"); });
@@ -296,7 +298,7 @@
 
     // alerts
     let ALERTS = null;
-    const TOOL = { pdc: "pdc", pipeline: "pipeline", amc: "amc", visits: "visits", books: "books", hr: "hr" };
+    const TOOL = { pdc: "pdc", pipeline: "pipeline", amc: "amc", visits: "visits", books: "books", hr: "hr", pettycash: "pettycash" };
     const loadAlerts = () => fetch("/api/alerts", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(a => {
       if (!a) return; ALERTS = a; window.BIFOLD_ALERTS = a; document.dispatchEvent(new CustomEvent("bifold:alerts", { detail: a }));
       const dot = top.querySelector(".bx-bell .dot"); dot.hidden = !a.count; dot.textContent = a.count > 99 ? "99+" : a.count;
@@ -366,7 +368,7 @@
       brandPage(m);
       build(m);
       if (!m.isManager) document.querySelectorAll("[data-manager]").forEach(el => { el.hidden = true; });
-      const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/suppliers/": ["suppliers", "pdc"], "/amc/": ["amc", "visits"], "/campaigns/": ["campaigns"], "/completion/": ["completion"], "/books/": BK.any, "/hr/": ["hr"], "/access/": ["manager"], "/activity/": ["manager"] };
+      const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/suppliers/": ["suppliers", "pdc"], "/amc/": ["amc", "visits"], "/campaigns/": ["campaigns"], "/completion/": ["completion"], "/books/": BK.any, "/hr/": ["hr"], "/pettycash/": ["pettycash", "books"], "/access/": ["manager"], "/activity/": ["manager"] };
       document.querySelectorAll("body > :not(.bx-side) a[href]").forEach(a => { const k = LINK[a.getAttribute("href")]; if (k && !allowed(m, k)) a.hidden = true; });
       if (m.noAccess) block(m, "You don't have access yet");
       else if (pageNeeds.length && !allowed(m, pageNeeds)) block(m, "You don't have access to this tool");

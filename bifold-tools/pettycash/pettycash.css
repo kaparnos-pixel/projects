@@ -1,0 +1,65 @@
+/* Petty Cash: builds on bifold.css, shell.css and the Books styles. */
+.floats{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.fcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:16px 18px;display:grid;gap:10px;cursor:pointer;position:relative;overflow:hidden;min-width:0}
+.fcard:hover{border-color:var(--accent)}
+.fcard::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:var(--accent)}
+.fcard.low::before{background:var(--warn)}.fcard.empty0::before{background:var(--bad)}.fcard.closed{opacity:.6}.fcard.closed::before{background:var(--line)}
+.fcard .hd{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.fcard h3{margin:0;font-size:15px}
+.fcard .who{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-top:3px}
+.av{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:800;flex:0 0 auto}
+.fcard .bal{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:26px;font-weight:600;line-height:1.1}
+.fcard .bal small{font-size:12px;color:var(--muted);margin-right:4px;font-weight:500}
+.gauge{height:8px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.gauge i{display:block;height:100%;border-radius:99px;background:var(--accent);transition:width .3s}
+.gauge.low i{background:var(--warn)}.gauge.out i{background:var(--bad)}
+.fcard .meta{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.fcard .acts{display:flex;gap:6px;flex-wrap:wrap}
+.fcard .acts button{font-size:12px;padding:6px 10px}
+.flag{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.04em;border-radius:99px;padding:2px 8px;white-space:nowrap;text-transform:uppercase}
+.flag.req{background:var(--accent-soft);color:var(--accent)}.flag.low{background:var(--warn-soft);color:var(--warn)}.flag.out{background:var(--bad-soft);color:var(--bad)}.flag.closed{background:var(--sunk);color:var(--muted)}
+.kd{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;border-radius:99px;padding:2px 8px;white-space:nowrap}
+.kd.expense{background:var(--accent-soft);color:var(--accent)}.kd.topup{background:var(--good-soft);color:var(--good)}.kd.return{background:var(--warn-soft);color:var(--warn)}.kd.count{background:var(--sunk);color:var(--muted)}
+.bk-ok{font-size:11px;font-weight:700;color:var(--good);white-space:nowrap}
+.bk-no{font-size:11px;font-weight:700;color:var(--warn);white-space:nowrap}
+.mono{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.in{color:var(--good)}.out{color:var(--fg)}
+td.ck,th.ck{width:34px;text-align:center}td.ck input,th.ck input{width:auto}
+table.pcl{min-width:900px}table.pcl td{vertical-align:top}
+.clip{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--muted)}
+.clip.miss{color:var(--warn);font-weight:700}
+.bulk{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border:1px solid var(--accent);background:var(--accent-soft);border-radius:10px;margin-bottom:12px;font-size:13px}
+.bulk .sp{flex:1}
+.fhead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:18px 20px;margin-bottom:16px}
+.fhead .bal{font-family:var(--f-num);font-size:32px;font-weight:600;line-height:1.1}
+.fhead .bal small{font-size:13px;color:var(--muted);margin-right:5px;font-weight:500}
+.fhead .facts{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.fhead .facts b{color:var(--fg);font-weight:600}
+@media (max-width:760px){.fhead{grid-template-columns:1fr}}
+.vat-hint{font-size:12px;border-radius:8px;padding:7px 10px;background:var(--sunk);color:var(--muted)}
+.vat-hint.ok{background:var(--good-soft);color:var(--good)}.vat-hint.warn{background:var(--warn-soft);color:var(--warn)}
+.quick{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}.quick button{font-size:11.5px;padding:3px 9px}
+.files{display:flex;flex-wrap:wrap;gap:8px}
+.fthumb{position:relative;width:86px;height:86px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--sunk);display:grid;place-items:center;font-size:11px;color:var(--muted);text-align:center;text-decoration:none}
+.fthumb img{width:100%;height:100%;object-fit:cover}
+.fthumb button{position:absolute;top:2px;right:2px;border:0;background:rgba(0,0,0,.55);color:#fff;border-radius:50%;width:20px;height:20px;padding:0;font-size:13px;line-height:20px}
+.addfile{display:grid;place-items:center;width:86px;height:86px;border:1.5px dashed var(--line);border-radius:8px;color:var(--muted);font-size:12px;cursor:pointer;text-align:center;padding:4px}
+.addfile:hover{border-color:var(--accent);color:var(--accent)}
+.dl2{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 18px;font-size:13px}
+.dl2 span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.dl2 b{font-weight:600;word-break:break-word}
+.catbars{display:grid;gap:8px;padding:14px 16px}
+.catbars .r0{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:4px 10px;font-size:12.5px}
+.catbars .r0 .tr{grid-column:1/-1;height:6px;border-radius:99px;background:var(--sunk);overflow:hidden}
+.catbars .r0 .tr i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.catbars .r0 .n{text-align:right;font-family:var(--f-num)}
+.howto{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:14px}
+.howto div{border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;background:var(--surface)}
+.howto b{display:block;margin-bottom:4px}
+.prof2{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media (max-width:1060px){.prof2{grid-template-columns:1fr}}
+.sm{font-size:12px}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+h3.sec2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:22px 0 10px}
+.clip svg{width:12px;height:12px}
+.card .mi>span:first-child{min-width:0}.card .mi .t{display:block}

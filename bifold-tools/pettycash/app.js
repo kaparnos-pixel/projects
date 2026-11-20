@@ -63,7 +63,24 @@ const mine = f => f && f.custodian === D.me;
 const floatName = id => (FL.get(id) || {}).name || "";
 const catName = c => c ? (CAT.get(c) ? CAT.get(c).name : (INC.get(c) || {}).name || c) : "";
 const kindTag = x => `<span class="kd ${x.kind}">${esc(D.kinds[x.kind])}</span>`;
-const inBooks = x => x.kind === "count" ? `<span class="muted sm">Not posted</span>` : x.booksId && x.booksId !== "pending" ? `<a class="bk-ok" href="/books/#/doc/${esc(x.booksId)}">${esc(x.booksNo)}</a>` : `<span class="bk-no">Not in Books</span>`;
+const inBooks = x => x.kind === "count" ? `<span class="muted sm">Not posted</span>` : x.booksId && x.booksId !== "pending" ? `<a class="bk-ok" href="/books/#/doc/${esc(x.booksId)}" title="Open in Books">${esc(x.booksNo)}</a>` : `<span class="bk-no" title="${esc(x.syncError || "Not posted yet")}">Not in Books${x.syncError ? " ⓘ" : ""}</span>`;
+// Receipt button on each row: shows how many are attached and takes new ones straight away.
+const rcptBtn = x => x.kind === "count" ? "" : `<button type="button" class="rcpt ${x.files.length ? "has" : x.kind === "expense" ? "miss" : ""}" data-up="${esc(x.id)}" title="${x.files.length ? x.files.length + " receipt" + (x.files.length === 1 ? "" : "s") + " attached. Click to add more" : "Upload receipt"}">${PAPERCLIP}${x.files.length || ""}</button>`;
+function wireUploads(root) {
+  root.querySelectorAll("[data-up]").forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const inp = document.createElement("input"); inp.type = "file"; inp.multiple = true; inp.accept = "image/*,application/pdf";
+    inp.onchange = async () => {
+      if (!inp.files.length) return;
+      b.disabled = true; b.classList.add("busy");
+      let n = 0;
+      try { for (const f0 of inp.files) { const p = await prepFile(f0); await api("POST", `entries/${b.dataset.up}/files`, { name: p.name, type: p.type, data: p.data }); n++; } toast(`${n} receipt${n === 1 ? "" : "s"} attached${(D.entries.find(x => x.id === b.dataset.up) || {}).booksNo ? " here and in Books" : ""}.`); }
+      catch (er) { toast(er.message, true); }
+      await load(); route();
+    };
+    inp.click();
+  });
+}
 const PAPERCLIP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg>`;
 const clip = x => x.kind !== "expense" ? "" : x.files.length ? `<span class="clip">${PAPERCLIP}${x.files.length} receipt${x.files.length === 1 ? "" : "s"}</span>` : `<span class="clip miss">No receipt</span>`;
 const isIn = x => x.kind === "topup" || x.kind === "cashin", isOut = x => x.kind === "expense" || x.kind === "return";
@@ -187,7 +204,7 @@ function floatView(id) {
     canLog ? `<button type="button" id="paste">Paste from Excel</button>` : "",
     f.status === "active" && admin() ? `<button type="button" data-a="topup">Top up</button>` : "",
     f.status === "active" && !admin() && mine(f) ? `<button type="button" data-a="request">${f.request ? "Change top-up request" : "Request top-up"}</button>` : "",
-    admin() && unposted.length ? `<button type="button" class="primary" id="postAll">Post ${unposted.length} to Books</button>` : "",
+    unposted.length && (canLog || admin()) ? `<button type="button" class="primary" id="postAll" title="Entries that couldn't go into Books by themselves, usually cash in without an invoice">${unposted.length} not in Books: fix</button>` : "",
   ].join("");
   const pct = f.limit > 0 ? Math.max(0, Math.min(100, f.balance / f.limit * 100)) : 0;
   page(f.name, "Petty cash book", acts, `
@@ -202,9 +219,9 @@ function floatView(id) {
     </div>
     <div class="tools"><label class="sm muted" for="pm">Month</label><select id="pm"><option value="all">All time</option>${months.map(m => `<option value="${m}">${esc(monthName(m))}</option>`).join("")}</select>
       <span class="cnt" id="cnt"></span></div>
-    <div class="panel listpanel"><div class="tblwrap"><table class="list pcl cbook"><thead><tr><th style="width:110px">Date</th><th>Description</th><th class="r" style="width:120px">Amount in</th><th class="r" style="width:120px">Amount out</th><th class="r" style="width:120px">Balance</th><th style="width:110px">Books</th></tr></thead>
+    <div class="panel listpanel"><div class="tblwrap"><table class="list pcl cbook"><thead><tr><th style="width:110px">Date</th><th>Description</th><th class="r" style="width:120px">Amount in</th><th class="r" style="width:120px">Amount out</th><th class="r" style="width:120px">Balance</th><th style="width:60px" title="Receipts">Receipt</th><th style="width:110px">Books</th></tr></thead>
       <tbody id="rows"></tbody>
-      ${canLog ? `<tbody class="addrow"><tr><td><input type="date" id="qd" max="${esc(D.today)}" aria-label="Date"></td><td><input id="qs" maxlength="500" placeholder="Description, e.g. Water coupons or Cash sales INV-2026-00068" aria-label="Description" list="qsl"></td><td><input id="qi" type="number" min="0" step="0.01" inputmode="decimal" class="r" placeholder="In" aria-label="Amount in"></td><td><input id="qo" type="number" min="0" step="0.01" inputmode="decimal" class="r" placeholder="Out" aria-label="Amount out"></td><td colspan="2"><button type="button" class="primary" id="qa">Add</button> <button type="button" id="qm" title="Add with receipt photo, VAT and category">More…</button></td></tr><tr><td colspan="6" class="qerr" id="qe"></td></tr></tbody>` : ""}
+      ${canLog ? `<tbody class="addrow"><tr><td><input type="date" id="qd" max="${esc(D.today)}" aria-label="Date"></td><td><input id="qs" maxlength="500" placeholder="Description, e.g. Water coupons or Cash sales INV-2026-00068" aria-label="Description" list="qsl"></td><td><input id="qi" type="number" min="0" step="0.01" inputmode="decimal" class="r" placeholder="In" aria-label="Amount in"></td><td><input id="qo" type="number" min="0" step="0.01" inputmode="decimal" class="r" placeholder="Out" aria-label="Amount out"></td><td class="rc"><label class="rcpt" id="qfl" title="Attach receipt">${PAPERCLIP}<span id="qfn"></span><input type="file" id="qf" accept="image/*,application/pdf" multiple hidden></label></td><td colspan="2" style="white-space:nowrap"><button type="button" class="primary" id="qa">Add</button> <button type="button" id="qm" title="Add with VAT, supplier TRN and category">More…</button></td></tr><tr><td colspan="7" class="qerr" id="qe"></td></tr></tbody>` : ""}
       <tfoot id="foot"></tfoot></table></div></div>
     <datalist id="qsl">${[...new Set(D.entries.filter(x => x.description).map(x => x.description))].slice(0, 80).map(p => `<option value="${esc(p)}">`).join("")}</datalist>
     <div class="btnrow" style="margin-top:12px"><button type="button" id="xl">Export to Excel</button><button type="button" id="pv">Preview statement</button><button type="button" class="primary" id="pdf">Download statement (PDF)</button></div>`, "float");
@@ -218,12 +235,13 @@ function floatView(id) {
   const draw = () => {
     const [from, to] = period(); const S = statementRows(f, from, to);
     const ins = S.rows.reduce((a, r) => a + (isIn(r.x) ? r.x.amount : 0), 0), outs = S.rows.reduce((a, r) => a + (isOut(r.x) ? r.x.amount : 0), 0);
-    $("rows").innerHTML = `<tr class="nohov"><td class="muted">${from ? fd(from) : ""}</td><td class="muted">Cash in hand${from ? " brought forward" : " at the start"}</td><td class="r mono">${S.opening ? aed(S.opening) : ""}</td><td></td><td class="r mono">${aed(S.opening)}</td><td></td></tr>` + S.rows.map(({ x, bal }) => `<tr data-id="${esc(x.id)}" tabindex="0" class="${x.kind === "count" ? "cnt-row" : ""}">
-      <td>${fd(x.date)}</td><td><div class="t">${esc(descOf(x))} ${x.kind === "topup" || x.kind === "return" ? kindTag(x) : ""}</div><div class="s">${esc(subOf(x))} ${clip(x)}</div></td>
-      <td class="r mono in">${isIn(x) ? aed(x.amount) : ""}</td><td class="r mono">${isOut(x) ? aed(x.amount) : ""}</td><td class="r mono ${bal < 0 ? "neg" : ""}">${aed(bal)}</td><td>${inBooks(x)}</td></tr>`).join("");
-    $("foot").innerHTML = `<tr><td colspan="2">Total</td><td class="r mono">${aed(r2(ins + S.opening))}</td><td class="r mono">${aed(outs)}</td><td class="r mono">${aed(S.closing)}</td><td></td></tr>`;
+    $("rows").innerHTML = `<tr class="nohov"><td class="muted">${from ? fd(from) : ""}</td><td class="muted">Cash in hand${from ? " brought forward" : " at the start"}</td><td class="r mono">${S.opening ? aed(S.opening) : ""}</td><td></td><td class="r mono">${aed(S.opening)}</td><td></td><td></td></tr>` + S.rows.map(({ x, bal }) => `<tr data-id="${esc(x.id)}" tabindex="0" class="${x.kind === "count" ? "cnt-row" : ""}">
+      <td>${fd(x.date)}</td><td><div class="t">${esc(descOf(x))} ${x.kind === "topup" || x.kind === "return" ? kindTag(x) : ""}</div><div class="s">${esc(subOf(x))}</div></td>
+      <td class="r mono in">${isIn(x) ? aed(x.amount) : ""}</td><td class="r mono">${isOut(x) ? aed(x.amount) : ""}</td><td class="r mono ${bal < 0 ? "neg" : ""}">${aed(bal)}</td><td class="rc">${rcptBtn(x)}</td><td>${inBooks(x)}</td></tr>`).join("");
+    $("foot").innerHTML = `<tr><td colspan="2">Total</td><td class="r mono">${aed(r2(ins + S.opening))}</td><td class="r mono">${aed(outs)}</td><td class="r mono">${aed(S.closing)}</td><td></td><td></td></tr>`;
     $("cnt").textContent = `${S.rows.length} entr${S.rows.length === 1 ? "y" : "ies"}`;
-    $("rows").querySelectorAll("tr[data-id]").forEach(tr => { tr.onclick = e => { if (!e.target.closest("a")) entryView(tr.dataset.id); }; tr.onkeydown = e => { if (e.key === "Enter") entryView(tr.dataset.id); }; });
+    $("rows").querySelectorAll("tr[data-id]").forEach(tr => { tr.onclick = e => { if (!e.target.closest("a,button")) entryView(tr.dataset.id); }; tr.onkeydown = e => { if (e.key === "Enter" && e.target === tr) entryView(tr.dataset.id); }; });
+    wireUploads($("rows"));
   };
   sel.onchange = draw; draw();
   // One-line add: date, description, amount in or out.
@@ -238,10 +256,13 @@ function floatView(id) {
       const guess = guessCat(desc, inA > 0 ? "cashin" : "expense");
       busy($("qa"), true);
       try {
-        await api("POST", "entries", { kind: inA > 0 ? "cashin" : "expense", floatId: id, date: $("qd").value, amount: inA || outA, description: desc, category: guess });
-        const keep = $("qd").value; await load(); route(); $("qd").value = keep; $("qs").focus();
+        const r = await api("POST", "entries", { kind: inA > 0 ? "cashin" : "expense", floatId: id, date: $("qd").value, amount: inA || outA, description: desc, category: guess, files: qfiles.map(({ name, type, data }) => ({ name, type, data })) });
+        const keep = $("qd").value; await load(); route(); if ($("qd")) { $("qd").value = keep; $("qs").focus(); }
+        toast(r.postError ? `Saved. Not in Books yet: ${r.postError}` : r.booksNo ? `Saved and added to Books as ${r.booksNo}.` : "Saved.", !!r.postError);
       } catch (e) { $("qe").textContent = e.message; busy($("qa"), false); }
     };
+    let qfiles = [];
+    $("qf").onchange = async () => { for (const f0 of $("qf").files) { try { qfiles.push(await prepFile(f0)); } catch (e) { toast(e.message, true); } } $("qf").value = ""; $("qfn").textContent = qfiles.length ? qfiles.length : ""; $("qfl").classList.toggle("has", qfiles.length > 0); $("qfl").title = qfiles.length ? `${qfiles.length} receipt${qfiles.length === 1 ? "" : "s"} ready (${qfiles.map(f => f.name).join(", ")})` : "Attach receipt"; };
     $("qa").onclick = add;
     ["qs", "qi", "qo"].forEach(i => $(i).addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } }));
     $("qi").addEventListener("input", () => { if ($("qi").value) $("qo").value = ""; });
@@ -332,7 +353,7 @@ async function pasteDialog(f) {
         catch (err) { q("#err").textContent = err.message; busy(b, false); } };
       setTimeout(() => q("#tx").focus(), 50);
     } });
-  if (r) { const m = (D.entries.find(x => x.floatId === f.id) || {}).date; await load(); route(); toast(`Added ${r.count} row${r.count === 1 ? "" : "s"}.`); }
+  if (r) { const m = (D.entries.find(x => x.floatId === f.id) || {}).date; await load(); route(); toast(`Added ${r.count} row${r.count === 1 ? "" : "s"}; ${r.posted} went into Books.${r.failed.length ? ` ${r.failed.length} need an invoice or account: use "not in Books: fix".` : ""}`, r.failed.length > 0); }
 }
 
 /* ---------- post to Books: choose the accounts in one place ---------- */
@@ -382,7 +403,7 @@ function entriesView(q) {
       <div class="seg" id="fs"><button type="button" aria-pressed="true" data-v="">All</button>${admin() ? `<button type="button" aria-pressed="false" data-v="unposted">Not in Books</button>` : ""}<button type="button" aria-pressed="false" data-v="noreceipt">No receipt</button></div>
       <span class="cnt" id="cnt"></span></div>
     <div id="bulk"></div>
-    <div class="panel listpanel"><div class="tblwrap"><table class="list pcl"><thead><tr>${admin() ? `<th class="ck"><input type="checkbox" id="all" aria-label="Select all not in Books"></th>` : ""}<th>Date</th><th>Voucher</th><th>Float</th><th>Details</th><th class="r">VAT</th><th class="r">Amount (AED)</th><th>Books</th></tr></thead><tbody id="rows"></tbody><tfoot id="foot"></tfoot></table><div class="empty" id="empty" hidden></div></div></div>
+    <div class="panel listpanel"><div class="tblwrap"><table class="list pcl"><thead><tr>${admin() ? `<th class="ck"><input type="checkbox" id="all" aria-label="Select all not in Books"></th>` : ""}<th>Date</th><th>Voucher</th><th>Float</th><th>Details</th><th class="r">VAT</th><th class="r">Amount (AED)</th><th title="Receipts">Receipt</th><th>Books</th></tr></thead><tbody id="rows"></tbody><tfoot id="foot"></tfoot></table><div class="empty" id="empty" hidden></div></div></div>
     <div class="btnrow" style="margin-top:12px"><button type="button" id="xl">Export to Excel</button></div>`, "entries");
   $("logE").onclick = () => entryForm("expense", { floatId: $("ff").value || undefined });
   if (q.get("float")) $("ff").value = q.get("float");
@@ -400,7 +421,7 @@ function entriesView(q) {
   const drawBulk = () => {
     if (!admin()) return;
     const n = [...sel].filter(id => D.entries.some(x => x.id === id && !x.booksId)).length;
-    $("bulk").innerHTML = n ? `<div class="bulk"><b>${n} selected</b><span class="sp"></span><span class="muted">You choose the category, invoice or income account for each one before posting.</span><button type="button" class="primary" id="postSel">Post ${n} to Books</button></div>` : "";
+    $("bulk").innerHTML = n ? `<div class="bulk"><b>${n} selected</b><span class="sp"></span><span class="muted">These didn't go into Books by themselves. Choose the category, invoice or income account, then post.</span><button type="button" class="primary" id="postSel">Post ${n} to Books</button></div>` : "";
     if (n) $("postSel").onclick = () => postDialog([...sel]);
   };
   const draw = () => {
@@ -408,12 +429,13 @@ function entriesView(q) {
     const tot = L.reduce((a, x) => a + (isOut(x) ? x.amount : 0), 0);
     $("rows").innerHTML = L.map(x => `<tr data-id="${esc(x.id)}" tabindex="0">${admin() ? `<td class="ck">${x.kind !== "count" && !x.booksId ? `<input type="checkbox" data-ck="${esc(x.id)}" ${sel.has(x.id) ? "checked" : ""} aria-label="Select ${esc(x.number)}">` : ""}</td>` : ""}
       <td>${fd(x.date)}</td><td><div class="t mono">${esc(x.number || "")}</div>${kindTag(x)}</td><td><div class="s">${esc(floatName(x.floatId))}</div></td>
-      <td><div class="t">${esc(descOf(x))}</div><div class="s">${esc(subOf(x).replace(x.number + " · ", "").replace(x.number, ""))}${x.project ? " · " + esc(x.project) : ""}</div>${clip(x)}</td>
-      <td class="r mono">${x.vatAmt ? aed(x.vatAmt) : ""}</td><td class="r mono ${isIn(x) ? "in" : ""}">${x.kind === "count" ? "" : (isIn(x) ? "+" : "") + aed(x.amount)}</td><td>${inBooks(x)}</td></tr>`).join("");
-    $("foot").innerHTML = L.length ? `<tr>${admin() ? "<td></td>" : ""}<td colspan="4">Spent and returned (${L.filter(x => x.kind === "expense").length} expenses)</td><td class="r mono">${aed(L.filter(x => x.kind === "expense").reduce((a, x) => a + x.vatAmt, 0))}</td><td class="r mono">${aed(tot)}</td><td></td></tr>` : "";
+      <td><div class="t">${esc(descOf(x))}</div><div class="s">${esc(subOf(x).replace(x.number + " · ", "").replace(x.number, ""))}${x.project ? " · " + esc(x.project) : ""}</div></td>
+      <td class="r mono">${x.vatAmt ? aed(x.vatAmt) : ""}</td><td class="r mono ${isIn(x) ? "in" : ""}">${x.kind === "count" ? "" : (isIn(x) ? "+" : "") + aed(x.amount)}</td><td class="rc">${rcptBtn(x)}</td><td>${inBooks(x)}</td></tr>`).join("");
+    $("foot").innerHTML = L.length ? `<tr>${admin() ? "<td></td>" : ""}<td colspan="4">Spent and returned (${L.filter(x => x.kind === "expense").length} expenses)</td><td class="r mono">${aed(L.filter(x => x.kind === "expense").reduce((a, x) => a + x.vatAmt, 0))}</td><td class="r mono">${aed(tot)}</td><td></td><td></td></tr>` : "";
     $("empty").hidden = L.length > 0; $("empty").textContent = D.entries.length ? "Nothing matches these filters." : "Nothing logged yet.";
     $("cnt").textContent = `${L.length} entr${L.length === 1 ? "y" : "ies"}`;
-    $("rows").querySelectorAll("tr[data-id]").forEach(tr => { tr.onclick = e => { if (e.target.closest("a,input")) return; entryView(tr.dataset.id); }; tr.onkeydown = e => { if (e.key === "Enter" && e.target === tr) entryView(tr.dataset.id); }; });
+    wireUploads($("rows"));
+    $("rows").querySelectorAll("tr[data-id]").forEach(tr => { tr.onclick = e => { if (e.target.closest("a,input,button")) return; entryView(tr.dataset.id); }; tr.onkeydown = e => { if (e.key === "Enter" && e.target === tr) entryView(tr.dataset.id); }; });
     $("rows").querySelectorAll("[data-ck]").forEach(c => c.onchange = () => { c.checked ? sel.add(c.dataset.ck) : sel.delete(c.dataset.ck); drawBulk(); });
     if ($("all")) { const ids = L.filter(x => x.kind !== "count" && !x.booksId).map(x => x.id); $("all").checked = ids.length > 0 && ids.every(id => sel.has(id)); $("all").onchange = () => { ids.forEach(id => $("all").checked ? sel.add(id) : sel.delete(id)); draw(); }; }
     drawBulk();
@@ -521,6 +543,7 @@ async function entryForm(kind, pre = {}, cur) {
     <div class="fields"><label><span class="lbl">Amount received (AED) *</span><input id="amt" type="number" min="0.01" step="0.01" inputmode="decimal" value="${v.amount}"></label>
       <label><span class="lbl">Invoice it pays</span><input id="inv" maxlength="40" list="invl" value="${esc(v.invoiceNo || "")}" placeholder="e.g. INV-2026-00068"><span class="hint" id="ih"></span></label></div>
     <label><span class="lbl">Description *</span><input id="ds" maxlength="500" value="${esc(v.description || "")}" placeholder="e.g. Cash sales INV-2026-00068"></label>
+    ${edit ? "" : `<div><span class="lbl">Receipt photos or PDF</span><div class="files" id="fls"><label class="addfile">+ Add receipt<input type="file" id="fi" accept="image/*,application/pdf" multiple hidden></label></div></div>`}
     <label id="incw"><span class="lbl">Income account (when there's no invoice)</span><select id="ct"><option value="">Choose now or when posting…</option>${D.incomeAccounts.map(c => `<option value="${esc(c.code)}" ${v.category === c.code ? "selected" : ""}>${esc(c.code)} ${esc(c.name)}</option>`).join("")}</select></label>
     <datalist id="invl">${D.invoices.map(i => `<option value="${esc(i.number)}">${esc(i.customer)}, AED ${aed(i.balance)} due</option>`).join("")}</datalist>
     ` : kind === "count" ? `
@@ -531,7 +554,7 @@ async function entryForm(kind, pre = {}, cur) {
       <label><span class="lbl">${kind === "topup" ? "Paid from" : "Paid back into"}</span><select id="bk">${D.banks.map(b => `<option value="${esc(b.code)}" ${(v.bankAccount || lastBank) === b.code ? "selected" : ""}>${esc(b.code)} ${esc(b.name)}</option>`).join("")}</select></label></div>
     <div class="fields"><label><span class="lbl">How</span><select id="mt">${D.methods.map(m => `<option ${v.method === m ? "selected" : ""}>${esc(m)}</option>`).join("")}</select></label><label><span class="lbl">Reference</span><input id="rf" maxlength="80" value="${esc(v.ref || "")}" placeholder="Cheque or transfer no."></label></div>`}
     <label><span class="lbl">Note</span><input id="nt" maxlength="1000" value="${esc(v.note || "")}" placeholder="Optional"></label>
-    ${admin() && kind !== "count" && !edit ? `<label class="chk"><input type="checkbox" id="pb" ${kind !== "expense" ? "checked" : ""}> Post to Books now</label>` : ""}
+    ${kind !== "count" ? `<p class="hint" style="margin:0">${edit && cur.booksNo ? `Changes also update ${esc(cur.booksNo)} in Books.` : "Goes into Books as soon as you save."}</p>` : ""}
     <datalist id="pys">${[...new Set(D.entries.filter(x => x.payee).map(x => x.payee))].slice(0, 60).map(p => `<option value="${esc(p)}">`).join("")}</datalist>
     <datalist id="pjs">${[...new Set(D.entries.filter(x => x.project).map(x => x.project))].slice(0, 60).map(p => `<option value="${esc(p)}">`).join("")}</datalist>
     <div class="err" id="err"></div><div class="foot"><button type="button" data-x>Cancel</button><button type="submit" class="primary">${edit ? "Save" : kind === "expense" ? "Save expense" : kind === "cashin" ? "Save cash in" : kind === "count" ? "Save count" : kind === "topup" ? "Record top-up" : "Record"}</button></div></form>`,
@@ -547,9 +570,9 @@ async function entryForm(kind, pre = {}, cur) {
         if (kind === "topup" || kind === "return") { const f = flNow(); q("#ah").textContent = kind === "topup" ? `Holds AED ${aed(f.balance)}; AED ${aed(Math.max(0, f.limit - f.balance))} brings it to the float.` : `Holds AED ${aed(f.balance)}.`; }
       };
       d.querySelectorAll("input,select").forEach(i => i.addEventListener("input", hint));
-      if (kind === "expense") {
-        q("#v5").onclick = () => { const a = num(q("#amt").value); q("#vat").value = a ? (a - r2(a / 1.05)).toFixed(2) : ""; hint(); };
-        q("#v0").onclick = () => { q("#vat").value = ""; hint(); };
+      if (kind === "expense" || kind === "cashin") {
+        if (q("#v5")) q("#v5").onclick = () => { const a = num(q("#amt").value); q("#vat").value = a ? (a - r2(a / 1.05)).toFixed(2) : ""; hint(); };
+        if (q("#v0")) q("#v0").onclick = () => { q("#vat").value = ""; hint(); };
         const fi = q("#fi");
         if (fi) {
           const drawFiles = () => { q("#fls").querySelectorAll(".fthumb").forEach(x => x.remove()); files.forEach((f, i) => { const el = document.createElement("div"); el.className = "fthumb"; el.innerHTML = (f.type.startsWith("image/") && f.type !== "image/heic" ? `<img src="${f.url}" alt="">` : `<span>${esc(f.name)}</span>`) + `<button type="button" aria-label="Remove">×</button>`; el.querySelector("button").onclick = () => { files.splice(i, 1); drawFiles(); }; q("#fls").insertBefore(el, q(".addfile")); }); };
@@ -561,22 +584,21 @@ async function entryForm(kind, pre = {}, cur) {
         e.preventDefault(); const b = e.submitter; busy(b, true); q("#err").textContent = "";
         const body = { kind, floatId: q("#fl").value, date: q("#dt").value, amount: q("#amt").value, note: q("#nt").value };
         if (kind === "expense") Object.assign(body, { vatAmt: q("#vat").value, payee: q("#py").value, category: q("#ct").value, description: q("#ds").value, receiptNo: q("#rn").value, payeeTrn: q("#trn").value, project: q("#pj").value, files: files.map(({ name, type, data }) => ({ name, type, data })) });
-        if (kind === "cashin") Object.assign(body, { description: q("#ds").value, invoiceNo: q("#inv").value, category: q("#ct").value });
+        if (kind === "cashin") Object.assign(body, { description: q("#ds").value, invoiceNo: q("#inv").value, category: q("#ct").value, files: files.map(({ name, type, data }) => ({ name, type, data })) });
         if (kind === "topup" || kind === "return") Object.assign(body, { bankAccount: q("#bk").value, method: q("#mt").value, ref: q("#rf").value });
-        if (q("#pb")) body.post = q("#pb").checked;
         if (edit) body.etag = cur.etag;
         if (kind === "expense" && !edit && !files.length && !(await confirmBox("No receipt attached", "Save without a photo of the receipt? You can attach it later from the entry.", "Save without receipt"))) { busy(b, false); return; }
         try { done(await api(edit ? "PUT" : "POST", edit ? "entries/" + cur.id : "entries", body)); } catch (err) { q("#err").textContent = err.message; busy(b, false); }
       };
     } });
-  if (r) { await load(); route(); toast(r.postError ? `Saved, but not posted to Books: ${r.postError}` : r.posted ? `Saved and posted to Books as ${r.booksNo}.` : edit ? "Saved." : `${r.number || "Cash count"} saved.`, !!r.postError); }
+  if (r) { await load(); route(); toast(r.postError ? `Saved. Not in Books yet: ${r.postError}` : r.booksNo ? `Saved${edit ? "" : " and added to Books"} as ${r.booksNo}.` : edit ? "Saved." : `${r.number || "Cash count"} saved.`, !!r.postError); }
 }
 
 /* ---------- one entry ---------- */
 async function entryView(id) {
   const x = D.entries.find(e => e.id === id); if (!x) return toast("This entry no longer exists.", true);
   const f = FL.get(x.floatId) || {};
-  const canEdit = !x.booksId && (admin() || x.createdBy === D.me);
+  const canEdit = admin() || x.createdBy === D.me;
   const st = x.kind === "expense" ? vatState(x) : null;
   const res = await dialog(`<form method="dialog"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><h3>${esc(x.number || D.kinds[x.kind])}</h3><div style="margin-top:4px">${kindTag(x)} ${inBooks(x)}</div></div><button type="button" class="x" data-x aria-label="Close">×</button></div>
     <div class="dl2">
@@ -591,14 +613,15 @@ async function entryView(id) {
     ${x.kind === "cashin" ? `<div><span class="lbl">Description</span>${esc(x.description)}</div>` : ""}
     ${x.kind === "expense" ? `<div><span class="lbl">For</span>${esc(x.description)}</div><div class="vat-hint ${st.cls}">${esc(st.text)}</div>` : ""}
     ${x.note ? `<div><span class="lbl">Note</span>${esc(x.note)}</div>` : ""}
-    ${x.kind === "expense" ? `<div><span class="lbl">Receipts</span><div class="files" id="fls">${x.files.map(fl => `<a class="fthumb" href="${fileUrl(x, fl)}" target="_blank" rel="noopener" title="${esc(fl.name)}">${fl.type.startsWith("image/") && !/hei[cf]/.test(fl.type) ? `<img src="${fileUrl(x, fl)}" alt="${esc(fl.name)}" loading="lazy">` : `<span>PDF<br>${esc(fl.name)}</span>`}${canEdit && (admin() || fl.by === D.me) ? `<button type="button" data-rm="${esc(fl.id)}" aria-label="Remove ${esc(fl.name)}">×</button>` : ""}</a>`).join("")}${canEdit ? `<label class="addfile">+ Add receipt<input type="file" id="fi" accept="image/*,application/pdf" multiple hidden></label>` : ""}${!x.files.length && !canEdit ? `<span class="muted sm">None attached.</span>` : ""}</div>${x.booksId && x.booksId !== "pending" && x.files.length ? `<div class="hint">Copies are attached to ${esc(x.booksNo)} in Books.</div>` : ""}</div>` : ""}
+    ${x.syncError && !x.booksId ? `<div class="note warn"><b>Not in Books yet</b>${esc(x.syncError)}</div>` : ""}
+    ${x.kind !== "count" ? `<div><span class="lbl">Receipts</span><div class="files" id="fls">${x.files.map(fl => `<a class="fthumb" href="${fileUrl(x, fl)}" target="_blank" rel="noopener" title="${esc(fl.name)}">${fl.type.startsWith("image/") && !/hei[cf]/.test(fl.type) ? `<img src="${fileUrl(x, fl)}" alt="${esc(fl.name)}" loading="lazy">` : `<span>PDF<br>${esc(fl.name)}</span>`}${canEdit && (admin() || fl.by === D.me) && (!x.booksId || admin()) ? `<button type="button" data-rm="${esc(fl.id)}" aria-label="Remove ${esc(fl.name)}">×</button>` : ""}</a>`).join("")}<label class="addfile">+ Add receipt<input type="file" id="fi" accept="image/*,application/pdf" multiple hidden></label></div>${x.booksId && x.booksId !== "pending" ? `<div class="hint">Receipts added here are also attached to ${esc(x.booksNo)} in Books.</div>` : ""}</div>` : ""}
     <div class="hint">Logged by ${esc(x.createdBy)} on ${fdt(x.createdAt)}${x.updatedAt !== x.createdAt ? `, last changed by ${esc(x.updatedBy)} on ${fdt(x.updatedAt)}` : ""}${x.postedAt && x.booksId ? `. Posted to Books by ${esc(x.postedBy)} on ${fdt(x.postedAt)}` : ""}.</div>
-    ${x.booksId && admin() ? `<div class="note"><b>Locked: in Books as ${esc(x.booksNo)}</b>To correct it, void <a href="/books/#/doc/${esc(x.booksId)}">${esc(x.booksNo)}</a> in Books, then release this entry so it can be edited and posted again.</div>` : ""}
+    ${x.booksId && x.booksId !== "pending" ? `<div class="hint">In Books as <a href="/books/#/doc/${esc(x.booksId)}">${esc(x.booksNo)}</a>. Editing or deleting this entry updates or voids it there too.</div>` : ""}
     <div class="err" id="err"></div>
     <div class="foot">
-      ${canEdit ? `<button type="button" class="danger" id="del">Delete</button>` : ""}${x.booksId && admin() ? `<button type="button" id="rel">Release after void</button>` : ""}<span style="flex:1"></span>
+      ${canEdit ? `<button type="button" class="danger" id="del">Delete</button>` : ""}<span style="flex:1"></span>
       ${x.kind === "expense" ? `<button type="button" id="epv">Preview voucher</button><button type="button" id="vpdf">Voucher PDF</button>` : ""}
-      ${canEdit ? `<button type="button" id="ed">Edit</button>` : ""}${admin() && !x.booksId && x.kind !== "count" ? `<button type="button" class="primary" id="post">Post to Books</button>` : ""}
+      ${canEdit ? `<button type="button" id="ed">Edit</button>` : ""}${canEdit && !x.booksId && x.kind !== "count" ? `<button type="button" class="primary" id="post">Put in Books</button>` : ""}
     </div></form>`, { wide: true, onOpen: (d, done) => {
       const q = s => d.querySelector(s); const err = m => { q("#err").textContent = m; };
       if (q("#ed")) q("#ed").onclick = () => done("edit");
@@ -606,7 +629,7 @@ async function entryView(id) {
       if (q("#vpdf")) q("#vpdf").onclick = async e => { busy(e.target, true); try { saveBlob(await voucherPdf(x), safe(`${x.number} ${x.payee || x.description}`) + ".pdf"); } catch (er) { err(er.message); } finally { busy(e.target, false); } };
       if (q("#post")) q("#post").onclick = () => done("post");
       if (q("#rel")) q("#rel").onclick = async e => { busy(e.target, true); try { await api("POST", `entries/${x.id}/release`); done("released"); } catch (er) { err(er.message); busy(e.target, false); } };
-      if (q("#del")) q("#del").onclick = async e => { if (!confirm(`Delete ${x.number || "this entry"}? This can't be undone.`)) return; busy(e.target, true); try { await api("DELETE", "entries/" + x.id); done("deleted"); } catch (er) { err(er.message); busy(e.target, false); } };
+      if (q("#del")) q("#del").onclick = async e => { if (!confirm(`Delete ${x.number || "this entry"}?${x.booksNo ? ` ${x.booksNo} will be voided in Books.` : ""} This can't be undone.`)) return; busy(e.target, true); try { await api("DELETE", "entries/" + x.id); done("deleted"); } catch (er) { err(er.message); busy(e.target, false); } };
       d.querySelectorAll("[data-rm]").forEach(b => b.onclick = async e => { e.preventDefault(); e.stopPropagation(); try { await api("DELETE", `entries/${x.id}/files/${b.dataset.rm}`); done("files"); } catch (er) { err(er.message); } });
       const fi = q("#fi"); if (fi) fi.onchange = async () => { try { for (const f0 of fi.files) { const p = await prepFile(f0); await api("POST", `entries/${x.id}/files`, { name: p.name, type: p.type, data: p.data }); } done("files"); } catch (er) { err(er.message); } };
     } });

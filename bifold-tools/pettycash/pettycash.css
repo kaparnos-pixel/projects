@@ -75,3 +75,10 @@ h3.sec2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(-
 dialog.wide:has(table.cbook){width:min(1040px,96vw);max-width:96vw}
 dialog table.cbook{min-width:0;width:100%}
 dialog table.cbook th:first-child,dialog table.cbook td:first-child{width:150px}
+.rcpt{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:4px 7px;font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer;line-height:1}
+.rcpt svg{width:14px;height:14px}
+.rcpt:hover{border-color:var(--accent);color:var(--accent)}
+.rcpt.has{color:var(--good);border-color:var(--good-soft);background:var(--good-soft)}
+.rcpt.miss{color:var(--warn)}
+.rcpt.busy{opacity:.5}
+td.rc{text-align:center}

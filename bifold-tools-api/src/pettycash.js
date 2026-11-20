@@ -49,7 +49,7 @@ module.exports = function makePettyCash(H) {
   const txOut = e => ({ id: e.rowKey, floatId: e.floatId, kind: e.kind, number: e.number || "", date: e.date, amount: num(e.amount),
     payee: e.payee || "", payeeTrn: e.payeeTrn || "", receiptNo: e.receiptNo || "", category: e.category || "", description: e.description || "",
     vatAmt: num(e.vatAmt), project: e.project || "", bankAccount: e.bankAccount || "", method: e.method || "", ref: e.ref || "",
-    expected: num(e.expected), note: e.note || "", files: j(e.files, []), invoiceNo: e.invoiceNo || "",
+    expected: num(e.expected), note: e.note || "", files: j(e.files, []), invoiceNo: e.invoiceNo || "", syncError: e.syncError || "",
     booksId: e.booksId || "", booksNo: e.booksNo || "", postedAt: e.postedAt || "", postedBy: e.postedBy || "", vatClaimed: !!e.vatClaimed,
     createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt, etag: e.etag });
 
@@ -225,7 +225,9 @@ module.exports = function makePettyCash(H) {
       Object.assign(f, { payee: clean(b.payee, 150), receiptNo: clean(b.receiptNo, 60), category: clean(b.category, 10), description: clean(b.description, 500),
         vatAmt: r2(Math.max(0, num(b.vatAmt))), payeeTrn: clean(b.payeeTrn, 20).replace(/\s+/g, ""), project: clean(b.project, 150) });
       if (!f.description) fail(400, "Say what the money was spent on.");
-      if (f.category) { const cat = (await info(co)).accounts.find(a => a.code === f.category && CAT_TYPES.includes(a.type)); if (!cat) fail(400, "Choose the expense category."); }
+      const accts = (await info(co)).accounts;
+      if (f.category) { const cat = accts.find(a => a.code === f.category && CAT_TYPES.includes(a.type)); if (!cat) fail(400, "Choose the expense category."); }
+      else if (accts.some(a => a.code === DEFAULT_CAT)) f.category = DEFAULT_CAT; // Miscellaneous Expenses until someone picks a better one
       if (f.vatAmt) vatSplit(f.amount, f.vatAmt);
       if (f.payeeTrn && !trnOk(f.payeeTrn)) fail(400, "A TRN is 15 digits. Check the receipt, or leave it blank.");
     }
@@ -265,9 +267,9 @@ module.exports = function makePettyCash(H) {
     // A top-up answers the custodian's request.
     if (f.kind === "topup" && fl.request) await t.updateEntity({ partitionKey: "fl-" + co, rowKey: fl.rowKey, request: "" }, "Merge");
     if (user.aud) { user.aud.name = [f.number, fl.name].filter(Boolean).join(" "); user.aud.detail = [fmt(f.amount), f.payee, f.description].filter(Boolean).join(", "); }
-    const out = txOut(await t.getEntity("tx-" + co, e.rowKey));
-    if (b.post && isAdmin(user) && f.kind !== "count") { try { return { ...(await postOne(user, co, out.id)), posted: true }; } catch (err) { return { ...out, postError: err.message }; } }
-    return out;
+    if (f.kind === "count") return txOut(await t.getEntity("tx-" + co, e.rowKey));
+    const out = await trySync(user, co, e.rowKey);
+    return out.booksId && !out.postError ? { ...out, posted: true } : out;
   }
   // Simple cash-book posting: many rows of date, description, amount in or out, saved together (for example pasted from
   // Excel). The book may dip below zero part-way through the period, but the float can't end up below zero.
@@ -306,8 +308,10 @@ module.exports = function makePettyCash(H) {
       const e = { partitionKey: "tx-" + co, rowKey: crypto.randomUUID(), ...f, files: "[]", booksId: "", booksNo: "", createdBy: user.email, createdAt: nowIso(), updatedBy: user.email, updatedAt: nowIso() };
       await t.createEntity(e); made.push(e.rowKey);
     }
+    let posted = 0; const failed = [];
+    for (const id of made) { const r = await trySync(user, co, id); if (r.postError) failed.push({ number: r.number, reason: r.postError }); else posted++; }
     if (user.aud) { user.aud.name = `${made.length} row${made.length === 1 ? "" : "s"} into ${fl.name}`; user.aud.detail = `${out.filter(f => f.kind !== "expense").length} in, ${out.filter(f => f.kind === "expense").length} out${opening ? `, opening cash ${fmt(opening)}` : ""}`; }
-    return { count: made.length, ids: made };
+    return { count: made.length, ids: made, posted, failed };
   }
   async function loadEntry(user, co, id) {
     const e = await getOrNull(await table(T), "tx-" + co, id);
@@ -315,11 +319,9 @@ module.exports = function makePettyCash(H) {
     if (!isAdmin(user)) { const fl = await getOrNull(await table(T), "fl-" + co, e.floatId); if (!fl || fl.custodian !== user.email) fail(404, "This entry no longer exists."); }
     return e;
   }
-  const lockedMsg = e => `${e.number || "This entry"} is in Books as ${e.booksNo}, so it can't change here. To correct it, void ${e.booksNo} in Books, then release the entry.`;
   async function updateEntry(user, id, b) {
     const co = coOf(user); const t = await table(T);
     const cur = await loadEntry(user, co, id);
-    if (cur.booksId) fail(400, lockedMsg(cur));
     if (!isAdmin(user) && cur.createdBy !== user.email) fail(403, "Only the person who logged this or a manager can change it.");
     const floats = await all(t, "fl-" + co);
     const { f, fl } = await entryIn(user, co, { ...b, floatId: b.floatId || cur.floatId }, cur, floats);
@@ -328,16 +330,27 @@ module.exports = function makePettyCash(H) {
     if (f.kind === "count") f.expected = bal;
     const next = { partitionKey: "tx-" + co, rowKey: id, ...f, updatedBy: user.email, updatedAt: nowIso() };
     if (user.aud) { user.aud.name = cur.number || KINDS[cur.kind]; user.aud.changes = diff(cur, next); }
-    try { await t.updateEntity(next, "Merge", { etag: b.etag || cur.etag }); }
+    // Already in Books: change the Books document first, so the two never disagree (a locked period stops both).
+    const live = await liveDoc(co, txOut(cur));
+    let claimed = !!cur.vatClaimed;
+    if (live) {
+      const merged = txOut({ ...cur, ...next }); merged.booksAlloc = await ownAlloc(co, txOut(cur));
+      const r = await bodyFor(co, merged, fl);
+      const doc = await books().route("PUT", ["docs", cur.booksId], asBooks(user), r.body);
+      claimed = r.claimed && !doc.cashBlocked;
+    }
+    try { await t.updateEntity({ ...next, vatClaimed: claimed }, "Merge", { etag: b.etag || cur.etag }); }
     catch (err) { if (err.statusCode === 412) fail(409, "Someone else changed this entry after you opened it. Reload and try again."); throw err; }
+    if (!live && cur.kind !== "count") return trySync(user, co, id);
     return txOut(await t.getEntity("tx-" + co, id));
   }
   async function deleteEntry(user, id) {
     const co = coOf(user); const t = await table(T);
     const cur = await loadEntry(user, co, id);
     if (user.aud) { user.aud.name = cur.number || KINDS[cur.kind]; user.aud.detail = [fmt(cur.amount), cur.payee, cur.description].filter(Boolean).join(", "); }
-    if (cur.booksId) fail(400, lockedMsg(cur));
     if (!isAdmin(user) && cur.createdBy !== user.email) fail(403, "Only the person who logged this or a manager can delete it.");
+    // Its Books document is voided (kept for the records), not deleted.
+    if (await liveDoc(co, txOut(cur))) await books().route("POST", ["docs", cur.booksId, "void"], asBooks(user), { reason: `Petty cash entry ${cur.number} deleted by ${user.email}` });
     await t.deleteEntity("tx-" + co, id);
     const c = await blobs(); await Promise.all(j(cur.files, []).map(x => c.deleteBlob(x.id).catch(() => {})));
   }
@@ -365,22 +378,32 @@ module.exports = function makePettyCash(H) {
   async function addFile(user, id, b) {
     const co = coOf(user); const t = await table(T);
     const cur = await loadEntry(user, co, id);
-    if (cur.booksId) fail(400, `${cur.number} is already in Books. Add the file to ${cur.booksNo} in Books instead.`);
+    if (cur.kind === "count") fail(400, "Cash counts don't take receipts.");
     const files = j(cur.files, []);
     if (files.length >= FILES_MAX) fail(400, `An entry can hold at most ${FILES_MAX} files.`);
     const f = await putFile(co, id, b, user);
     if (user.aud) { user.aud.name = f.name; user.aud.detail = cur.number; }
-    await t.updateEntity({ partitionKey: "tx-" + co, rowKey: id, files: JSON.stringify(files.concat(f)) }, "Merge");
+    if (realId(txOut(cur)) && await liveDoc(co, txOut(cur))) { try { f.bid = await pushFile(user, co, cur.booksId, f); } catch { /* kept here; can be re-sent */ } }
+    // Re-read so two uploads at once both keep their file.
+    for (let i = 0; i < 4; i++) {
+      const now = await t.getEntity("tx-" + co, id);
+      try { await t.updateEntity({ partitionKey: "tx-" + co, rowKey: id, files: JSON.stringify(j(now.files, []).concat(f)) }, "Merge", { etag: now.etag }); break; }
+      catch (err) { if (err.statusCode !== 412 || i === 3) throw err; }
+    }
     return txOut(await t.getEntity("tx-" + co, id));
   }
   async function removeFile(user, id, fid) {
     const co = coOf(user); const t = await table(T);
     const cur = await loadEntry(user, co, id);
-    if (cur.booksId) fail(400, lockedMsg(cur));
     const files = j(cur.files, []); const f = files.find(x => x.id === fid);
     if (!f) fail(404, "That file is no longer attached.");
     if (user.aud) { user.aud.name = f.name; user.aud.detail = cur.number; }
     if (!isAdmin(user) && f.by !== user.email) fail(403, "Only the person who attached this file or a manager can remove it.");
+    const live = await liveDoc(co, txOut(cur));
+    if (live && f.bid) {
+      if (!user.isManager) fail(403, `${cur.number} is in Books as ${cur.booksNo}, so its receipts are part of the tax records. Only a manager can remove them.`);
+      await books().route("DELETE", ["docs", cur.booksId, "files", f.bid], asBooks(user), {}).catch(err => { if (err.status !== 404) throw err; });
+    }
     await t.updateEntity({ partitionKey: "tx-" + co, rowKey: id, files: JSON.stringify(files.filter(x => x.id !== fid)) }, "Merge");
     await (await blobs()).deleteBlob(fid).catch(() => {});
     return txOut(await t.getEntity("tx-" + co, id));
@@ -397,59 +420,94 @@ module.exports = function makePettyCash(H) {
   }
 
   /* ---------- posting to Books ---------- */
-  async function postOne(user, co, id) {
-    needAdmin(user);
-    const t = await table(T);
-    const e = await getOrNull(t, "tx-" + co, id);
-    if (!e) fail(404, "This entry no longer exists.");
-    if (e.booksId) return txOut(e);
-    if (e.kind === "count") fail(400, "Cash counts aren't posted to Books.");
-    const fl = await getOrNull(t, "fl-" + co, e.floatId);
-    if (!fl) fail(400, "The float for this entry no longer exists.");
-    const x = txOut(e), bi = await info(co);
+  // Every entry goes into Books as soon as it is saved, and stays in step when it is edited, given a receipt or deleted.
+  // These Books calls run with Books rights, so the person holding the cash doesn't need Books access themselves.
+  const asBooks = user => ({ email: user.email, name: user.name, co: user.co, isManager: true, sections: ["books"], aud: {} });
+  const DEFAULT_CAT = "6950"; // Miscellaneous Expenses, until someone picks a better category
+  const realId = x => x.booksId && x.booksId !== "pending";
+  async function bodyFor(co, x, fl) {
+    const bi = await info(co);
     const notes = `Petty cash ${x.number}, ${fl.name} (held by ${fl.custodian}). Logged by ${x.createdBy}.${x.project ? " Project / customer: " + x.project + "." : ""}${x.note ? " " + x.note : ""}`.slice(0, 3000);
-    let body, claimed = false;
-    if (x.kind === "expense" && !x.category) fail(400, `Choose the Books category for ${x.number} (${x.description}).`);
+    let claimed = false;
     if (x.kind === "cashin") {
       const inv = x.invoiceNo ? (await books().pcInvoices(co)).find(i => i.number.toUpperCase() === x.invoiceNo) : null;
       if (x.invoiceNo && !inv) fail(400, `${x.invoiceNo} isn't an issued invoice in Books. Correct the invoice number, or clear it and choose an income account.`);
       if (inv) {
-        const amt = Math.min(x.amount, Math.max(0, inv.balance));
-        body = { type: "receipt", date: x.date, contactId: inv.contactId, amount: x.amount, account: fl.account, method: "Cash", bankRef: x.number, notes, allocs: amt > 0.004 ? [{ id: inv.id, amt: r2(amt) }] : [] };
-      } else if (x.category) body = { type: "journal", date: x.date, notes: `Cash received into petty cash: ${x.description}. ${notes}`.slice(0, 3000), lines: [{ account: fl.account, debit: x.amount, memo: x.description.slice(0, 200) }, { account: x.category, credit: x.amount, memo: x.description.slice(0, 200) }] };
-      else fail(400, `${x.number} (${x.description}): enter the Books invoice number it pays, or choose an income account.`);
-    } else if (x.kind === "expense") {
+        // When editing an existing payment, its own earlier allocation counts as still open.
+        const amt = Math.min(x.amount, Math.max(0, inv.balance + (x.booksAlloc || 0)));
+        return { body: { type: "receipt", date: x.date, contactId: inv.contactId, amount: x.amount, account: fl.account, method: "Cash", bankRef: x.number, notes, allocs: amt > 0.004 ? [{ id: inv.id, amt: r2(amt) }] : [] }, claimed };
+      }
+      if (x.category) return { body: { type: "journal", date: x.date, notes: `Cash received into petty cash: ${x.description}. ${notes}`.slice(0, 3000), lines: [{ account: fl.account, debit: x.amount, memo: x.description.slice(0, 200) }, { account: x.category, credit: x.amount, memo: x.description.slice(0, 200) }] }, claimed };
+      fail(400, `Cash in "${x.description}" needs the invoice number it pays, or an income account, before it can go into Books.`);
+    }
+    if (x.kind === "expense") {
+      const cat = x.category || (bi.accounts.some(a => a.code === DEFAULT_CAT) ? DEFAULT_CAT : "");
+      if (!cat) fail(400, `Choose the Books category for ${x.number} (${x.description}).`);
       const lines = [];
       if (x.vatAmt > 0 && bi.vatRegistered) {
         const { taxable, other } = vatSplit(x.amount, x.vatAmt);
         claimed = trnOk(x.payeeTrn) && !!x.receiptNo;
-        lines.push({ name: x.description, qty: 1, rate: taxable, vat: "SR", account: x.category, blocked: !claimed });
-        if (other > 0.004) lines.push({ name: x.description + " (no VAT)", qty: 1, rate: other, vat: "OS", account: x.category });
-      } else lines.push({ name: x.description, qty: 1, rate: x.amount, vat: "OS", account: x.category });
-      body = { type: "expense", date: x.date, account: fl.account, payee: x.payee || x.description.slice(0, 150), payeeTrn: claimed ? x.payeeTrn : "", ref: x.receiptNo || x.number, notes, lines };
-    } else if (x.kind === "topup") body = { type: "transfer", date: x.date, amount: x.amount, account: x.bankAccount, toAccount: fl.account, ref: x.ref || x.number, notes: `${x.method} to ${notes}` };
-    else body = { type: "transfer", date: x.date, amount: x.amount, account: fl.account, toAccount: x.bankAccount, ref: x.ref || x.number, notes: `Cash returned: ${notes}` };
-    // Claim the entry first, so two people posting at once can't make two Books documents.
-    try { await t.updateEntity({ partitionKey: "tx-" + co, rowKey: id, booksId: "pending", postedBy: user.email, postedAt: nowIso() }, "Merge", { etag: e.etag }); }
-    catch (err) { if (err.statusCode === 412) fail(409, `${x.number} changed or is being posted by someone else. Reload and try again.`); throw err; }
-    let doc;
-    try { doc = await quietly(user, () => books().route("POST", ["docs"], user, body)); }
-    catch (err) { await t.updateEntity({ partitionKey: "tx-" + co, rowKey: id, booksId: "", postedBy: "", postedAt: "" }, "Merge").catch(() => {}); throw err; }
-    // Books may have added the VAT to the cost (cash payments above the threshold).
-    if (claimed && doc.cashBlocked) claimed = false;
-    await t.updateEntity({ partitionKey: "tx-" + co, rowKey: id, booksId: doc.id, booksNo: doc.number || "", vatClaimed: claimed }, "Merge");
-    // Receipts go with the Books document, which is the tax record.
-    if (x.kind === "expense" && x.files.length) {
-      const c = await blobs();
-      for (const f of x.files) {
-        try { const buf = await c.getBlockBlobClient(f.id).downloadToBuffer(); await quietly(user, () => books().route("POST", ["docs", doc.id, "files"], user, { kind: "receipt", name: f.name, type: f.type, data: buf.toString("base64") })); }
-        catch { /* the receipt stays here; the Books document notes the voucher number */ }
-      }
+        lines.push({ name: x.description, qty: 1, rate: taxable, vat: "SR", account: cat, blocked: !claimed });
+        if (other > 0.004) lines.push({ name: x.description + " (no VAT)", qty: 1, rate: other, vat: "OS", account: cat });
+      } else lines.push({ name: x.description, qty: 1, rate: x.amount, vat: "OS", account: cat });
+      return { body: { type: "expense", date: x.date, account: fl.account, payee: x.payee || x.description.slice(0, 150), payeeTrn: claimed ? x.payeeTrn : "", ref: x.receiptNo || x.number, notes, lines }, claimed };
     }
+    if (x.kind === "topup") return { body: { type: "transfer", date: x.date, amount: x.amount, account: x.bankAccount, toAccount: fl.account, ref: x.ref || x.number, notes: `${x.method} to ${notes}` }, claimed };
+    if (x.kind === "return") return { body: { type: "transfer", date: x.date, amount: x.amount, account: fl.account, toAccount: x.bankAccount, ref: x.ref || x.number, notes: `Cash returned: ${notes}` }, claimed };
+    fail(400, "Cash counts aren't posted to Books.");
+  }
+  async function liveDoc(co, x) { if (!realId(x)) return false; const st = await books().docStatus(co, x.booksId); return !!st && st !== "void"; }
+  // Payment already applied to the invoice by this entry's own Books receipt, so an edit can re-apply it.
+  async function ownAlloc(co, x) {
+    if (x.kind !== "cashin" || !realId(x)) return 0;
+    try { const d = await books().route("GET", ["docs", x.booksId], asBooks({ email: "system", co }), {}); return (d.applied || []).reduce((a, y) => a + num(y.amt), 0); } catch { return 0; }
+  }
+  async function pushFile(user, co, docId, f) {
+    const buf = await (await blobs()).getBlockBlobClient(f.id).downloadToBuffer();
+    const r = await books().route("POST", ["docs", docId, "files"], asBooks(user), { kind: "receipt", name: f.name, type: f.type, data: buf.toString("base64") });
+    return r && r.file ? r.file.id : "";
+  }
+  async function syncOne(user, co, id) {
+    const t = await table(T);
+    const e = await getOrNull(t, "tx-" + co, id);
+    if (!e) fail(404, "This entry no longer exists.");
+    if (e.kind === "count") return txOut(e);
+    const fl = await getOrNull(t, "fl-" + co, e.floatId);
+    if (!fl) fail(400, "The float for this entry no longer exists.");
+    const x = txOut(e);
+    const live = await liveDoc(co, x);
+    x.booksAlloc = live ? await ownAlloc(co, x) : 0;
+    let { body, claimed } = await bodyFor(co, x, fl);
+    const B = asBooks(user);
+    let doc;
+    if (live) doc = await books().route("PUT", ["docs", x.booksId], B, body);
+    else {
+      if (x.booksId === "pending" && Date.now() - Date.parse(x.postedAt || 0) < 5 * 60e3) fail(409, `${x.number} is being posted right now. Wait a minute and reload.`);
+      // Claim the entry first, so two saves at once can't make two Books documents.
+      try { await t.updateEntity({ partitionKey: "tx-" + co, rowKey: id, booksId: "pending", postedBy: user.email, postedAt: nowIso() }, "Merge", { etag: e.etag }); }
+      catch (err) { if (err.statusCode === 412) fail(409, `${x.number} changed while it was being posted. Reload and try again.`); throw err; }
+      try { doc = await books().route("POST", ["docs"], B, body); }
+      catch (err) { await t.updateEntity({ partitionKey: "tx-" + co, rowKey: id, booksId: "", postedBy: "", postedAt: "" }, "Merge").catch(() => {}); throw err; }
+    }
+    if (claimed && doc.cashBlocked) claimed = false;
+    // Receipts go with the Books document, which is the tax record.
+    const files = x.files.map(f => live ? f : { ...f, bid: "" });
+    for (const f of files) if (!f.bid) { try { f.bid = await pushFile(user, co, doc.id, f); } catch { /* stays here; the Books document notes the voucher number */ } }
+    await t.updateEntity({ partitionKey: "tx-" + co, rowKey: id, booksId: doc.id, booksNo: doc.number || "", vatClaimed: claimed, files: JSON.stringify(files), syncError: "",
+      postedBy: live ? x.postedBy : user.email, postedAt: live ? x.postedAt : nowIso() }, "Merge");
     return txOut(await t.getEntity("tx-" + co, id));
   }
+  // Saving never fails because Books said no: the entry is kept, marked "Not in Books" with the reason.
+  async function trySync(user, co, id) {
+    const t = await table(T);
+    try { return await syncOne(user, co, id); }
+    catch (err) {
+      await t.updateEntity({ partitionKey: "tx-" + co, rowKey: id, syncError: String(err.message || "Couldn't post to Books.").slice(0, 500) }, "Merge").catch(() => {});
+      const o = txOut(await t.getEntity("tx-" + co, id)); return { ...o, postError: o.syncError };
+    }
+  }
   async function post(user, b) {
-    needAdmin(user); const co = coOf(user);
+    const co = coOf(user);
     const ids = (Array.isArray(b.ids) ? b.ids : []).map(x => clean(x, 60)).filter(Boolean).slice(0, 200);
     if (!ids.length) fail(400, "Choose the entries to post.");
     // Categories, income accounts and invoice numbers chosen in the posting window.
@@ -458,6 +516,7 @@ module.exports = function makePettyCash(H) {
     for (const id of ids) {
       const v = asg[id]; if (!v || typeof v !== "object") continue;
       const e = await getOrNull(t, "tx-" + co, id); if (!e || e.booksId) continue;
+      if (!isAdmin(user)) { const fl = await getOrNull(t, "fl-" + co, e.floatId); if (!fl || fl.custodian !== user.email) continue; }
       const upd = {};
       if (v.category !== undefined) {
         const c = clean(v.category, 10), a = bi.accounts.find(x => x.code === c);
@@ -470,11 +529,12 @@ module.exports = function makePettyCash(H) {
     const D = await loadAll(co);
     // Oldest first, top-ups before expenses on the same day, so the cash account never dips below zero in Books.
     const order = { topup: 0, cashin: 1, expense: 2, return: 3 };
-    const list = D.entries.filter(x => ids.includes(x.id) && !x.booksId && x.kind !== "count").sort((a, b) => a.date.localeCompare(b.date) || order[a.kind] - order[b.kind] || a.createdAt.localeCompare(b.createdAt));
+    const mineF = new Set(D.floats.filter(f => isAdmin(user) || f.custodian === user.email).map(f => f.id));
+    const list = D.entries.filter(x => ids.includes(x.id) && !x.booksId && x.kind !== "count" && mineF.has(x.floatId)).sort((a, b) => a.date.localeCompare(b.date) || order[a.kind] - order[b.kind] || a.createdAt.localeCompare(b.createdAt));
     const done = [], failed = [];
     for (const x of list) {
-      try { const r = await postOne(user, co, x.id); done.push({ id: x.id, number: x.number, booksNo: r.booksNo }); }
-      catch (err) { failed.push({ id: x.id, number: x.number, reason: err.message }); }
+      try { const r = await syncOne(user, co, x.id); done.push({ id: x.id, number: x.number, booksNo: r.booksNo }); }
+      catch (err) { failed.push({ id: x.id, number: x.number, reason: err.message }); await t.updateEntity({ partitionKey: "tx-" + co, rowKey: x.id, syncError: String(err.message).slice(0, 500) }, "Merge").catch(() => {}); }
     }
     if (user.aud) { user.aud.name = `${done.length} entr${done.length === 1 ? "y" : "ies"}`; user.aud.detail = [done.map(d => `${d.number} as ${d.booksNo}`).join(", "), failed.length ? `${failed.length} failed` : ""].filter(Boolean).join("; ").slice(0, 900); }
     return { done, failed };

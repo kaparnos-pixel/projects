@@ -14,10 +14,10 @@
 //                          agentruns  PK "run-<co>" (newest first) and PK "usage" RowKey "<co>-<YYYY-MM>"
 
 const ENGINE = require("./agent-engine");
-const { AGENTS, settingsIn, TABLES, tidy, DEFAULT_SIGS } = ENGINE;
-const BRAND = { bifold: { ink: "#1B2A4A", accent: "#C0392B", logo: "/assets/bifold_logo.png" }, techhub: { ink: "#003C50", accent: "#28A08C", logo: "/assets/techhub/techhub_logo.png" } };
-const SITE = "https://yellow-dune-0607b0710.4.azurestaticapps.net";
-const siteUrl = co => String((co === "techhub" && process.env.MK_PUBLIC_URL_TECHHUB) || process.env.MK_PUBLIC_URL || SITE).replace(/\/+$/, "");
+const { AGENTS, settingsIn, TABLES, tidy, DEFAULT_SIGS, SIG_KEYS, sigFor, noEm } = ENGINE;
+const ICONS = require("./sig-icons");
+const ACCENT = { bifold: "#2E6DA4", techhub: "#28A08C" };
+const SOCIAL = [["linkedin", "LinkedIn"], ["x", "X"], ["facebook", "Facebook"], ["instagram", "Instagram"], ["whatsapp", "WhatsApp"], ["tiktok", "TikTok"]];
 const graphReady = () => ["GRAPH_TENANT_ID", "GRAPH_CLIENT_ID", "GRAPH_CLIENT_SECRET"].every(k => process.env[k]);
 const nameOf = e => String(e || "").split("@")[0].split(/[._-]+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
 const STATUSES = ["open", "snoozed", "sent", "done", "dismissed", "resolved"];
@@ -60,7 +60,10 @@ module.exports = function makeAgents(H) {
     return settingsIn(e ? json(e.data, {}) : {});
   }
 
-  /* -------- signatures -------- */
+  /* -------- signatures --------
+     Layout (as Tech Hub's Outlook signature): name, job title, COMPANY, tagline, brands, a rule, then phone (office |
+     mobile), email, website and address each with an icon, a rule, the social bar, and the disclaimer. Icons go as
+     inline attachments (cid:) in sent mail and as data: images in the page preview. */
   const sigTable = () => table(TABLES.SETTINGS);
   const profileCache = new Map();
   async function graphProfile(email) {
@@ -69,45 +72,69 @@ module.exports = function makeAgents(H) {
     let p = {};
     try {
       const r = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(email)}?$select=displayName,jobTitle,mobilePhone,businessPhones`, { headers: { Authorization: "Bearer " + await graphToken() } });
-      if (r.ok) { const j = await r.json(); p = { name: j.displayName || "", title: j.jobTitle || "", mobile: j.mobilePhone || (j.businessPhones || [])[0] || "" }; }
+      if (r.ok) { const j = await r.json(); p = { name: j.displayName || "", title: j.jobTitle || "", mobile: j.mobilePhone || "" }; }
     } catch {}
     profileCache.set(email, p); return p;
   }
-  // The person's signature details: what they saved, else their Microsoft 365 profile, else a name from the email.
+  // The person's details: what they saved, else their Microsoft 365 profile, else a name from the email.
   async function person(email) {
     const e = await getOrNull(await sigTable(), "person", email);
     if (e) return { name: e.name || "", title: e.title || "", mobile: e.mobile || "", saved: true };
     const g = await graphProfile(email);
     return { name: g.name || nameOf(email), title: g.title || "", mobile: g.mobile || "", saved: false };
   }
-  function sigLines(co, S, p, email) {
-    const tpl = S.signature || DEFAULT_SIGS[co];
-    const vals = { name: p.name, title: p.title, mobile: p.mobile, email };
-    return tpl.split("\n").map(line => {
-      const parts = line.split(" | ").filter(part => !(part.match(/\{(\w+)\}/g) || []).some(k => !String(vals[k.slice(1, -1)] || "").trim()));
-      return parts.map(part => part.replace(/\{(\w+)\}/g, (m, k) => vals[k] !== undefined ? String(vals[k]).trim() : m)).join(" | ").trim();
-    }).filter(Boolean);
-  }
-  function sigHtml(co, S, lines) {
-    const b = BRAND[co], [first, ...rest] = lines;
-    const row = (t, st) => `<div style="${st}">${esc(t).replace(/(www\.[\w.-]+\.\w+)/g, '<a href="https://$1" style="color:' + b.accent + ';text-decoration:none">$1</a>')}</div>`;
-    return `<table cellpadding="0" cellspacing="0" style="margin-top:4px;font-family:Arial,sans-serif;font-size:13px;line-height:1.45;color:#3d4b59"><tr>`
-      + (S.sigLogo ? `<td style="padding-right:14px;vertical-align:top;border-right:3px solid ${b.accent}"><img src="${siteUrl(co)}${b.logo}" alt="" width="120" style="display:block;width:120px;height:auto"></td><td style="padding-left:14px;vertical-align:top">` : `<td style="border-left:3px solid ${b.accent};padding-left:12px;vertical-align:top">`)
-      + (first ? row(first, `font-weight:bold;font-size:14px;color:${b.ink}`) : "") + rest.map(t => row(t, "")).join("") + `</td></tr></table>`;
+  const tel = v => "tel:" + String(v).replace(/[^\d+]/g, "");
+  const href = v => /^https?:\/\//i.test(v) ? v : "https://" + String(v).replace(/^\/+/, "");
+  function sigBuild(co, sig, p, email, mode) {
+    const acc = ACCENT[co], used = new Set();
+    const img = (key, size) => { used.add(key); const src = mode === "cid" ? `cid:sig-${key}` : `data:image/png;base64,${ICONS[key]}`; return `<img src="${src}" width="${size}" height="${size}" alt="" style="display:block;width:${size}px;height:${size}px;border:0">`; };
+    const font = "font-family:'Segoe UI',Arial,Helvetica,sans-serif;";
+    const rule = `<tr><td style="padding:10px 0"><table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td style="border-top:1px solid ${acc};font-size:0;line-height:0;height:1px">&nbsp;</td></tr></table></td></tr>`;
+    const line = (text, st) => text ? `<tr><td style="${font}${st}">${esc(text)}</td></tr>` : "";
+    const link = (u, text, color) => `<a href="${esc(u)}" style="color:${color || "#111111"};text-decoration:underline">${esc(text)}</a>`;
+    const contact = (icon, inner) => `<tr><td style="padding:3px 0"><table cellpadding="0" cellspacing="0" role="presentation"><tr><td width="30" style="width:30px;vertical-align:middle">${img(`${co}-${icon}`, 18)}</td><td style="${font}font-size:14px;color:#111111;vertical-align:middle">${inner}</td></tr></table></td></tr>`;
+    const phones = [sig.office, p.mobile].filter(v => String(v || "").trim());
+    const socials = SOCIAL.filter(([k]) => String(sig[k] || "").trim());
+    const rows = [
+      line(p.name, "font-size:20px;font-weight:bold;color:#111111"),
+      line(p.title, "font-size:16px;color:#111111"),
+      line(sig.company, `font-size:15px;font-weight:bold;color:${acc};padding-top:2px`),
+      line(sig.tagline, "font-size:14px;color:#111111"),
+      line(sig.brands, `font-size:14px;font-weight:bold;color:${acc}`),
+      rule,
+      phones.length ? contact("phone", phones.map(v => link(tel(v), v)).join(' <span style="color:#111111">&nbsp;|&nbsp;</span> ')) : "",
+      contact("mail", link("mailto:" + email, email, "#0563C1")),
+      sig.website ? contact("globe", link(href(sig.website), sig.website)) : "",
+      sig.address ? contact("map-pin", esc(sig.address)) : "",
+      rule,
+      socials.length ? `<tr><td><table cellpadding="0" cellspacing="0" role="presentation" bgcolor="${acc}" style="background:${acc}"><tr>${socials.map(([k, n]) => `<td style="padding:5px 6px"><a href="${esc(href(sig[k]))}" title="${n}">${img("social-" + k, 18)}</a></td>`).join("")}</tr></table></td></tr>` : "",
+      line(sig.disclaimer, "font-size:12px;color:#222222;padding-top:4px;line-height:1.4"),
+    ].join("");
+    const html = `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="width:100%;max-width:620px;margin-top:6px;border-collapse:collapse">${rows}</table>`;
+    const text = [p.name, p.title, sig.company, sig.tagline, sig.brands, phones.join(" | "), email, sig.website, sig.address].filter(v => String(v || "").trim()).join("\n");
+    return { html, text, icons: [...used] };
   }
   async function signature(co, user, S) {
     S = S || await settings(co);
     const p = await person(user.email);
-    const lines = sigLines(co, S, p, user.email);
-    return { lines, text: lines.join("\n"), html: sigHtml(co, S, lines), person: p };
+    const b = sigBuild(co, sigFor(co, S.sig), p, user.email, "data");
+    return { html: b.html, text: b.text, person: p };
   }
+  const personIn = b => ({ name: noEm(clean(b.name, 80)), title: noEm(clean(b.title, 100)), mobile: noEm(clean(b.mobile, 40)) });
   async function saveMe(user, b) {
     writeCo(user);
-    const v = { name: tidy(clean(b.name, 80)), title: tidy(clean(b.title, 80)), mobile: clean(b.mobile, 40) };
+    const v = personIn(b);
     if (!v.name) fail(400, "Enter your name as it should appear in emails.");
     if (user.aud) user.aud.name = "Email signature details";
     await (await sigTable()).upsertEntity({ partitionKey: "person", rowKey: user.email, ...v, updatedAt: now() }, "Replace");
     return signature(coOf(user), user);
+  }
+  // Live preview while someone edits their details or (managers) the company signature. Saves nothing.
+  async function preview(user, b) {
+    const co = coOf(user);
+    const p = b.person ? { ...personIn(b.person), saved: true } : await person(user.email);
+    const sig = b.sig && user.isManager ? sigFor(co, b.sig) : sigFor(co, (await settings(co)).sig);
+    return { html: sigBuild(co, sig, p, user.email, "data").html };
   }
 
   async function list(user) {
@@ -120,7 +147,7 @@ module.exports = function makeAgents(H) {
     for await (const e of runsT.listEntities({ queryOptions: { filter: `PartitionKey eq 'run-${co}'` } })) { runs.push({ at: e.at, created: e.created, resolved: e.resolved, drafted: e.drafted, counts: json(e.counts, {}) }); if (runs.length >= 7) break; }
     const usage = await getOrNull(runsT, "usage", `${co}-${today().slice(0, 7)}`);
     const S = await settings(co);
-    return { items, agents: AGENTS, settings: { ...S, signature: S.signature || DEFAULT_SIGS[co] }, defaultSignature: DEFAULT_SIGS[co], signature: await signature(co, user, S), runs, draftsThisMonth: usage ? Number(usage.drafts) || 0 : 0,
+    return { items, agents: AGENTS, settings: { ...S, sig: sigFor(co, S.sig) }, defaultSig: DEFAULT_SIGS[co], signature: await signature(co, user, S), runs, draftsThisMonth: usage ? Number(usage.drafts) || 0 : 0,
       isManager: user.isManager, me: user.email, mailReady: graphReady(), claudeReady: !!process.env.ANTHROPIC_API_KEY, company: CO[co].name };
   }
 
@@ -192,11 +219,12 @@ module.exports = function makeAgents(H) {
     if (!to.length) fail(400, "Add the customer's email address."); if (bad) fail(400, `${bad} isn't a valid email address.`);
     if (!subject || body.trim().length < 20) fail(400, "Write a subject and a message before sending.");
     if (user.aud) { user.aud.name = e.title; user.aud.changes = [`Emailed ${to.join(", ")}: ${subject}`]; }
-    const sig = await signature(co, user);
-    const html = toHtml(body) + sigHtml(co, (await settings(co)), sig.lines);
+    const sb = sigBuild(co, sigFor(co, (await settings(co)).sig), await person(user.email), user.email, "cid");
+    const html = toHtml(body) + sb.html;
+    const attachments = sb.icons.map(k => ({ "@odata.type": "#microsoft.graph.fileAttachment", name: `${k}.png`, contentType: "image/png", contentBytes: ICONS[k], isInline: true, contentId: `sig-${k}` }));
     const post = (mailbox, extraCc) => fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/sendMail`, {
       method: "POST", headers: { Authorization: "Bearer " + tokenNow, "Content-Type": "application/json" },
-      body: JSON.stringify({ message: { subject, body: { contentType: "HTML", content: html }, toRecipients: to.map(a => ({ emailAddress: { address: a } })),
+      body: JSON.stringify({ message: { subject, body: { contentType: "HTML", content: html }, attachments, toRecipients: to.map(a => ({ emailAddress: { address: a } })),
         ccRecipients: cc.concat(extraCc).map(a => ({ emailAddress: { address: a } })), replyTo: [{ emailAddress: { address: user.email } }] }, saveToSentItems: true }),
     });
     const tokenNow = await graphToken();
@@ -223,14 +251,14 @@ module.exports = function makeAgents(H) {
     if (!user.isManager) fail(403, "Only managers can change the agent settings.");
     const co = writeCo(user);
     const s = settingsIn(b);
-    if (s.signature === DEFAULT_SIGS[co]) s.signature = "";
-    if (s.signature && !/\{name\}/.test(s.signature)) fail(400, "Keep {name} in the signature so each email is signed by the person sending it.");
+    s.sig = sigFor(co, s.sig);
+    for (const k of ["linkedin", "x", "facebook", "instagram", "whatsapp", "tiktok"]) if (s.sig[k] && !/^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/\S*)?$/i.test(s.sig[k])) fail(400, `The ${k === "x" ? "X" : k[0].toUpperCase() + k.slice(1)} link doesn't look like a web address.`);
     if (b.financeEmail && !s.financeEmail) fail(400, "Enter a valid email address for collections, or leave it empty.");
     if (s.financeEmail && !sameCoEmail(s.financeEmail, user)) fail(400, "The collections contact must be someone in your company.");
     const prev = await settings(co);
     if (user.aud) user.aud.changes = Object.keys(s).filter(k => JSON.stringify(s[k]) !== JSON.stringify(prev[k])).map(k => `${k}: ${JSON.stringify(prev[k])} to ${JSON.stringify(s[k])}`);
     await (await table(TABLES.SETTINGS)).upsertEntity({ partitionKey: "settings", rowKey: co, data: JSON.stringify(s), updatedBy: user.email, updatedAt: now() }, "Replace");
-    return { ...s, signature: s.signature || DEFAULT_SIGS[co] };
+    return s;
   }
 
   // For the top bar: the person's own open items.
@@ -248,6 +276,7 @@ module.exports = function makeAgents(H) {
     if (!a && method === "GET") return list(user);
     if (a === "settings" && method === "PUT") return saveSettings(user, body);
     if (a === "me" && method === "PUT") return saveMe(user, body);
+    if (a === "preview" && method === "POST") return preview(user, body);
     if (a === "items" && id) {
       if (!sub && method === "PUT") return saveDraft(user, id, body);
       if (sub === "send" && method === "POST") return send(user, id, body);

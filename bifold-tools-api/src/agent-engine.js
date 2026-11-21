@@ -17,13 +17,27 @@
 const CO_NAMES = { bifold: "Bifold Technologies LLC", techhub: "Tech Hub Information Technology" };
 const AGENTS = { a1: "AMC Renewal and Warranty", a2: "Pipeline Follow-up", a3: "Margin Guard", a4: "Collections and Cash" };
 const DEFAULTS = { enabled: { a1: true, a2: true, a3: true, a4: true }, renewalDays: 90, warrantyDays: 90, followupDays: 7, surveyDays: 5,
-  marginFloor: 15, financeEmail: "", monthlyDrafts: 300, digest: true, signature: "", sigLogo: true };
-// Default email signatures; managers change them in Agent settings. {name} {title} {mobile} {email} come from each
-// person's "My signature" details. A line (or a " | " part of it) whose placeholder is empty is left out.
+  marginFloor: 15, financeEmail: "", monthlyDrafts: 300, digest: true, sig: {} };
+// Default email signatures, one per company; managers change them in Agent settings. Each person adds their own name,
+// job title and mobile under "My signature". Empty fields are left out of the signature.
+const SIG_KEYS = ["company", "tagline", "brands", "office", "website", "address", "linkedin", "x", "facebook", "instagram", "whatsapp", "tiktok", "disclaimer"];
+const DISCLAIMER = "The content of this email is confidential and intended for the recipient specified in message. If you received this message by mistake, please reply to this message and follow with its deletion, so that we can ensure such a mistake does not occur in the future.";
 const DEFAULT_SIGS = {
-  bifold: "{name}\n{title}\nBifold Technologies LLC\nAl Garhoud, Dubai, UAE\nM: {mobile} | {email}\nwww.bifoldtech.com",
-  techhub: "{name}\n{title}\nTech Hub Information Technology\nAl Nakheel, Ras Al Khaimah, UAE\nT: +971 7 258 1926 | M: {mobile} | {email}\nwww.techhubrak.ae",
+  bifold: { company: "BIFOLD TECHNOLOGIES LLC", tagline: "Enterprise IT Solutions | Networking | Security | Unified Communications | Managed Services",
+    brands: "Cisco | HPE | Fortinet | Microsoft | Avaya | Mitel | Ribbon", office: "", website: "www.bifoldtech.com", address: "Al Garhoud, Dubai, UAE",
+    linkedin: "", x: "", facebook: "", instagram: "", whatsapp: "", tiktok: "", disclaimer: DISCLAIMER },
+  techhub: { company: "TECH HUB INFORMATION TECHNOLOGY", tagline: "Business IT Solutions | Laptops | Desktops | Cloud | Software",
+    brands: "HP | Dell | Lenovo | Cisco | HPE | Fortinet | H3C | Huawei | UNV", office: "+971 07 2581926", website: "www.techhubrak.ae",
+    address: "Expo Road, Opp. RAK Chamber, Al Nakheel, Ras Al Khaimah, UAE", linkedin: "https://www.linkedin.com/company/techhub-rak", x: "https://x.com/techhubrak",
+    facebook: "https://www.facebook.com/techhubrak", instagram: "https://www.instagram.com/techhubrak", whatsapp: "https://wa.me/97172581926", tiktok: "", disclaimer: DISCLAIMER },
 };
+const noEm = v => String(v == null ? "" : v).replace(/\s*\u2014\s*/g, ", ").replace(/[\u0000-\u001f]/g, " ").trim();
+// Company signature for co: the saved fields over the defaults.
+function sigFor(co, saved) {
+  const out = { ...DEFAULT_SIGS[co] };
+  if (saved && typeof saved === "object") SIG_KEYS.forEach(k => { if (saved[k] !== undefined) out[k] = noEm(saved[k]).slice(0, k === "disclaimer" ? 800 : 300); });
+  return out;
+}
 const INBOX = "agentinbox", SETTINGS = "agentsettings", RUNS = "agentruns";
 
 const json = (s, d) => { try { return s ? JSON.parse(s) : d; } catch { return d; } };
@@ -61,8 +75,7 @@ function settingsIn(raw) {
     financeEmail: emailLike(s.financeEmail) ? String(s.financeEmail).trim().toLowerCase() : "",
     monthlyDrafts: clamp(s.monthlyDrafts, 0, 5000, DEFAULTS.monthlyDrafts),
     digest: s.digest === undefined ? true : !!s.digest,
-    signature: tidy(String(s.signature || "")).replace(/\r/g, "").split("\n").map(l => l.trimEnd()).join("\n").trim().slice(0, 1500),
-    sigLogo: s.sigLogo === undefined ? true : !!s.sigLogo,
+    sig: s.sig && typeof s.sig === "object" ? Object.fromEntries(SIG_KEYS.filter(k => s.sig[k] !== undefined).map(k => [k, noEm(s.sig[k]).slice(0, k === "disclaimer" ? 800 : 300)])) : {},
   };
 }
 
@@ -373,6 +386,9 @@ module.exports = function makeEngine({ tableFor, log = console.log, now = () => 
 module.exports.AGENTS = AGENTS;
 module.exports.DEFAULTS = DEFAULTS;
 module.exports.DEFAULT_SIGS = DEFAULT_SIGS;
+module.exports.SIG_KEYS = SIG_KEYS;
+module.exports.sigFor = sigFor;
+module.exports.noEm = noEm;
 module.exports.settingsIn = settingsIn;
 module.exports.TABLES = { INBOX, SETTINGS, RUNS };
 module.exports.tidy = tidy;

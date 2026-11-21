@@ -759,6 +759,7 @@ async function alerts(user) {
   if (has("pettycash") || has("books")) jobs.push(pc().alerts(user).then(l => out.push(...l)).catch(() => {}));
   if (has("inventory")) jobs.push(inv().alerts(user).then(l => out.push(...l)).catch(() => {}));
   jobs.push(agents().alerts(user).then(l => out.push(...l)).catch(() => {}));
+  if (user.isManager) jobs.push(mk().approvals(user).then(l => out.push(...l)).catch(() => {}));
   await Promise.all(jobs);
   const rank = { high: 0, medium: 1, low: 2 };
   out.sort((a, b) => rank[a.severity] - rank[b.severity] || String(a.when).localeCompare(String(b.when)));

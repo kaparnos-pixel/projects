@@ -35,7 +35,7 @@
   const segVal = el => (el.querySelector('button[aria-pressed="true"]') || {}).dataset?.v;
   const segBind = (el, fn) => el.addEventListener("click", e => { const b = e.target.closest("button[data-v]"); if (!b) return; seg(el, b.dataset.v); fn(b.dataset.v); });
   document.addEventListener("click", e => { const c = e.target.closest("[data-close]"); if (c) c.closest("dialog").close(); });
-  const STATUS = { draft: "Draft", scheduled: "Scheduled", sending: "Sending", paused: "Paused", sent: "Sent", cancelled: "Cancelled", failed: "Failed" };
+  const STATUS = { draft: "Draft", approval: "Awaiting approval", scheduled: "Scheduled", sending: "Sending", paused: "Paused", sent: "Sent", cancelled: "Cancelled", failed: "Failed" };
   const chip = s => `<span class="stchip ${esc(s)}">${esc(STATUS[s] || s)}</span>`;
   const audLabel = a => a && a.mode === "tags" ? (a.tags.length ? "Lists: " + a.tags.join(", ") : "No lists chosen") : "Everyone subscribed";
   const ask = (title, label, value) => new Promise(res => {
@@ -110,7 +110,7 @@
     const rate = k.total ? (k.unsubscribed / k.total * 100) : 0;
     $("kpis").innerHTML = [
       ["Subscribed contacts", num(k.subscribed), `${BOOT.tags.length} list${BOOT.tags.length === 1 ? "" : "s"}`, "var(--good)"],
-      ["Scheduled", num(sched.length), sched[0] ? "Next " + fdt(sched[0].scheduledAt) : "Nothing waiting", "var(--accent)"],
+      ["Scheduled", num(sched.length), (n => n ? `${n} awaiting a manager's approval` : "")(CAMPS.filter(c => c.status === "approval").length) || (sched[0] ? "Next " + fdt(sched[0].scheduledAt) : "Nothing waiting"), "var(--accent)"],
       ["Emails sent, 30 days", num(sent30), (n => `${n} campaign${n === 1 ? "" : "s"} sent in total`)(CAMPS.filter(c => c.status === "sent").length), "var(--red)"],
       ["Unsubscribed", num(k.unsubscribed), k.total ? rate.toFixed(1) + "% of all contacts" : "No contacts yet", "var(--warn)"],
     ].map(([kk, v, s, c]) => `<div class="kpi" style="--c:${c}"><div class="k">${kk}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></div>`).join("");
@@ -124,16 +124,17 @@
       const pct = c.total ? Math.round(c.sent / c.total * 100) : 0;
       let res = "";
       if (["sending", "paused", "sent", "cancelled"].includes(c.status) && c.total) res = `<div class="n">${num(c.sent)} <span class="muted">/ ${num(c.total)}</span></div><div class="l">delivered to Azure${c.failed ? ` · <span class="neg">${num(c.failed)} failed</span>` : ""}</div><div class="bar"><i style="width:${pct}%"></i></div>`;
+      else if (c.status === "approval") res = `<div class="n">Needs approval</div><div class="l">for ${esc(fdt(c.scheduledAt))}</div>`;
       else if (c.status === "scheduled") res = `<div class="n">${esc(rel(c.scheduledAt))}</div><div class="l">${esc(fdt(c.scheduledAt))}</div>`;
       else res = `<div class="l">Edited ${esc(fd(c.updatedAt))}</div><div class="l">by ${esc(firstName(c.updatedBy))}</div>`;
-      const when = c.status === "sent" ? `Sent <b>${esc(fdt(c.completedAt || c.startedAt))}</b>` : c.status === "scheduled" ? `Goes out <b>${esc(fdt(c.scheduledAt))}</b>` : c.status === "sending" ? `Started <b>${esc(fdt(c.startedAt))}</b>` : "";
+      const when = c.status === "sent" ? `Sent <b>${esc(fdt(c.completedAt || c.startedAt))}</b>` : c.status === "approval" ? `Waiting for a manager, requested by ${esc(firstName(c.requestedBy || c.createdBy))}` : c.status === "scheduled" ? `Goes out <b>${esc(fdt(c.scheduledAt))}</b>${c.approvedBy ? `, approved by ${esc(firstName(c.approvedBy))}` : ""}` : c.status === "sending" ? `Started <b>${esc(fdt(c.startedAt))}</b>` : "";
       return `<button type="button" class="ccard" data-id="${esc(c.id)}" data-st="${esc(c.status)}"><div><h3>${esc(c.name)} ${chip(c.status)}</h3><div class="subj">${esc(c.subject || "No subject yet")}</div>
-        <div class="meta"><span>${esc(audLabel(c.audience))}</span>${when ? `<span>${when}</span>` : ""}<span>Created by ${esc(firstName(c.createdBy))}</span>${c.lastNote && c.status === "sending" ? `<span>Waiting: ${esc(c.lastNote)}</span>` : ""}</div></div><div class="res">${res}</div></button>`;
+        <div class="meta"><span>${esc(audLabel(c.audience))}</span>${when ? `<span>${when}</span>` : ""}<span>Created by ${esc(firstName(c.createdBy))}</span>${c.lastNote && c.status === "sending" ? `<span>Waiting: ${esc(c.lastNote)}</span>` : ""}${c.lastNote && c.status === "draft" && /^Returned/.test(c.lastNote) ? `<span class="neg">${esc(c.lastNote)}</span>` : ""}</div></div><div class="res">${res}</div></button>`;
     }).join("") || `<div class="empty">No campaigns match.</div>`;
   }
   segBind($("cStatus"), v => { cFilter = v; drawCampaigns(); });
   $("cQ").oninput = () => drawCampaigns();
-  $("cList").addEventListener("click", e => { const b = e.target.closest(".ccard"); if (!b) return; location.hash = (["draft", "scheduled"].includes(b.dataset.st) ? "#edit/" : "#report/") + b.dataset.id; });
+  $("cList").addEventListener("click", e => { const b = e.target.closest(".ccard"); if (!b) return; location.hash = (["draft", "approval", "scheduled"].includes(b.dataset.st) ? "#edit/" : "#report/") + b.dataset.id; });
 
   // ---------- new campaign ----------
   async function openNew() {
@@ -207,8 +208,8 @@
     $("v-edit").hidden = false;
     let c;
     try { c = await api("GET", "campaigns/" + id); } catch (e) { toast(e.message, true); location.hash = "#campaigns"; return; }
-    if (!["draft", "scheduled"].includes(c.status)) { location.replace("#report/" + id); return; }
-    ED = { id, etag: c.etag, status: c.status, scheduledAt: c.scheduledAt, open: null, dirty: false, saving: null, c: { name: c.name, subject: c.subject, preheader: c.preheader, edition: c.edition || "", audience: c.audience || { mode: "all", tags: [] }, blocks: (c.blocks || []).map(b => ({ ...b, id: b.id || uid() })) } };
+    if (!["draft", "approval", "scheduled"].includes(c.status)) { location.replace("#report/" + id); return; }
+    ED = { id, etag: c.etag, status: c.status, scheduledAt: c.scheduledAt, lastNote: c.lastNote || "", requestedBy: c.requestedBy || "", approvedBy: c.approvedBy || "", open: null, dirty: false, saving: null, c: { name: c.name, subject: c.subject, preheader: c.preheader, edition: c.edition || "", audience: c.audience || { mode: "all", tags: [] }, blocks: (c.blocks || []).map(b => ({ ...b, id: b.id || uid() })) } };
     $("eName").value = ED.c.name; $("eSubject").value = ED.c.subject; $("ePre").value = ED.c.preheader; $("eEd").value = ED.c.edition;
     $("eSubLen").textContent = ED.c.subject.length;
     const ideas = window.__mkIdeas; window.__mkIdeas = null;
@@ -217,10 +218,30 @@
     $("eSaved").textContent = "Saved";
     const ro = BOOT.readOnly; ["eTpl", "eTest", "eSched"].forEach(k => { $(k).disabled = ro; });
   }
+  // Only a manager's click lets a campaign go out: team members send it for approval; managers approve or schedule.
   function drawEdStatus() {
-    $("eStatus").outerHTML = `<span class="stchip ${ED.status}" id="eStatus">${ED.status === "scheduled" ? "Scheduled · " + esc(fdt(ED.scheduledAt)) : "Draft"}</span>`;
-    $("eSched").textContent = ED.status === "scheduled" ? "Reschedule" : "Schedule";
+    const st = ED.status, mgr = BOOT.isManager;
+    $("eStatus").outerHTML = `<span class="stchip ${st}" id="eStatus">${st === "scheduled" ? "Scheduled · " + esc(fdt(ED.scheduledAt)) : st === "approval" ? "Awaiting approval · " + esc(fdt(ED.scheduledAt)) : "Draft"}</span>`;
+    $("eSched").textContent = mgr ? (st === "scheduled" ? "Reschedule" : "Schedule") : st === "draft" ? "Send for approval" : "Change requested time";
+    $("eSched").hidden = mgr && st === "approval";
+    $("eApprove").hidden = $("eReject").hidden = !(mgr && st === "approval");
+    const note = st === "approval" ? (mgr ? `${esc(firstName(ED.requestedBy))} asked to send this campaign on ${esc(fdt(ED.scheduledAt))}. Check it, then approve or return it to draft. Nothing goes out until you approve.` : "Waiting for a manager's approval. Nothing goes out until a manager approves it. Changing it keeps it in the queue for approval.")
+      : st === "scheduled" && !mgr ? `Approved${ED.approvedBy ? " by " + esc(firstName(ED.approvedBy)) : ""}. If you change it, it goes back to a manager for approval.`
+      : st === "draft" && /^Returned/.test(ED.lastNote) ? esc(ED.lastNote) : "";
+    $("eNote").hidden = !note; $("eNote").innerHTML = note;
   }
+  $("eApprove").onclick = async () => {
+    await flushSave();
+    if (!confirm(`Approve "${ED.c.name}"? It will go to ${num(ED.count || 0)} people ${Date.parse(ED.scheduledAt) > Date.now() ? "on " + fdt(ED.scheduledAt) : "within about 10 minutes"}.`)) return;
+    try { const r = await api("POST", `campaigns/${ED.id}/approve`); ED.status = r.status; ED.scheduledAt = r.scheduledAt; ED.etag = r.etag; ED.approvedBy = r.approvedBy; drawEdStatus(); toast(`Approved. It goes out ${fdt(r.scheduledAt)} (UAE time).`); location.hash = "#campaigns"; }
+    catch (er) { toast(er.message, true); }
+  };
+  $("eReject").onclick = async () => {
+    const reason = prompt("Why is it going back? (shown to the person who prepared it)", "");
+    if (reason === null) return;
+    try { const r = await api("POST", `campaigns/${ED.id}/reject`, { reason }); ED.status = r.status; ED.etag = r.etag; ED.lastNote = r.lastNote; drawEdStatus(); toast("Returned to draft. Nothing was sent."); }
+    catch (er) { toast(er.message, true); }
+  };
   function changed(redrawBlocks) {
     if (!ED) return;
     ED.dirty = true; $("eSaved").textContent = "Unsaved changes";
@@ -376,16 +397,17 @@
   // schedule
   $("eSched").onclick = async () => {
     await flushSave();
-    const when = ED.status === "scheduled" ? new Date(ED.scheduledAt) : new Date(Date.now() + 864e5);
+    const has = ["scheduled", "approval"].includes(ED.status);
+    const when = has ? new Date(ED.scheduledAt) : new Date(Date.now() + 864e5);
     const p = dubaiParts(when);
-    $("schedDate").value = p.date; $("schedTime").value = ED.status === "scheduled" ? p.time : "09:00";
+    $("schedDate").value = p.date; $("schedTime").value = has ? p.time : "09:00";
     $("schedDate").min = dubaiParts(new Date()).date;
     seg($("schedMode"), "later"); $("schedWhen").hidden = false; $("schedErr").textContent = "";
-    $("schedGo").textContent = ED.status === "scheduled" ? "Update schedule" : "Schedule";
+    $("schedGo").textContent = !BOOT.isManager ? "Send for approval" : ED.status === "scheduled" ? "Update schedule" : "Schedule";
     let extra = $("schedForm").querySelector("[data-unsched]");
-    if (ED.status === "scheduled" && !extra) { extra = document.createElement("button"); extra.type = "button"; extra.dataset.unsched = "1"; extra.textContent = "Move back to draft"; $("schedForm").querySelector(".foot > span").replaceWith(extra); }
-    else if (ED.status !== "scheduled" && extra) extra.replaceWith(document.createElement("span"));
-    if (extra && ED.status === "scheduled") extra.onclick = async () => { try { const r = await api("POST", `campaigns/${ED.id}/unschedule`); ED.status = r.status; ED.etag = r.etag; drawEdStatus(); $("schedDlg").close(); toast("Moved back to draft. It won't be sent."); } catch (er) { $("schedErr").textContent = er.message; } };
+    if (has && !extra) { extra = document.createElement("button"); extra.type = "button"; extra.dataset.unsched = "1"; extra.textContent = "Move back to draft"; $("schedForm").querySelector(".foot > span").replaceWith(extra); }
+    else if (!has && extra) extra.replaceWith(document.createElement("span"));
+    if (extra && has) extra.onclick = async () => { try { const r = await api("POST", `campaigns/${ED.id}/unschedule`); ED.status = r.status; ED.etag = r.etag; drawEdStatus(); $("schedDlg").close(); toast("Moved back to draft. It won't be sent."); } catch (er) { $("schedErr").textContent = er.message; } };
     schedSummary();
     $("schedDlg").showModal();
   };
@@ -397,9 +419,10 @@
       <div>Subject: ${esc(ED.c.subject || "(none yet)")}</div>
       <div>From: ${esc(s.sender || "not set yet")}${BOOT.settings.replyTo ? " · replies to " + esc(BOOT.settings.replyTo) : ""}</div>
       <div class="muted">Sending starts within about 10 minutes of the chosen time and takes ${dur} at the current limit of ${num(s.perHour)} emails an hour.</div>
-      ${s.ready ? "" : `<div class="neg">Sending isn't connected yet, so this campaign will wait until it is.</div>`}`;
+      ${s.ready ? "" : `<div class="neg">Sending isn't connected yet, so this campaign will wait until it is.</div>`}
+      ${BOOT.isManager ? "" : `<div><b>A manager must approve this campaign before it goes out.</b> They'll see it at the top of their screen.</div>`}`;
   }
-  segBind($("schedMode"), v => { $("schedWhen").hidden = v === "now"; $("schedGo").textContent = v === "now" ? "Send now" : ED.status === "scheduled" ? "Update schedule" : "Schedule"; });
+  segBind($("schedMode"), v => { $("schedWhen").hidden = v === "now"; $("schedGo").textContent = !BOOT.isManager ? "Send for approval" : v === "now" ? "Send now" : ED.status === "scheduled" ? "Update schedule" : "Schedule"; });
   $("schedForm").onsubmit = async e => {
     e.preventDefault(); $("schedErr").textContent = "";
     const now = segVal($("schedMode")) === "now";
@@ -408,13 +431,14 @@
       if (!$("schedDate").value || !$("schedTime").value) { $("schedErr").textContent = "Pick a date and time."; return; }
       at = new Date(`${$("schedDate").value}T${$("schedTime").value}:00+04:00`).toISOString();
     }
-    if (now && !confirm(`Send "${ED.c.name}" to ${num(ED.count || 0)} people now?`)) return;
+    if (now && BOOT.isManager && !confirm(`Send "${ED.c.name}" to ${num(ED.count || 0)} people now?`)) return;
     busy($("schedGo"), true, "Scheduling…");
     try {
       await flushSave();
       const r = await api("POST", `campaigns/${ED.id}/schedule`, { at });
       ED.status = r.status; ED.scheduledAt = r.scheduledAt; ED.etag = r.etag; drawEdStatus();
-      $("schedDlg").close(); toast(now ? "Queued. Sending starts within about 10 minutes." : `Scheduled for ${fdt(r.scheduledAt)} (UAE time).`);
+      $("schedDlg").close();
+      toast(r.status === "approval" ? "Sent to a manager for approval. It goes out only after they approve it." : now ? "Queued. Sending starts within about 10 minutes." : `Scheduled for ${fdt(r.scheduledAt)} (UAE time).`);
       location.hash = "#campaigns";
     } catch (er) { $("schedErr").textContent = er.message; } finally { busy($("schedGo"), false); }
   };

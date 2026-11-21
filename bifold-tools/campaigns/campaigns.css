@@ -51,6 +51,8 @@ header.top .acts{display:flex;gap:8px;flex-wrap:wrap}
 @media (max-width:700px){.ccard{grid-template-columns:minmax(0,1fr)}.ccard .thumb{display:none}.ccard .res{text-align:left}}
 
 .stchip{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:99px;padding:2px 9px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.stchip.approval{background:var(--warn-soft);color:var(--warn)}
+.enote{border:1px solid var(--line);border-left:4px solid var(--warn);background:var(--surface);border-radius:10px;padding:10px 14px;margin:0 0 12px;font-size:13px}
 .stchip.scheduled{background:var(--accent-soft);color:var(--accent)}
 .stchip.sending{background:var(--warn-soft);color:var(--warn)}
 .stchip.paused{background:var(--warn-soft);color:var(--warn)}

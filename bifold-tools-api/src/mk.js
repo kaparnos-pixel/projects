@@ -21,7 +21,9 @@ const makeSender = require("./mk-send");
 
 const MEDIA_MAX = 5 * 1048576;
 const MEDIA_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
-const STATUSES = ["draft", "scheduled", "sending", "paused", "sent", "cancelled", "failed"];
+// "approval": a team member scheduled it and it waits for a manager. Only "scheduled" and "sending" campaigns are ever
+// sent (mk-send.js), so nothing reaches customers until a manager has approved it (or scheduled it themselves).
+const STATUSES = ["draft", "approval", "scheduled", "sending", "paused", "sent", "cancelled", "failed"];
 const BLOCKS = ["hero", "heading", "text", "image", "button", "split", "features", "stats", "quote", "cta", "divider", "spacer", "html"];
 const emailRe = /^[^@\s,;<>"]+@[^@\s,;<>"]+\.[a-z]{2,}$/i;
 
@@ -139,15 +141,27 @@ module.exports = function makeMk(H) {
   }
 
   // ---------- campaigns ----------
-  const SUM = ["RowKey", "PartitionKey", "name", "subject", "status", "audience", "scheduledAt", "startedAt", "completedAt", "total", "sent", "failed", "skipped", "lastNote", "createdBy", "createdAt", "updatedBy", "updatedAt"];
+  const SUM = ["RowKey", "PartitionKey", "name", "subject", "status", "audience", "scheduledAt", "startedAt", "completedAt", "total", "sent", "failed", "skipped", "lastNote", "createdBy", "createdAt", "updatedBy", "updatedAt", "requestedBy", "requestedAt", "approvedBy", "approvedAt"];
   const campOut = e => ({ id: e.rowKey || e.RowKey, co: e.partitionKey || e.PartitionKey, name: e.name || "", subject: e.subject || "", status: e.status || "draft", audience: json(e.audience, { mode: "all", tags: [] }),
     scheduledAt: e.scheduledAt || "", startedAt: e.startedAt || "", completedAt: e.completedAt || "", total: e.total || 0, sent: e.sent || 0, failed: e.failed || 0, skipped: e.skipped || 0,
-    lastNote: e.lastNote || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt });
+    lastNote: e.lastNote || "", createdBy: e.createdBy, createdAt: e.createdAt, updatedBy: e.updatedBy, updatedAt: e.updatedAt,
+    requestedBy: e.requestedBy || "", requestedAt: e.requestedAt || "", approvedBy: e.approvedBy || "", approvedAt: e.approvedAt || "" });
   const campFull = e => ({ ...campOut(e), preheader: e.preheader || "", ...unpackJson(e), etag: e.etag });
   async function listCampaigns(user) {
     const t = await table("mkcampaigns"); const out = [];
     for (const co of cos(user)) for await (const e of t.listEntities({ queryOptions: { filter: `PartitionKey eq '${co}'`, select: SUM } })) out.push(campOut(e));
     return out.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  }
+  // Top bar: managers see campaigns waiting for their approval.
+  async function approvals(user) {
+    if (!user.isManager) return [];
+    const t = await table("mkcampaigns"); const out = [];
+    for (const co of cos(user)) for await (const e of t.listEntities({ queryOptions: { filter: `PartitionKey eq '${co}' and status eq 'approval'`, select: SUM } })) {
+      const c = campOut(e);
+      out.push({ tool: "campaigns", severity: "high", when: (c.scheduledAt || c.requestedAt || "").slice(0, 10), href: `/campaigns/#edit/${c.id}`,
+        title: `Campaign waiting for your approval: ${c.name}`, text: `From ${c.requestedBy || c.createdBy}${c.total ? `, ${c.total} recipients` : ""}` });
+    }
+    return out;
   }
   async function loadCamp(user, id) {
     const t = await table("mkcampaigns");
@@ -181,8 +195,10 @@ module.exports = function makeMk(H) {
   }
   async function saveCamp(user, id, b) {
     const cur = await loadCamp(user, id); writeCo(user);
-    if (!["draft", "scheduled"].includes(cur.status)) fail(409, `This campaign is ${cur.status}, so its content can't be changed. Duplicate it to make a new version.`);
+    if (!["draft", "approval", "scheduled"].includes(cur.status)) fail(409, `This campaign is ${cur.status}, so its content can't be changed. Duplicate it to make a new version.`);
     const next = { partitionKey: cur.partitionKey, rowKey: id, ...campFields(b), updatedBy: user.email, updatedAt: now() };
+    // A team member changing an approved campaign sends it back to a manager.
+    if (cur.status === "scheduled" && !user.isManager) Object.assign(next, { status: "approval", requestedBy: user.email, requestedAt: now(), approvedBy: "", approvedAt: "", lastNote: "Changed after approval, so it needs approving again." });
     for (let i = 0; i < 20; i++) if (cur["data" + i] != null && next["data" + i] == null) next["data" + i] = "";
     if (user.aud) user.aud.name = next.name;
     try { await (await table("mkcampaigns")).updateEntity(next, "Merge", { etag: b.etag || cur.etag }); }
@@ -211,12 +227,28 @@ module.exports = function makeMk(H) {
       if (at.getTime() < Date.now() - 5 * 60000) fail(400, "That time has already passed. Pick a time in the future, or Send now.");
       const n = await audienceCount(co, c.audience);
       if (!n) fail(400, "Nobody in this audience is subscribed. Choose a different audience or import contacts.");
-      Object.assign(patch, { status: "scheduled", scheduledAt: at.toISOString(), scheduledBy: user.email, total: n, lastNote: "" });
-      if (user.aud) user.aud.detail = `${n} recipient(s), ${at.toISOString()}`;
-    } else if (action === "unschedule") { if (st !== "scheduled") fail(409, "Only a scheduled campaign can be moved back to draft."); Object.assign(patch, { status: "draft", scheduledAt: "" }); }
+      // Managers' scheduling is the approval; anyone else's waits for a manager.
+      if (user.isManager) Object.assign(patch, { status: "scheduled", scheduledAt: at.toISOString(), scheduledBy: user.email, approvedBy: user.email, approvedAt: now(), total: n, lastNote: "" });
+      else Object.assign(patch, { status: "approval", scheduledAt: at.toISOString(), scheduledBy: user.email, requestedBy: user.email, requestedAt: now(), approvedBy: "", approvedAt: "", total: n, lastNote: "" });
+      if (user.aud) user.aud.detail = `${n} recipient(s), ${at.toISOString()}${user.isManager ? "" : ", sent for approval"}`;
+    } else if (action === "approve") {
+      if (!user.isManager) fail(403, "Only a manager can approve a campaign.");
+      if (st !== "approval") fail(409, "This campaign isn't waiting for approval.");
+      const c = campFull(cur); const n = await audienceCount(co, c.audience);
+      if (!n) fail(400, "Nobody in this audience is subscribed any more. Return it to draft instead.");
+      // A requested time that has passed while it waited means "send now".
+      const at = cur.scheduledAt && Date.parse(cur.scheduledAt) > Date.now() ? cur.scheduledAt : new Date().toISOString();
+      Object.assign(patch, { status: "scheduled", scheduledAt: at, approvedBy: user.email, approvedAt: now(), total: n, lastNote: "" });
+      if (user.aud) user.aud.detail = `Approved; ${n} recipient(s), ${at}`;
+    } else if (action === "reject") {
+      if (!user.isManager) fail(403, "Only a manager can return a campaign.");
+      if (st !== "approval") fail(409, "This campaign isn't waiting for approval.");
+      const why = clean(b && b.reason, 300);
+      Object.assign(patch, { status: "draft", scheduledAt: "", approvedBy: "", approvedAt: "", lastNote: `Returned to draft by ${user.email}${why ? ": " + why : ""}` });
+    } else if (action === "unschedule") { if (!["scheduled", "approval"].includes(st)) fail(409, "Only a scheduled campaign can be moved back to draft."); Object.assign(patch, { status: "draft", scheduledAt: "", approvedBy: "", approvedAt: "" }); }
     else if (action === "pause") { if (st !== "sending") fail(409, "Only a campaign that is sending can be paused."); patch.status = "paused"; }
     else if (action === "resume") { if (st !== "paused") fail(409, "Only a paused campaign can be resumed."); patch.status = "sending"; }
-    else if (action === "cancel") { if (!["scheduled", "sending", "paused"].includes(st)) fail(409, "This campaign isn't waiting to send."); patch.status = "cancelled"; }
+    else if (action === "cancel") { if (!["approval", "scheduled", "sending", "paused"].includes(st)) fail(409, "This campaign isn't waiting to send."); patch.status = "cancelled"; }
     else fail(404, "Unknown request.");
     try { await t.updateEntity(patch, "Merge", { etag: cur.etag }); }
     catch (err) { if (err.statusCode === 412) fail(409, "The campaign changed while you were doing this (the sender may have just started it). Reload and try again."); throw err; }
@@ -462,7 +494,7 @@ Reply with ONLY one JSON object: {"name": internal campaign name, "subject": bes
       if (id && sub === "test" && method === "POST") return testSend(user, id, body);
       if (id && sub === "duplicate" && method === "POST") return duplicateCamp(user, id);
       if (id && sub === "report" && method === "GET") return report(user, id);
-      if (id && ["schedule", "unschedule", "pause", "resume", "cancel"].includes(sub) && method === "POST") return setState(user, id, sub, body);
+      if (id && ["schedule", "unschedule", "approve", "reject", "pause", "resume", "cancel"].includes(sub) && method === "POST") return setState(user, id, sub, body);
     }
     if (a === "audience" && method === "POST") { const co = writeCo(user); return { count: await audienceCount(co, { mode: body.mode === "tags" ? "tags" : "all", tags: tagList(body.tags) }) }; }
     if (a === "templates") {
@@ -529,5 +561,5 @@ Reply with ONLY one JSON object: {"name": internal campaign name, "subject": bes
     fail(404, "Not found.");
   }
 
-  return { route, publicRoute };
+  return { route, publicRoute, approvals };
 };

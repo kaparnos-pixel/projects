@@ -92,12 +92,17 @@ module.exports = function makeAudit(H) {
         if (method === "PUT") return ["Maintenance visits", out.status === "completed" && (aud.changes || []).some(x => x.startsWith("status")) ? "Completed visit" : "Edited visit", out.reportNo || out.ref || name || c, ch];
         if (method === "DELETE") return ["Maintenance visits", "Deleted visit", name || c, ""];
       }
+      if (b === "incidents") {
+        if (method === "POST") return ["Incident reports", "Created incident report", out.reportNo, [out.customerName, out.title].filter(Boolean).join(": ")];
+        if (method === "PUT") return ["Incident reports", (aud.changes || []).some(x => /^status: .*→ (resolved|closed)/.test(x)) ? "Resolved incident" : "Edited incident report", out.reportNo ? out.reportNo + ", " + out.customerName : name || c, ch];
+        if (method === "DELETE") return ["Incident reports", "Deleted incident report", name || c, ""];
+      }
       if (b === "files") {
         if (method === "POST") return ["AMC Tracker", "Uploaded file", out.name || clean(body.name, 200), out.size ? Math.max(1, Math.round(out.size / 1024)) + " KB" : ""];
         if (method === "GET") return ["AMC Tracker", d === "download" ? "Downloaded file" : "Opened file", name || c, ""];
       }
-      if (b === "share") return ["AMC Tracker", body.kind === "visit" ? "Emailed visit report" : "Emailed AMC proposal", name || clean(body.id, 60), "To " + [].concat(body.to || []).join(", ").slice(0, 200)];
-      if (b === "ai") return ["AMC Tracker", body.kind === "visit" ? "Drafted visit findings with Claude" : "Drafted proposal with Claude", clean(body.customerName, 150), ""];
+      if (b === "share") return [body.kind === "incident" ? "Incident reports" : "AMC Tracker", body.kind === "visit" ? "Emailed visit report" : body.kind === "incident" ? "Emailed incident report" : "Emailed AMC proposal", name || clean(body.id, 60), "To " + [].concat(body.to || []).join(", ").slice(0, 200)];
+      if (b === "ai") return ["AMC Tracker", body.kind === "incident" ? "Drafted incident report with Claude" : body.kind === "visit" ? "Drafted visit findings with Claude" : "Drafted proposal with Claude", clean(body.customerName, 150), ""];
     }
     if (a === "mk") {
       const A = "Email Campaigns", det = aud.detail || "";

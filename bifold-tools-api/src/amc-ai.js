@@ -67,6 +67,16 @@ ${clean(b.notes, 4000)}
 Write clear, professional, customer-facing English. Never use the em dash character (U+2014); use a comma, colon or full stop. Reply with ONLY JSON: {"findings": [short sentences], "actions": [short sentences], "recommendations": [short sentences]}. Each array may be empty.`;
 }
 
+function incidentPrompt(b, clean) {
+  return `You are writing an incident / service report that ${NAMES[b.company] || NAMES.bifold} will send to its customer ${clean(b.customerName, 150)}.
+Incident type: ${clean(b.incidentType, 60) || "not stated"}. Priority: ${clean(b.priority, 30) || "not stated"}. Systems at the site: ${clean(b.systems, 3000) || "not listed"}.
+Engineer's rough notes (the only source of facts; add nothing the notes don't support, invent no times, models or names):
+${clean(b.notes, 5000)}
+
+Write clear, calm, professional, customer-facing English. Never use the em dash character (U+2014); use a comma, colon or full stop. Each array item is one short sentence.
+Reply with ONLY JSON: {"title": "short report title, under 70 characters", "description": "2-4 sentences: what was reported and what was found", "impact": "1-2 sentences on the effect on the customer's operations, or empty", "rootCause": "1-3 sentences, or 'Under investigation.' if the notes don't establish it", "actions": [steps taken], "resolution": "1-2 sentences on how it was resolved and the current state", "recommendations": [preventive actions], "timeline": [{"time": "HH:MM or empty", "text": "event"}]}.`;
+}
+
 function parseJson(text) {
   const t = String(text || "").trim();
   try { return JSON.parse(t); } catch {}
@@ -78,7 +88,7 @@ function parseJson(text) {
 
 async function run(b, fail, clean) {
   if (!ready()) fail(501, "Claude drafting isn't set up on the tools site. The standard template was used instead.");
-  const prompt = b.kind === "proposal" ? proposalPrompt(b, clean) : b.kind === "visit" ? visitPrompt(b, clean) : null;
+  const prompt = b.kind === "proposal" ? proposalPrompt(b, clean) : b.kind === "visit" ? visitPrompt(b, clean) : b.kind === "incident" ? incidentPrompt(b, clean) : null;
   if (!prompt) fail(400, "Unknown drafting request.");
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 40000);
   let r;
@@ -86,7 +96,7 @@ async function run(b, fail, clean) {
     r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST", signal: ctl.signal,
       headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: MODEL(), max_tokens: b.kind === "visit" ? 1200 : 2500, messages: [{ role: "user", content: prompt }] }),
+      body: JSON.stringify({ model: MODEL(), max_tokens: b.kind === "visit" ? 1200 : b.kind === "incident" ? 1800 : 2500, messages: [{ role: "user", content: prompt }] }),
     });
   } catch (e) { fail(504, "Claude took too long to answer. The standard template was used instead."); }
   finally { clearTimeout(timer); }

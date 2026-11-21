@@ -224,8 +224,65 @@ const GEN = (function () {
     }
     B.push(K.h1((n++) + ". Sign-off"));
     B.push(K.body("Both parties confirm that the maintenance visit described in this report was carried out on the date stated and that the findings above were reviewed on site."));
-    B.push(signTable(D, K, ["Bifold Technologies LLC: Engineer", "Customer Representative"], [v.engineers, v.customerRep]));
+    B.push(signTable(D, K, [COMPANY.company + ": Engineer", "Customer Representative"], [v.engineers, v.customerRep]));
     return K.doc([{ properties: K.contentProps, headers: { default: K.header("Maintenance Report: " + s(v.customerName)) }, footers: { default: K.footer() }, children: B }]);
+  }
+
+  /* ---------------- incident / service report ---------------- */
+  const INC_TYPES = { hardware: "Hardware failure", network: "Network / connectivity", software: "Software / application", security: "Security incident", power: "Power / environmental",
+    telephony: "Telephony / voice", cctv: "CCTV / access control", request: "Service request", other: "Other" };
+  const INC_PRIORITY = { critical: "Critical", high: "High", medium: "Medium", low: "Low" };
+  const INC_STATUS = { open: "Open", in_progress: "In progress", resolved: "Resolved", closed: "Closed" };
+  const fmtDT = v => v ? fmtDate(v.slice(0, 10)) + (v.length > 10 ? ", " + v.slice(11, 16) : "") : "";
+  function duration(a, b) {
+    if (!a || !b) return ""; const m = Math.round((Date.parse(b) - Date.parse(a)) / 60000); if (!(m >= 0)) return "";
+    const d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mi = m % 60;
+    return [d && d + (d === 1 ? " day" : " days"), h && h + (h === 1 ? " hour" : " hours"), (mi || (!d && !h)) && mi + " min"].filter(Boolean).join(" ");
+  }
+  function incidentKv(r) {
+    return [["Report No.", s(r.reportNo)], ["Customer", s(r.customerName)], ["Site / Location", s(r.site) || "-"],
+      ["Coverage", r.ref ? "Annual Maintenance Contract " + s(r.ref) : "Not under an AMC" + (r.chargeable ? " (chargeable service)" : "")],
+      r.visitReportNo ? ["Related Visit Report", s(r.visitReportNo)] : null,
+      ["Incident Type", INC_TYPES[r.type] || s(r.type)], ["Priority", INC_PRIORITY[r.priority] || s(r.priority)], ["Status", INC_STATUS[r.status] || s(r.status)],
+      ["Reported By", [s(r.reportedBy), r.reportedVia ? "via " + s(r.reportedVia) : ""].filter(Boolean).join(" ") || "-"], ["Reported", fmtDT(r.reportedAt) || "-"],
+      ["Responded", fmtDT(r.respondedAt) ? fmtDT(r.respondedAt) + (duration(r.reportedAt, r.respondedAt) ? " (" + duration(r.reportedAt, r.respondedAt) + ")" : "") : "-"],
+      ["Resolved", fmtDT(r.resolvedAt) ? fmtDT(r.resolvedAt) + (duration(r.reportedAt, r.resolvedAt) ? " (" + duration(r.reportedAt, r.resolvedAt) + " from report)" : "") : "-"],
+      ["Engineer(s)", s(r.engineers) || "-"]].filter(Boolean);
+  }
+  function incidentSections(r) {
+    const tl = (r.timeline || []).filter(x => x.text).slice().sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    return [
+      ["Incident Summary", r.description, "text"], ["Systems / Equipment Affected", r.affected, "list"], ["Business Impact", r.impact, "text"],
+      ["Timeline of Events", tl, "timeline"], ["Root Cause", r.rootCause, "text"], ["Actions Taken", r.actions, "list"], ["Resolution", r.resolution, "text"],
+      ["Recommendations & Preventive Actions", r.recommendations, "list"],
+    ].filter(([, v, k]) => k === "timeline" ? v.length : lines(v).length);
+  }
+  function incidentDocx(D, r, img, photos) {
+    const K = docxKit(D, img); const { Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, TableLayoutType, AlignmentType } = D;
+    const B = reportCover(D, K, img, r.type === "request" ? "SERVICE REPORT" : "INCIDENT REPORT", s(r.title), s(r.customerName), incidentKv(r));
+    let n = 1;
+    incidentSections(r).forEach(([t, v, k]) => {
+      B.push(K.h1((n++) + ". " + t));
+      if (k === "timeline") B.push(K.grid(["Date & Time", "Event"], [2600, 7480], v.map(x => [fmtDT(x.at) || "-", x.text]), {}));
+      else if (k === "list") lines(v).forEach(x => B.push(K.bullet(x)));
+      else lines(v).forEach(x => B.push(K.body(x)));
+    });
+    if (photos && photos.length) {
+      B.push(K.h1((n++) + ". Photographs"));
+      const colW = 5040, imgW = 300, rows = [];
+      for (let i = 0; i < photos.length; i += 2) {
+        const pair = photos.slice(i, i + 2);
+        rows.push(new TableRow({ cantSplit: true, children: [0, 1].map(j => { const p = pair[j];
+          return new TableCell({ width: { size: colW, type: WidthType.DXA }, borders: K.noBorders(), margins: { top: 100, bottom: 100, left: 80, right: 80 },
+            children: p ? [new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ data: p.bytes, type: p.type || "jpg", transformation: fitBox(p, imgW, 240) })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 60 }, children: [new TextRun({ text: "Photo " + (i + j + 1) + (p.caption ? ": " + p.caption : ""), font: "Arial", size: 18, color: MUTE, italics: true })] })] : [new Paragraph("")] }); }) }));
+      }
+      B.push(new Table({ width: { size: CW, type: WidthType.DXA }, columnWidths: [colW, colW], layout: TableLayoutType.FIXED, borders: K.noBorders(), rows }));
+    }
+    B.push(K.h1((n++) + ". Acknowledgement"));
+    B.push(K.body("This report records the issue reported, the work carried out and its outcome. Please contact us if anything in it needs clarification or if the issue recurs."));
+    B.push(signTable(D, K, [COMPANY.company + ": Engineer", "Customer Representative"], [r.engineers, r.reportedBy]));
+    return K.doc([{ properties: K.contentProps, headers: { default: K.header((r.type === "request" ? "Service Report: " : "Incident Report: ") + s(r.customerName)) }, footers: { default: K.footer() }, children: B }]);
   }
 
   function contractDocx(D, c, visits, img) {
@@ -328,11 +385,15 @@ const GEN = (function () {
     const { doc, M, CWp } = k; k.y = startY;
     if (img && img.logo) { k.image(img.logo, 170); k.y += 10; }
     k.rule();
-    const h = 150; k.block(NAVY, h);
+    // Long titles (e.g. incident reports) wrap onto a second line in a slightly smaller size instead of running off the page.
+    doc.setFont("helvetica", "bold"); doc.setFontSize(24);
+    let size = 24, bigLines = doc.splitTextToSize(P(big), CWp - 44);
+    if (bigLines.length > 1) { size = 19; doc.setFontSize(size); bigLines = doc.splitTextToSize(P(big), CWp - 44).slice(0, 3); }
+    const h = 150 + (bigLines.length - 1) * (size + 5); k.block(NAVY, h);
     let yy = k.y + 34;
     doc.setFont("helvetica", "italic"); doc.setFontSize(10); doc.setTextColor(...rgb("C9DBEA")); doc.text(P(COMPANY.tagline), M + 22, yy); yy += 30;
     doc.setFont("helvetica", "normal"); doc.setFontSize(11); doc.setTextColor(...rgb("9CBBD5")); doc.text(P(kicker), M + 22, yy, { charSpace: 1.5 }); yy += 30;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(24); doc.setTextColor(255, 255, 255); doc.text(P(big), M + 22, yy); yy += 26;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(size); doc.setTextColor(255, 255, 255); bigLines.forEach((l, i) => doc.text(l, M + 22, yy + i * (size + 5))); yy += 26 + (bigLines.length - 1) * (size + 5);
     doc.setFont("helvetica", "normal"); doc.setFontSize(13); doc.text(doc.splitTextToSize(P(sub), CWp - 44)[0] || "", M + 22, yy);
     k.y += h; k.rule(); k.y += 14;
     return kvRows;
@@ -443,7 +504,37 @@ const GEN = (function () {
     }
     k.h1((n++) + ". Sign-off");
     k.text("Both parties confirm that the maintenance visit described in this report was carried out on the date stated and that the findings above were reviewed on site.");
-    pdfSign(k, ["Bifold Technologies LLC - Engineer", "Customer Representative"], [v.engineers, v.customerRep]);
+    pdfSign(k, [COMPANY.company + " - Engineer", "Customer Representative"], [v.engineers, v.customerRep]);
+    k.chrome(false);
+    return k.doc;
+  }
+
+  function incidentPdf(jsPDF, r, img, photos) {
+    const k = pdfKit(jsPDF, img, (r.type === "request" ? "Service Report - " : "Incident Report - ") + s(r.customerName));
+    pdfReportCover(k, img, r.type === "request" ? "SERVICE REPORT" : "INCIDENT REPORT", s(r.title), s(r.customerName), incidentKv(r));
+    let n = 1;
+    incidentSections(r).forEach(([t, v, kind]) => {
+      k.h1((n++) + ". " + t);
+      if (kind === "timeline") k.table(["Date & Time", "Event"], v.map(x => [fmtDT(x.at) || "-", x.text]), { columnStyles: { 0: { cellWidth: 120 } } });
+      else if (kind === "list") lines(v).forEach(k.bullet);
+      else lines(v).forEach(x => k.text(x));
+    });
+    if (photos && photos.length) {
+      k.h1((n++) + ". Photographs");
+      const { doc, M, CWp } = k; const w = (CWp - 18) / 2, maxH = 190;
+      for (let i = 0; i < photos.length; i += 2) {
+        const pair = photos.slice(i, i + 2);
+        const dims = pair.map(p => { let pw = w, ph = w * p.h / p.w; if (ph > maxH) { ph = maxH; pw = maxH * p.w / p.h; } return { pw, ph }; });
+        const rowH = Math.max(...dims.map(d => d.ph)) + 26; k.need(rowH);
+        pair.forEach((p, j) => { const x = M + j * (w + 18) + (w - dims[j].pw) / 2; doc.addImage(p.dataUrl, "JPEG", x, k.y, dims[j].pw, dims[j].ph);
+          doc.setFont("helvetica", "italic"); doc.setFontSize(8.5); doc.setTextColor(...rgb(MUTE));
+          doc.text(doc.splitTextToSize(P("Photo " + (i + j + 1) + (p.caption ? " - " + p.caption : "")), w)[0], M + j * (w + 18) + w / 2, k.y + Math.max(...dims.map(d => d.ph)) + 13, { align: "center" }); });
+        k.y += rowH;
+      }
+    }
+    k.need(200); k.h1((n++) + ". Acknowledgement");
+    k.text("This report records the issue reported, the work carried out and its outcome. Please contact us if anything in it needs clarification or if the issue recurs.");
+    pdfSign(k, [COMPANY.company + " - Engineer", "Customer Representative"], [r.engineers, r.reportedBy]);
     k.chrome(false);
     return k.doc;
   }
@@ -653,7 +744,7 @@ const GEN = (function () {
     }
     return { fromAmc, docx, pdf };
   })();
-  return { amcDocx, amcPdf, visitDocx, visitPdf, contractDocx, contractPdf, fmtDate, typeLabel, TYPES, lines, useBrand,
+  return { amcDocx, amcPdf, visitDocx, visitPdf, contractDocx, contractPdf, incidentDocx, incidentPdf, INC_TYPES, INC_PRIORITY, INC_STATUS, fmtDT, duration, fmtDate, typeLabel, TYPES, lines, useBrand,
     thFromAmc: (...a) => TH.fromAmc(...a), thAmcDocx: (...a) => TH.docx(...a), thAmcPdf: (...a) => TH.pdf(...a), get COMPANY() { return COMPANY; } };
 })();
 if (typeof module !== "undefined") module.exports = GEN;

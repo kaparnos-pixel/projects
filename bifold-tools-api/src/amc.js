@@ -25,6 +25,11 @@ const VIS = "amcvisits", VPK = "visit";
 const STATUSES = ["draft", "sent", "awarded", "lost"];
 const VISIT_STATUS = ["scheduled", "in_progress", "completed", "cancelled"];
 const VISIT_TYPES = ["pm", "corrective", "emergency", "survey"];
+const INC = "amcincidents", IPK = "incident";
+const INC_STATUS = ["open", "in_progress", "resolved", "closed"];
+const INC_PRIORITY = ["critical", "high", "medium", "low"];
+const INC_TYPES = ["hardware", "network", "software", "security", "power", "telephony", "cctv", "request", "other"];
+const INC_SOURCES = ["call", "visit"];
 const MAX_FILE = 10 * 1048576;
 
 module.exports = function makeAmc(H) {
@@ -311,6 +316,98 @@ module.exports = function makeAmc(H) {
     await t.deleteEntity(VPK, id);
   }
 
+  /* ---------------- incident / service reports ---------------- */
+  // A report for a single customer issue: raised from a maintenance visit, or for any day-to-day service call
+  // (with or without an AMC). Anyone in the company with maintenance-visit access can create and update them.
+  const dt = v => { const s = clean(v, 16); return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s) ? s : ""; };
+  function timelineIn(arr) { return (Array.isArray(arr) ? arr : []).slice(0, 60).map(x => ({ at: dt(x.at), text: clean(x.text, 600) })).filter(x => x.text); }
+  function incidentOut(e) {
+    const d = unpackJson(e);
+    return {
+      id: e.rowKey, co: rowCo(e), reportNo: e.reportNo, source: e.source || "call", customerId: e.customerId || "", customerName: e.customerName, amcId: e.amcId || "", ref: e.ref || "",
+      visitId: e.visitId || "", visitReportNo: e.visitReportNo || "", title: e.title || "", type: e.type || "other", priority: e.priority || "medium", status: e.status || "open",
+      site: e.site || "", reportedBy: e.reportedBy || "", reportedVia: e.reportedVia || "", reportedAt: e.reportedAt || "", respondedAt: e.respondedAt || "", resolvedAt: e.resolvedAt || "",
+      engineers: e.engineers || "", chargeable: !!e.chargeable, contactEmail: e.contactEmail || "",
+      affected: d.affected || "", description: d.description || "", impact: d.impact || "", rootCause: d.rootCause || "", actions: d.actions || "", resolution: d.resolution || "",
+      recommendations: d.recommendations || "", timeline: d.timeline || [], photos: d.photos || [], files: d.files || [], shares: d.shares || [],
+      createdBy: e.createdBy, createdAt: e.createdAt, updatedAt: e.updatedAt, updatedBy: e.updatedBy, etag: e.etag,
+    };
+  }
+  const listIncidents = async user => { try { return (await all(await table(INC), IPK)).filter(e => inCo(e, user)).map(incidentOut); } catch (e) { if (e.statusCode === 404) return []; throw e; } };
+  async function nextIncidentNo(co, year) {
+    const pre = `${PFX[co]}-IR-${year}-`;
+    let max = 0;
+    for (const e of await all(await table(INC), IPK, ["reportNo"])) { const m = String(e.reportNo || ""); if (m.startsWith(pre)) max = Math.max(max, parseInt(m.slice(pre.length), 10) || 0); }
+    return pre + String(max + 1).padStart(4, "0");
+  }
+  function incidentFields(b, e) {
+    const pick = (k, max) => b[k] !== undefined ? clean(b[k], max) : (e ? e[k] || "" : "");
+    const pickDt = k => b[k] !== undefined ? dt(b[k]) : (e ? e[k] || "" : "");
+    const type = b.type !== undefined ? (INC_TYPES.includes(b.type) ? b.type : "other") : (e && e.type) || "other";
+    const priority = b.priority !== undefined ? (INC_PRIORITY.includes(b.priority) ? b.priority : "medium") : (e && e.priority) || "medium";
+    const status = b.status !== undefined ? String(b.status) : (e && e.status) || "open";
+    if (!INC_STATUS.includes(status)) fail(400, "Choose a valid report status.");
+    const f = { title: pick("title", 200), type, priority, status, site: pick("site", 300), reportedBy: pick("reportedBy", 150), reportedVia: pick("reportedVia", 40),
+      reportedAt: pickDt("reportedAt"), respondedAt: pickDt("respondedAt"), resolvedAt: pickDt("resolvedAt"), engineers: pick("engineers", 200), contactEmail: pick("contactEmail", 150),
+      chargeable: b.chargeable !== undefined ? !!b.chargeable : !!(e && e.chargeable) };
+    if (!f.title) fail(400, "Give the report a short title, e.g. \"Internet outage at head office\".");
+    if ((status === "resolved" || status === "closed") && !f.engineers) fail(400, "Add the engineer name before marking the report resolved.");
+    if (status === "resolved" || status === "closed") { if (!f.resolvedAt) f.resolvedAt = new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 16); }
+    return f;
+  }
+  function incidentData(b, d) {
+    const t = (k, max) => b[k] !== undefined ? clean(b[k], max) : (d[k] || "");
+    return { affected: t("affected", 3000), description: t("description", 8000), impact: t("impact", 3000), rootCause: t("rootCause", 4000), actions: t("actions", 8000),
+      resolution: t("resolution", 4000), recommendations: t("recommendations", 6000), timeline: b.timeline !== undefined ? timelineIn(b.timeline) : d.timeline || [],
+      photos: b.photos !== undefined ? photosIn(b.photos) : d.photos || [], files: b.files !== undefined ? filesIn(b.files) : d.files || [], shares: d.shares || [] };
+  }
+  async function createIncident(user, b) {
+    const co = writeCo(user);
+    const source = INC_SOURCES.includes(b.source) ? b.source : "call";
+    let visit = null, contract = null, cust = null;
+    if (b.visitId) { const v = await getOrNull(await table(VIS), VPK, clean(b.visitId, 60)); if (!v || rowCo(v) !== co) fail(400, "That maintenance visit no longer exists."); visit = v; }
+    const amcId = clean(b.amcId || (visit && visit.amcId), 60);
+    if (amcId) { const c = await getOrNull(await table(CON), KPK, amcId); if (c && rowCo(c) === co) contract = c; }
+    const customerId = clean(b.customerId, 60);
+    if (customerId) { const c = await getOrNull(await table(CUST), CPK, customerId); if (!c || !inCo(c, user)) fail(400, "Choose a customer from the list."); cust = c; }
+    const customerName = (cust && cust.name) || (contract && contract.customerName) || (visit && visit.customerName) || "";
+    if (!customerName) fail(400, "Choose the customer.");
+    const f = incidentFields(Object.assign({ site: (visit && visit.site) || (contract && contract.site) || "", engineers: visit ? visit.engineers : "", reportedBy: (cust && cust.contactName) || (contract && contract.contactName) || "",
+      contactEmail: (cust && cust.email) || (contract && contract.contactEmail) || "", reportedAt: new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 16), chargeable: !contract }, b), null);
+    const id = crypto.randomUUID(); const t = now();
+    const reportNo = await nextIncidentNo(co, gulfDay().slice(0, 4));
+    const e = { partitionKey: IPK, rowKey: id, co, reportNo, source: visit ? "visit" : source, customerId: (cust && cust.rowKey) || (contract && contract.customerId) || "", customerName,
+      amcId: contract ? contract.rowKey : "", ref: contract ? contract.ref : "", visitId: visit ? visit.rowKey : "", visitReportNo: visit ? visit.reportNo || "" : "", ...f,
+      createdBy: user.email, createdAt: t, updatedAt: t, updatedBy: user.email, ...packJson(incidentData(b, {})) };
+    await (await table(INC)).createEntity(e);
+    if (user.aud) user.aud.name = reportNo + ", " + customerName;
+    return incidentOut(await (await table(INC)).getEntity(IPK, id));
+  }
+  async function loadIncident(user, id) { const e = await getOrNull(await table(INC), IPK, clean(id, 60)); if (!e || !inCo(e, user)) fail(404, "This report no longer exists."); return e; }
+  async function updateIncident(user, id, b) {
+    const t = await table(INC); const e = await loadIncident(user, id);
+    const co = writeCo(user);
+    let link = {};
+    if (b.amcId !== undefined && b.amcId !== e.amcId) {
+      const c = b.amcId ? await getOrNull(await table(CON), KPK, clean(b.amcId, 60)) : null;
+      if (b.amcId && (!c || rowCo(c) !== co)) fail(400, "Choose an awarded contract.");
+      link = { amcId: c ? c.rowKey : "", ref: c ? c.ref : "" };
+    }
+    const next = { partitionKey: IPK, rowKey: e.rowKey, co, reportNo: e.reportNo, source: e.source, customerId: e.customerId, customerName: e.customerName, amcId: e.amcId || "", ref: e.ref || "",
+      visitId: e.visitId || "", visitReportNo: e.visitReportNo || "", ...link, ...incidentFields(b, e), createdBy: e.createdBy, createdAt: e.createdAt, updatedAt: now(), updatedBy: user.email,
+      ...packJson(incidentData(b, unpackJson(e))) };
+    if (user.aud) { user.aud.name = e.reportNo + ", " + e.customerName; user.aud.changes = diff(e, next); }
+    await t.updateEntity(next, "Replace", { etag: b.etag || e.etag }).catch(etagFail("report"));
+    return incidentOut(await t.getEntity(IPK, e.rowKey));
+  }
+  async function deleteIncident(user, id) {
+    const t = await table(INC); const e = await getOrNull(t, IPK, clean(id, 60)); if (!e || !inCo(e, user)) return;
+    if (user.aud) user.aud.name = [e.reportNo, e.customerName, e.title].filter(Boolean).join(", ");
+    writeCo(user);
+    if (!user.isManager && (e.createdBy !== user.email || (unpackJson(e).shares || []).length)) fail(403, "Only the person who created this report can delete it, and only before it is sent. Ask a manager otherwise.");
+    await t.deleteEntity(IPK, e.rowKey);
+  }
+
   /* ---------------- files (Blob Storage) ---------------- */
   let container;
   async function blobs() {
@@ -370,6 +467,7 @@ module.exports = function makeAmc(H) {
     let rec;
     if (b.kind === "amc") rec = await loadAmc(user, clean(b.id, 60));
     else if (b.kind === "visit") { rec = await getOrNull(await table(VIS), VPK, clean(b.id, 60)); if (!rec || !inCo(rec, user)) fail(404, "This visit no longer exists."); }
+    else if (b.kind === "incident") rec = await loadIncident(user, b.id);
     else fail(400, "Unknown share.");
     if (user.aud) user.aud.name = [rec.reportNo || rec.ref, rec.customerName].filter(Boolean).join(", ");
     const r = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderFor(co))}/sendMail`, {
@@ -380,8 +478,8 @@ module.exports = function makeAmc(H) {
     if (!r.ok) fail(502, `Microsoft 365 didn't send the email (${r.status}). Try again, or download the PDF and send it from Outlook.`);
     const entry = { at: now(), by: user.email, to: to.join(", "), mode: "sent" };
     for (let i = 0; i < 3; i++) {
-      const t = await table(b.kind === "amc" ? AMC : VIS);
-      const e = await t.getEntity(b.kind === "amc" ? APK : VPK, rec.rowKey);
+      const t = await table(b.kind === "amc" ? AMC : b.kind === "incident" ? INC : VIS);
+      const e = await t.getEntity(b.kind === "amc" ? APK : b.kind === "incident" ? IPK : VPK, rec.rowKey);
       const d = unpackJson(e); d.shares = (d.shares || []).concat([entry]).slice(-30);
       const patch = { partitionKey: e.partitionKey, rowKey: e.rowKey, ...packJson(d), updatedAt: now() };
       if (b.kind === "amc") { d.history = (d.history || []).concat([log(user, "Emailed proposal to " + entry.to)]).slice(-80); Object.assign(patch, packJson(d)); if (e.status === "draft") { patch.status = "sent"; patch.sentAt = now(); } }
@@ -396,8 +494,8 @@ module.exports = function makeAmc(H) {
     if (a === "bootstrap" && method === "GET") {
       // Without the AMC section the commercial records stay hidden; contracts and visits are still shown for planning.
       const canAmc = user.isManager || (user.sections || []).includes("amc");
-      const [amcs, contracts, visits] = await Promise.all([canAmc ? listAmcs(user) : [], listContracts(user), listVisits(user)]);
-      return { co: user.co, amcs, contracts, visits, features: { ai: AI.ready(), mail: user.co !== "all" && mailReadyFor(user.co) }, can: { amc: canAmc, visits: user.isManager || (user.sections || []).includes("visits") } };
+      const [amcs, contracts, visits, incidents] = await Promise.all([canAmc ? listAmcs(user) : [], listContracts(user), listVisits(user), listIncidents(user)]);
+      return { co: user.co, amcs, contracts, visits, incidents, features: { ai: AI.ready(), mail: user.co !== "all" && mailReadyFor(user.co) }, can: { amc: canAmc, visits: user.isManager || (user.sections || []).includes("visits") } };
     }
     if (a === "amcs") {
       if (!id && method === "POST") return createAmc(user, body);
@@ -411,6 +509,12 @@ module.exports = function makeAmc(H) {
       if (!id && method === "POST") return createVisit(user, body);
       if (id && method === "PUT") return updateVisit(user, id, body);
       if (id && method === "DELETE") return deleteVisit(user, id);
+    }
+    if (a === "incidents") {
+      if (!id && method === "POST") return createIncident(user, body);
+      if (id && method === "GET") return incidentOut(await loadIncident(user, id));
+      if (id && method === "PUT") return updateIncident(user, id, body);
+      if (id && method === "DELETE") return deleteIncident(user, id);
     }
     if (a === "files") {
       if (!id && method === "POST") return uploadFile(user, body);

@@ -32,7 +32,7 @@ const PM_LABEL = { 0: "No scheduled PM", 1: "Monthly", 3: "Quarterly", 6: "Every
 
 /* ============ state ============ */
 const S = { me: null, meId: null, isAdmin: false, features: { ai: false, mail: false }, can: { amc: true, visits: true },
-  customers: new Map(), amcs: new Map(), contracts: new Map(), visits: new Map(), amcFilter: "all", visitFilter: "upcoming",
+  customers: new Map(), amcs: new Map(), contracts: new Map(), visits: new Map(), incidents: new Map(), amcFilter: "all", visitFilter: "upcoming", incFilter: "open",
   openAmc: null, openVisit: null, draftFiles: [], ready: false };
 
 async function api(method, path, body) {
@@ -145,7 +145,8 @@ function amcState(a) {
 }
 function chip(st) {
   const lab = { draft: "Draft", sent: "Proposal sent", awarded: "Awarded", lost: "Lost", active: "Active", expiring: "Expiring soon", expired: "Expired", renewed: "Renewed", closed: "Closed",
-    scheduled: "Scheduled", in_progress: "In progress", completed: "Completed", cancelled: "Cancelled", overdue: "Overdue" }[st] || st;
+    scheduled: "Scheduled", in_progress: "In progress", completed: "Completed", cancelled: "Cancelled", overdue: "Overdue", open: "Open", resolved: "Resolved",
+    critical: "Critical", high: "High", medium: "Medium", low: "Low" }[st] || st;
   return `<span class="chip ${esc(st)}">${esc(lab)}</span>`;
 }
 function visitState(v) { if (v.status === "scheduled" && v.scheduledDate < today()) return "overdue"; return v.status; }
@@ -159,13 +160,13 @@ function termHTML(c) {
 const nameOf = email => !email ? "-" : email === S.meId ? "You" : String(email).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
 /* ============ routing ============ */
-const VIEWS = ["overview", "amcs", "visits"];
+const VIEWS = ["overview", "amcs", "visits", "incidents"];
 // Team access: without the AMC section, proposals and contract values are hidden; without the visits
 // section, visits are read-only. The API enforces the same rules.
 function applyCan() {
   const c = S.can;
   document.querySelectorAll('nav.tabs a[data-v="amcs"], [data-act="new-amc"], [data-act="export-amcs"]').forEach(el => el.hidden = !c.amc);
-  document.querySelectorAll('[data-act="new-visit"]').forEach(el => el.hidden = !c.visits);
+  document.querySelectorAll('[data-act="new-visit"], [data-act="new-incident"]').forEach(el => el.hidden = !c.visits);
   document.querySelector("#v-overview .view-head p").textContent = c.amc ? `Contracts, renewals and site visits across ${B().short}'s maintenance book.` : `Maintenance visits for ${B().short}'s awarded contracts.`;
   route();
 }
@@ -180,7 +181,7 @@ addEventListener("hashchange", route);
 
 /* ============ render ============ */
 let rq = 0;
-function renderAll() { cancelAnimationFrame(rq); rq = requestAnimationFrame(() => { renderAlerts(); renderOverview(); renderAmcs(); renderVisits(); if (S.openAmc && $("sAmc").open) renderAmcSheet(); }); }
+function renderAll() { cancelAnimationFrame(rq); rq = requestAnimationFrame(() => { renderAlerts(); renderOverview(); renderAmcs(); renderVisits(); renderIncidents(); if (S.openAmc && $("sAmc").open) renderAmcSheet(); }); }
 
 function alertContracts() { return [...S.contracts.values()].filter(c => { const st = contractState(c); return st === "expiring" || st === "expired"; }).filter(c => daysTo(c.end) > -60).sort((a, b) => a.end.localeCompare(b.end)); }
 function renderAlerts() {
@@ -214,6 +215,7 @@ function renderOverview() {
   const att = [];
   alertContracts().forEach(c => att.push({ when: c.end, html: `<span class="dateblock late"><div class="m">${esc(fmt(c.end).split(" ")[1] || "")}</div><div class="d">${esc(fmt(c.end).split(" ")[0])}</div></span><span><span class="t">${esc(c.customerName)}</span><br><span class="sub">${daysTo(c.end) < 0 ? "Contract expired. Start the renewal" : "Contract expires in " + daysTo(c.end) + " days"} · ${esc(c.ref)}</span></span>${chip(contractState(c))}`, open: () => openAmcById(c.amcId) }));
   overdue.forEach(v => att.push({ when: v.scheduledDate, html: visitLiHTML(v), open: () => openVisit(v.id) }));
+  [...S.incidents.values()].filter(r => (r.status === "open" || r.status === "in_progress") && (r.priority === "critical" || r.priority === "high")).forEach(r => att.push({ when: r.reportedAt || r.createdAt, html: incLiHTML(r), open: () => openIncident(r.id) }));
   amcs.filter(a => a.status === "sent" && a.sentAt && daysTo(a.sentAt.slice(0, 10)) < -14).forEach(a => att.push({ when: a.sentAt, html: `<span class="dateblock"><div class="m">Sent</div><div class="d">${Math.abs(daysTo(a.sentAt.slice(0, 10)))}d</div></span><span><span class="t">${esc(a.customerName)}</span><br><span class="sub">Proposal sent ${esc(fmt(a.sentAt))}. Follow up for a decision</span></span>${chip("sent")}`, open: () => openAmc(a) }));
   att.sort((a, b) => String(a.when).localeCompare(String(b.when)));
   listInto($("attention"), att.slice(0, 8), S.ready ? "Nothing needs attention right now." : "Loading…");
@@ -891,7 +893,8 @@ function renderVisitSheet() {
     <label class="f">Recommendations<textarea id="vf_rec" rows="3">${esc(v.recommendations)}</textarea></label></div>`);
   HB.push(`<div class="sec"><h3>Site photos</h3><div class="photos" id="vf_photos"></div>${'<label class="drop" id="vf_pdrop">Add site photos: drop images or click to choose<input type="file" id="vf_pinput" accept="image/*" multiple></label>'}</div>`);
   HB.push(`<div class="sec"><h3>Documents</h3><div class="files" id="vf_files">${filesHTML(v.files, true)}</div>${'<label class="drop" id="vf_fdrop">Upload signed job sheet or other documents<input type="file" id="vf_finput" multiple></label>'}</div>`);
-  HB.push(`<div class="sec"><h3>Report</h3><div class="docrow"><button type="button" class="sm" id="vf_docx">Word report</button><button type="button" class="sm" id="vf_pdf">PDF report</button><button type="button" class="sm" id="vf_pv">Preview</button><button type="button" class="accent sm" id="vf_share">Share with customer</button></div>
+  HB.push(`<div class="sec"><h3>Report</h3><div class="docrow"><button type="button" class="sm" id="vf_docx">Word report</button><button type="button" class="sm" id="vf_pdf">PDF report</button><button type="button" class="sm" id="vf_pv">Preview</button><button type="button" class="accent sm" id="vf_share">Share with customer</button><button type="button" class="sm" id="vf_inc">Raise incident report</button></div>
+    ${[...S.incidents.values()].filter(x => x.visitId === v.id).map(x => `<div class="log"><div><time>${esc(x.reportNo)}</time><span><a href="#incidents" data-inc="${esc(x.id)}">${esc(x.title)}</a> · ${esc(GEN.INC_STATUS[x.status])}</span></div></div>`).join("")}
     ${(v.shares || []).length ? `<div class="log">${v.shares.slice(-3).reverse().map(s => `<div><time>${esc(fmt(s.at))}</time><span>${esc(s.mode === "draft" ? "Outlook draft for" : "Emailed to")} ${esc(s.to)}</span></div>`).join("")}</div>` : ""}</div>`);
   HB.push(`<div class="sec" style="position:sticky;bottom:-28px;background:var(--surface);padding:12px 0 4px;border-top:1px solid var(--line)"><div class="docrow">
     <button type="button" class="primary" id="vf_save">Save</button>
@@ -904,7 +907,7 @@ function renderVisitSheet() {
   renderChecklist(); renderPhotos(); wireVisit();
   if (!S.can.visits) {
     $("vs_body").querySelectorAll("input, textarea, select").forEach(el => el.disabled = true);
-    $("vs_body").querySelectorAll(".ck button, .ph .x, .drop, details.more, #vf_ckNew, #vf_ckAdd, #vf_share, #vf_save, #vf_start, #vf_complete, #vf_reopen, #vf_cancel, #vf_delete, #vf_files [data-rm]").forEach(el => el.hidden = true);
+    $("vs_body").querySelectorAll(".ck button, .ph .x, .drop, details.more, #vf_ckNew, #vf_ckAdd, #vf_share, #vf_inc, #vf_save, #vf_start, #vf_complete, #vf_reopen, #vf_cancel, #vf_delete, #vf_files [data-rm]").forEach(el => el.hidden = true);
     const n = document.createElement("div"); n.className = "callout"; n.textContent = `View only. Ask ${B().manager} for access to maintenance visits to update this visit.`; $("vs_body").prepend(n);
   }
 }
@@ -992,7 +995,226 @@ function wireVisit() {
   const rep = async (kind, b) => { busy(b, true, ""); try { readVisitForm(); if (vDirty) await saveVisit(); await save(visitName(vDraft, kind), await buildVisit(vDraft, kind)); } catch (e) { err(errMsg(e)); } finally { busy(b, false); } };
   on("vf_docx", b => rep("docx", b)); on("vf_pdf", b => rep("pdf", b));
   on("vf_pv", () => BXPdf.preview(async () => { readVisitForm(); if (vDirty) await saveVisit(); return buildVisit(vDraft, "pdf"); }, visitName(vDraft, "pdf")));
+  on("vf_inc", async () => { readVisitForm(); if (vDirty) { try { await saveVisit(); } catch (e) { err(errMsg(e)); return; } } openNewIncident({ visitId: vDraft.id }); });
+  $("vs_body").querySelectorAll("[data-inc]").forEach(a => a.onclick = e => { e.preventDefault(); const id = a.dataset.inc; $("sVisit").close(); openIncident(id); });
   on("vf_share", async () => { readVisitForm(); if (vDirty) { try { await saveVisit(); } catch (e) { err(errMsg(e)); return; } } openShare({ kind: "visit", v: S.visits.get(vDraft.id) }); });
+}
+
+/* ============ incident / service reports ============ */
+const INC_TYPES = () => GEN.INC_TYPES;
+const nowLocal = () => { const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+const incName = (r, ext) => safeName(`${r.reportNo} ${shortName(r.customerName)} ${r.type === "request" ? "Service" : "Incident"} Report`) + "." + ext;
+const incOpen = r => r.status === "open" || r.status === "in_progress";
+function incLiHTML(r) {
+  const d = (r.reportedAt || r.createdAt || "").slice(0, 10);
+  return `<span class="dateblock${r.priority === "critical" ? " late" : ""}"><div class="m">${esc(fmt(d).split(" ")[1] || "")}</div><div class="d">${esc(fmt(d).split(" ")[0] || "")}</div></span><span><span class="t">${esc(r.customerName)}</span><br><span class="sub">${esc(r.title)} · ${esc(r.reportNo)}</span></span>${chip(r.priority)}`;
+}
+function renderIncidents() {
+  const all = [...S.incidents.values()];
+  $("nIncidents").textContent = all.filter(incOpen).length;
+  const q = $("incSearch").value.trim().toLowerCase(), f = S.incFilter, pr = $("incPriority").value;
+  const rows = all.filter(r => {
+    if (f === "open" && !incOpen(r)) return false;
+    if (f === "resolved" && incOpen(r)) return false;
+    if (f === "unsent" && (r.shares || []).length) return false;
+    if (pr && r.priority !== pr) return false;
+    return !q || [r.customerName, r.reportNo, r.title, r.engineers, r.ref, r.visitReportNo].join(" ").toLowerCase().includes(q);
+  }).sort((a, b) => String(b.reportedAt || b.createdAt).localeCompare(String(a.reportedAt || a.createdAt)));
+  $("incCount").textContent = rows.length + " report" + (rows.length === 1 ? "" : "s");
+  const tb = $("incRows"); tb.innerHTML = "";
+  rows.forEach(r => {
+    const tr = document.createElement("tr"); tr.className = "click"; tr.tabIndex = 0;
+    const sent = (r.shares || []).slice(-1)[0];
+    tr.innerHTML = `<td><b>${esc(fmt((r.reportedAt || r.createdAt).slice(0, 10)))}</b>${r.reportedAt ? `<div class="sub">${esc(r.reportedAt.slice(11, 16))}</div>` : ""}</td><td><b>${esc(r.title)}</b><div class="ref">${esc(r.reportNo)}${r.visitReportNo ? " · from " + esc(r.visitReportNo) : ""}</div></td><td><b>${esc(r.customerName)}</b><div class="sub">${r.ref ? esc(r.ref) : "No AMC"}</div></td><td>${chip(r.priority)}</td><td>${chip(r.status)}</td><td class="small">${esc(r.engineers || "-")}</td><td class="small">${sent ? esc(fmt(sent.at)) : '<span class="muted">Not sent</span>'}</td>`;
+    tr.onclick = () => openIncident(r.id); tr.onkeydown = e => { if (e.key === "Enter") openIncident(r.id); };
+    tb.appendChild(tr);
+  });
+  $("incEmpty").hidden = !(S.ready && !rows.length);
+}
+$("incSeg").onclick = e => { const b = e.target.closest("button"); if (!b) return; S.incFilter = b.dataset.f; syncSeg("incSeg", S.incFilter); renderIncidents(); };
+$("incSearch").oninput = renderIncidents; $("incPriority").onchange = renderIncidents;
+
+// New report: from a customer service call (any customer) or from a maintenance visit.
+let niSrc = "call", niPreset = null;
+function contractFor(customerId) { return [...S.contracts.values()].filter(c => c.customerId === customerId && ["active", "expiring"].includes(contractState(c)))[0] || null; }
+function niCover() {
+  if (niSrc === "visit") { const v = S.visits.get($("ni_visit").value); $("ni_cover").textContent = ""; return v; }
+  const c = contractFor($("ni_customer").value);
+  $("ni_cover").textContent = c ? `Covered under AMC ${c.ref}.` : $("ni_customer").value ? "No active AMC: the report will be marked as chargeable service (you can change this)." : "";
+  return c;
+}
+function niSetSrc(src) {
+  niSrc = src; syncSeg("ni_src", src);
+  $("ni_visitWrap").hidden = src !== "visit"; $("ni_custWrap").hidden = src === "visit";
+  niCover();
+}
+function openNewIncident(preset) {
+  niPreset = preset || null; $("fNewInc").reset(); $("ni_err").textContent = "";
+  $("ni_type").innerHTML = Object.entries(INC_TYPES()).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("");
+  fillCustomerSelect($("ni_customer"), preset && preset.customerId);
+  const vs = [...S.visits.values()].filter(v => v.status !== "cancelled").sort((a, b) => String(b.scheduledDate).localeCompare(String(a.scheduledDate))).slice(0, 200);
+  $("ni_visit").innerHTML = '<option value="">Choose a visit</option>' + vs.map(v => `<option value="${esc(v.id)}">${esc(fmt(v.scheduledDate))} · ${esc(v.customerName)} · ${esc(v.reportNo || GEN.typeLabel(v.type))}</option>`).join("");
+  $("ni_at").value = nowLocal(); $("ni_eng").value = "";
+  if (preset && preset.visitId) { $("ni_visit").value = preset.visitId; const v = S.visits.get(preset.visitId); if (v) { $("ni_eng").value = v.engineers || ""; $("ni_by").value = v.customerRep || ""; $("ni_via").value = "On site"; } niSetSrc("visit"); }
+  else niSetSrc("call");
+  $("dNewInc").showModal(); $("ni_title").focus();
+}
+$("ni_src").onclick = e => { const b = e.target.closest("button"); if (b) niSetSrc(b.dataset.f); };
+$("ni_customer").onchange = () => { const c = S.customers.get($("ni_customer").value); if (c && !$("ni_by").value) $("ni_by").value = c.contactName || ""; niCover(); };
+$("ni_visit").onchange = () => { const v = S.visits.get($("ni_visit").value); if (v) { if (!$("ni_eng").value) $("ni_eng").value = v.engineers || ""; if (!$("ni_by").value) $("ni_by").value = v.customerRep || ""; $("ni_via").value = "On site"; } };
+$("ni_newCust").onclick = () => openCustomer(null, id => { fillCustomerSelect($("ni_customer"), id); $("ni_customer").onchange(); });
+closeOn($("dNewInc"));
+$("fNewInc").onsubmit = async e => {
+  e.preventDefault(); $("ni_err").textContent = "";
+  const title = $("ni_title").value.trim();
+  const body = { source: niSrc, title, type: $("ni_type").value, priority: $("ni_priority").value, reportedBy: $("ni_by").value.trim(), reportedVia: $("ni_via").value, reportedAt: $("ni_at").value, engineers: $("ni_eng").value.trim() };
+  if (niSrc === "visit") { const v = S.visits.get($("ni_visit").value); if (!v) { $("ni_err").textContent = "Choose the maintenance visit."; return; } body.visitId = v.id; body.amcId = v.amcId; const c = S.contracts.get(v.amcId); if (c && c.customerId) body.customerId = c.customerId; }
+  else { if (!$("ni_customer").value) { $("ni_err").textContent = "Choose the customer."; return; } body.customerId = $("ni_customer").value; const c = contractFor(body.customerId); if (c) { body.amcId = c.amcId; body.chargeable = false; } }
+  if (!title) { $("ni_err").textContent = "Give the report a short title."; return; }
+  busy($("ni_save"), true, "Creating");
+  try { const r = await api("POST", "amc/incidents", body); S.incidents.set(r.id, r); $("dNewInc").close(); toast("Report " + r.reportNo + " created"); renderAll(); if ($("sVisit").open) $("sVisit").close(); openIncident(r.id); }
+  catch (err) { $("ni_err").textContent = errMsg(err); }
+  finally { busy($("ni_save"), false); }
+};
+
+let iDraft = null, iDirty = false;
+function openIncident(id) { const r = S.incidents.get(id); if (!r) return; iDraft = JSON.parse(JSON.stringify(r)); iDirty = false; renderIncidentSheet(); if (!$("sInc").open) $("sInc").showModal(); }
+$("sInc").addEventListener("close", () => { iDraft = null; iDirty = false; });
+function renderIncidentSheet() {
+  const r = iDraft; const c = S.contracts.get(r.amcId) || null; const closed = !incOpen(r);
+  $("is_ref").textContent = r.reportNo + (r.ref ? " · " + r.ref : "") + (r.visitReportNo ? " · visit " + r.visitReportNo : "");
+  $("is_title").textContent = r.customerName;
+  const rsp = GEN.duration(r.reportedAt, r.respondedAt), res = GEN.duration(r.reportedAt, r.resolvedAt);
+  $("is_chips").innerHTML = chip(r.status) + " " + chip(r.priority) + ` <span class="chip">${esc(INC_TYPES()[r.type] || r.type)}</span>` + (rsp ? ` <span class="chip">Response ${esc(rsp)}</span>` : "") + (res ? ` <span class="chip">Resolved in ${esc(res)}</span>` : "");
+  const opt = (o, v) => Object.entries(o).map(([k, l]) => `<option value="${k}"${k === v ? " selected" : ""}>${esc(l)}</option>`).join("");
+  const contracts = [...S.contracts.values()].filter(x => x.customerId && x.customerId === r.customerId || x.amcId === r.amcId);
+  const H = [];
+  H.push(`<div class="sec"><h3>Incident</h3><div class="grid2">
+    <label class="f full">Title<input id="if_title" maxlength="200" value="${esc(r.title)}"></label>
+    <label class="f">Incident type<select id="if_type">${opt(INC_TYPES(), r.type)}</select></label>
+    <label class="f">Priority<select id="if_priority">${opt(GEN.INC_PRIORITY, r.priority)}</select></label>
+    <label class="f">Reported by<input id="if_by" maxlength="150" value="${esc(r.reportedBy)}"></label>
+    <label class="f">Reported via<select id="if_via">${["Phone", "Email", "WhatsApp", "On site", "Monitoring alert", "Support portal"].map(x => `<option${x === r.reportedVia ? " selected" : ""}>${x}</option>`).join("")}</select></label>
+    <label class="f">Reported at<input id="if_rep" type="datetime-local" value="${esc(r.reportedAt)}"></label>
+    <label class="f">Responded at<input id="if_resp" type="datetime-local" value="${esc(r.respondedAt)}"><span class="hint">First response or engineer on the case</span></label>
+    <label class="f">Resolved at<input id="if_resl" type="datetime-local" value="${esc(r.resolvedAt)}"></label>
+    <label class="f">Engineer(s)<input id="if_eng" maxlength="200" value="${esc(r.engineers)}"></label>
+    <label class="f">Site / location<input id="if_site" maxlength="300" value="${esc(r.site)}"></label>
+    <label class="f">Customer email for the report<input id="if_mail" type="email" maxlength="150" value="${esc(r.contactEmail)}"></label>
+    <label class="f">Coverage<select id="if_amc"><option value="">No AMC</option>${contracts.map(x => `<option value="${esc(x.amcId)}"${x.amcId === r.amcId ? " selected" : ""}>AMC ${esc(x.ref)}</option>`).join("")}</select></label>
+    <label class="f" style="display:flex;gap:8px;align-items:center;font-weight:500;color:var(--fg)"><input type="checkbox" id="if_charge" style="width:auto"${r.chargeable ? " checked" : ""}> Chargeable service (outside AMC cover)</label>
+  </div>${c && c.systems ? `<details class="more"><summary>Systems under the AMC</summary><div class="systems" style="margin-top:8px">${esc(c.systems)}</div></details>` : ""}</div>`);
+  H.push(`<div class="sec"><h3>Report</h3>
+    ${S.features.ai ? `<details class="more"${r.description ? "" : " open"}><summary>Write up from rough notes with Claude</summary><div style="display:grid;gap:8px;margin-top:8px"><textarea id="if_rough" rows="4" placeholder="e.g. 9:40 customer called, internet down all floors. 10:15 on site, ISP router ok, core switch fan failed and overheated, rebooted, moved uplink to spare switch 10:50 service back. replace switch, add temperature alert"></textarea><div><button type="button" class="sm" id="if_ai">Draft the report</button></div></div></details>` : ""}
+    <label class="f">What was reported and found<textarea id="if_desc" rows="4">${esc(r.description)}</textarea></label>
+    <label class="f">Systems / equipment affected <span class="hint">One per line</span><textarea id="if_aff" rows="2">${esc(r.affected)}</textarea></label>
+    <label class="f">Business impact<textarea id="if_imp" rows="2">${esc(r.impact)}</textarea></label>
+    <label class="f">Root cause<textarea id="if_rc" rows="2">${esc(r.rootCause)}</textarea></label>
+    <label class="f">Actions taken <span class="hint">One per line</span><textarea id="if_act" rows="4">${esc(r.actions)}</textarea></label>
+    <label class="f">Resolution<textarea id="if_resol" rows="2">${esc(r.resolution)}</textarea></label>
+    <label class="f">Recommendations &amp; preventive actions <span class="hint">One per line</span><textarea id="if_rec" rows="3">${esc(r.recommendations)}</textarea></label></div>`);
+  H.push(`<div class="sec"><h3>Timeline</h3><div id="if_tl"></div><div class="docrow"><input id="if_tlAt" type="datetime-local" style="width:auto"><input id="if_tlText" placeholder="What happened, e.g. Engineer arrived on site" style="flex:1;min-width:180px"><button type="button" class="sm" id="if_tlAdd">Add</button></div></div>`);
+  H.push(`<div class="sec"><h3>Photos</h3><div class="photos" id="if_photos"></div><label class="drop" id="if_pdrop">Add photos: drop images or click to choose<input type="file" id="if_pinput" accept="image/*" multiple></label></div>`);
+  H.push(`<div class="sec"><h3>Documents</h3><div class="files" id="if_files">${filesHTML(r.files, true)}</div><label class="drop" id="if_fdrop">Upload a signed job sheet, logs or other documents<input type="file" id="if_finput" multiple></label></div>`);
+  H.push(`<div class="sec"><h3>Send to customer</h3><div class="docrow"><button type="button" class="sm" id="if_docx">Word report</button><button type="button" class="sm" id="if_pdf">PDF report</button><button type="button" class="sm" id="if_pv">Preview</button><button type="button" class="accent sm" id="if_share">Email to customer</button></div>
+    ${(r.shares || []).length ? `<div class="log">${r.shares.slice(-5).reverse().map(x => `<div><time>${esc(fmt(x.at))}</time><span>Emailed to ${esc(x.to)}${x.by ? " by " + esc(x.by) : ""}</span></div>`).join("")}</div>` : '<p class="muted small" style="margin:6px 0 0">Not sent yet.</p>'}</div>`);
+  H.push(`<div class="sec" style="position:sticky;bottom:-28px;background:var(--surface);padding:12px 0 4px;border-top:1px solid var(--line)"><div class="docrow">
+    <button type="button" class="primary" id="if_save">Save</button>
+    ${r.status === "open" ? '<button type="button" id="if_start">Start work</button>' : ""}
+    ${!closed ? '<button type="button" id="if_resolve">Mark resolved</button>' : ""}
+    ${r.status === "resolved" ? '<button type="button" id="if_close">Close</button>' : ""}
+    ${closed ? '<button type="button" id="if_reopen">Reopen</button>' : ""}
+    <button type="button" class="danger sm" id="if_delete" style="margin-left:auto">Delete</button></div><div class="err" id="if_err" role="alert"></div></div>`);
+  $("is_body").innerHTML = H.join("");
+  renderTimeline(); renderIncPhotos(); wireIncident();
+  if (!S.can.visits) {
+    $("is_body").querySelectorAll("input, textarea, select").forEach(el => el.disabled = true);
+    $("is_body").querySelectorAll(".drop, details.more, #if_tlAdd, #if_share, #if_save, #if_start, #if_resolve, #if_close, #if_reopen, #if_delete, #if_files [data-rm], .ph .x, [data-tlx]").forEach(el => el.hidden = true);
+    const n = document.createElement("div"); n.className = "callout"; n.textContent = `View only. Ask ${B().manager} for access to maintenance visits to update incident reports.`; $("is_body").prepend(n);
+  }
+}
+function renderTimeline() {
+  const box = $("if_tl"); const tl = iDraft.timeline;
+  if (!tl.length) { box.innerHTML = '<p class="muted small" style="margin:0 0 8px">No events yet. Add the key times: reported, responded, on site, restored.</p>'; return; }
+  const order = tl.map((x, i) => [x, i]).sort((a, b) => String(a[0].at).localeCompare(String(b[0].at)));
+  box.innerHTML = `<div class="log" style="margin:0 0 8px">${order.map(([x, i]) => `<div><time>${esc(GEN.fmtDT(x.at) || "-")}</time><span style="flex:1">${esc(x.text)}</span><button type="button" class="ghost sm" data-tlx="${i}" aria-label="Remove event">✕</button></div>`).join("")}</div>`;
+  box.querySelectorAll("[data-tlx]").forEach(b => b.onclick = () => { iDraft.timeline.splice(+b.dataset.tlx, 1); iDirty = true; renderTimeline(); });
+}
+function renderIncPhotos() {
+  const box = $("if_photos"); box.innerHTML = ""; if (!iDraft.photos.length) { box.innerHTML = '<span class="muted small">No photos yet.</span>'; return; }
+  iDraft.photos.forEach((p, i) => {
+    const d = document.createElement("div"); d.className = "ph";
+    d.innerHTML = `<img src="/api/amc/files/${esc(p.id)}" alt="${esc(p.caption || "Photo " + (i + 1))}" loading="lazy"><input placeholder="Caption" value="${esc(p.caption)}" aria-label="Caption for photo ${i + 1}"><button type="button" class="sm x" aria-label="Remove photo">✕</button>`;
+    d.querySelector("input").oninput = e => { p.caption = e.target.value; iDirty = true; };
+    d.querySelector(".x").onclick = () => { iDraft.photos.splice(i, 1); iDirty = true; renderIncPhotos(); };
+    box.appendChild(d);
+  });
+}
+function readIncForm() {
+  const g = id => $(id) ? $(id).value.trim() : "";
+  Object.assign(iDraft, { title: g("if_title"), type: $("if_type").value, priority: $("if_priority").value, reportedBy: g("if_by"), reportedVia: $("if_via").value, reportedAt: g("if_rep"),
+    respondedAt: g("if_resp"), resolvedAt: g("if_resl"), engineers: g("if_eng"), site: g("if_site"), contactEmail: g("if_mail"), amcId: $("if_amc").value, chargeable: $("if_charge").checked,
+    description: $("if_desc").value, affected: $("if_aff").value, impact: $("if_imp").value, rootCause: $("if_rc").value, actions: $("if_act").value, resolution: $("if_resol").value, recommendations: $("if_rec").value });
+}
+async function saveIncident(patch, msg) {
+  readIncForm(); Object.assign(iDraft, patch || {});
+  const data = JSON.parse(JSON.stringify(iDraft)); delete data.id;
+  const saved = await api("PUT", "amc/incidents/" + encodeURIComponent(iDraft.id), data);
+  S.incidents.set(saved.id, saved); iDraft = JSON.parse(JSON.stringify(saved)); iDirty = false;
+  if (msg) toast(msg); renderAll(); renderIncidentSheet();
+}
+async function buildIncident(r, kind) {
+  const img = await brand(); GEN.useBrand(B().key); const photos = (await Promise.all((r.photos || []).map(photoData))).filter(Boolean);
+  if (kind === "docx") { const D = await libDocx(); return await D.Packer.toBlob(GEN.incidentDocx(D, r, img, photos)); }
+  const J = await libPdf(); return GEN.incidentPdf(J, r, img, photos).output("blob");
+}
+function wireIncident() {
+  const on = (id, fn) => { const b = $(id); if (b) b.onclick = () => fn(b); };
+  const err = m => { $("if_err").textContent = m; };
+  $("is_body").querySelectorAll("input,textarea,select").forEach(x => x.addEventListener("input", () => iDirty = true));
+  $("if_tlAt").value = nowLocal();
+  on("if_tlAdd", () => { const t = $("if_tlText").value.trim(); if (!t) return; readIncForm(); iDraft.timeline.push({ at: $("if_tlAt").value, text: t }); iDirty = true; $("if_tlText").value = ""; renderTimeline(); });
+  $("if_tlText").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); $("if_tlAdd").click(); } };
+  on("if_save", async b => { busy(b, true, "Saving"); try { await saveIncident(null, "Report saved"); } catch (e) { err(errMsg(e)); busy(b, false); } });
+  on("if_start", async () => { try { await saveIncident({ status: "in_progress", respondedAt: $("if_resp").value || nowLocal() }, "Work started"); } catch (e) { err(errMsg(e)); } });
+  on("if_resolve", async () => { readIncForm(); if (!iDraft.engineers) { err("Add the engineer name before marking the report resolved."); return; }
+    try { await saveIncident({ status: "resolved", respondedAt: iDraft.respondedAt || $("if_resl").value || nowLocal(), resolvedAt: $("if_resl").value || nowLocal() }, "Marked resolved. Send the report to the customer when ready"); } catch (e) { err(errMsg(e)); } });
+  on("if_close", async () => { try { await saveIncident({ status: "closed" }, "Report closed"); } catch (e) { err(errMsg(e)); } });
+  on("if_reopen", async () => { try { await saveIncident({ status: "in_progress" }, "Report reopened"); } catch (e) { err(errMsg(e)); } });
+  arm($("if_delete"), "Click again to delete", async () => { try { await api("DELETE", "amc/incidents/" + encodeURIComponent(iDraft.id)); S.incidents.delete(iDraft.id); $("sInc").close(); toast("Report deleted"); renderAll(); } catch (e) { err(errMsg(e)); } });
+  on("if_ai", async b => {
+    const rough = $("if_rough").value.trim(); if (!rough) { err("Type your rough notes first."); return; }
+    busy(b, true, "Writing"); readIncForm();
+    try {
+      const c = S.contracts.get(iDraft.amcId) || {};
+      const r = await api("POST", "amc/ai", { kind: "incident", customerName: iDraft.customerName, incidentType: INC_TYPES()[iDraft.type], priority: GEN.INC_PRIORITY[iDraft.priority], systems: c.systems || "", notes: rough });
+      const j = a => Array.isArray(a) ? a.map(x => noEm(x)).join("\n") : noEm(a || "");
+      const put = (id, v) => { if (v && !$(id).value.trim()) $(id).value = v; else if (v) $(id).value = $(id).value.trim() + "\n" + v; };
+      if (r.title && (!$("if_title").value.trim() || $("if_title").value.trim() === iDraft.title)) $("if_title").value = noEm(r.title);
+      put("if_desc", j(r.description)); put("if_imp", j(r.impact)); put("if_rc", j(r.rootCause)); put("if_act", j(r.actions)); put("if_resol", j(r.resolution)); put("if_rec", j(r.recommendations));
+      const day = (iDraft.reportedAt || nowLocal()).slice(0, 10);
+      (Array.isArray(r.timeline) ? r.timeline : []).forEach(x => { if (x && x.text) iDraft.timeline.push({ at: /^\d{1,2}:\d{2}$/.test(x.time || "") ? day + "T" + x.time.padStart(5, "0") : "", text: noEm(x.text) }); });
+      readIncForm(); iDirty = true; renderTimeline(); toast("Drafted. Review it and save.");
+    } catch (e) { err(errMsg(e)); }
+    finally { busy(b, false); }
+  });
+  wireDrop($("if_pdrop"), $("if_pinput"), async files => {
+    readIncForm(); $("if_pdrop").firstChild.textContent = "Uploading " + files.length + " photo" + (files.length === 1 ? "" : "s") + "…";
+    for (const f of files) { try { const r = await resizeImage(f); const up = await api("POST", "amc/files", { name: (f.name || "photo").replace(/\.[^.]+$/, "") + ".jpg", type: "image/jpeg", data: await toB64(r.blob) }); iDraft.photos.push({ id: up.id, caption: "", w: r.w, h: r.h, by: S.meId, at: nowISO() }); } catch (e) { toast(errMsg(e)); } }
+    try { await saveIncident(null, "Photos added"); } catch (e) { err(errMsg(e)); }
+  });
+  const fx = $("if_files");
+  fx.querySelectorAll("[data-dl]").forEach(b => b.onclick = () => downloadFile(iDraft.files[+b.dataset.dl], b));
+  fx.querySelectorAll("[data-rm]").forEach(b => arm(b, "Remove?", async () => { readIncForm(); iDraft.files.splice(+b.dataset.rm, 1); try { await saveIncident(null, "File removed"); } catch (e) { err(errMsg(e)); } }));
+  wireDrop($("if_fdrop"), $("if_finput"), async files => {
+    readIncForm(); for (const f of files) { try { iDraft.files.push(await uploadFile(f)); } catch (e) { toast(errMsg(e)); } }
+    try { await saveIncident(null, "Uploaded"); } catch (e) { err(errMsg(e)); }
+  });
+  const ensure = async () => { readIncForm(); if (iDirty) await saveIncident(); return S.incidents.get(iDraft.id); };
+  const rep = async (kind, b) => { busy(b, true, ""); try { const r = await ensure(); await save(incName(r, kind), await buildIncident(r, kind)); } catch (e) { err(errMsg(e)); } finally { busy(b, false); } };
+  on("if_docx", b => rep("docx", b)); on("if_pdf", b => rep("pdf", b));
+  on("if_pv", () => BXPdf.preview(async () => buildIncident(await ensure(), "pdf"), incName(iDraft, "pdf")));
+  on("if_share", async () => { try { const r = await ensure(); openShare({ kind: "incident", r }); } catch (e) { err(errMsg(e)); } });
 }
 
 /* ============ share ============ */
@@ -1007,6 +1229,13 @@ function openShare(ctx) {
     $("sh_to").value = cust.email || ""; const boss = ((window.BIFOLD_ME || {}).managers || [])[0] || (B().key === "bifold" ? RANJAN : ""); $("sh_cc").value = boss && myEmail !== boss ? boss : "";
     $("sh_subject").value = `AMC Proposal ${a.ref} | ${a.proposal.meta.subtitle} | ${B().name}`;
     $("sh_msg").value = `${a.proposal.letter.salutation}\n\nPlease find attached our Annual Maintenance Contract proposal for ${a.customerName}, covering ${GEN.lines(a.systems).join(", ")}.\n\nThe total contract value is AED ${a.proposal.commercial.total} including VAT, and the proposal is valid until ${a.proposal.meta.validUntil}.\n\nWe would be glad to walk you through it at your convenience.`;
+  } else if (ctx.kind === "incident") {
+    const r = ctx.r; const cust = S.customers.get(r.customerId) || {}; const label = r.type === "request" ? "Service Report" : "Incident Report";
+    $("sh_title").textContent = "Send " + label.toLowerCase() + " to " + shortName(r.customerName);
+    $("sh_to").value = r.contactEmail || cust.email || ""; $("sh_cc").value = "";
+    $("sh_subject").value = `${label} ${r.reportNo} | ${r.title} | ${r.customerName}`;
+    const when = GEN.fmtDT(r.reportedAt);
+    $("sh_msg").value = `Dear ${r.reportedBy || cust.contactName || "Sir/Madam"},\n\nFurther to the issue reported${when ? " on " + when : ""} (${r.title}), please find our ${label.toLowerCase()} attached. ${r.status === "resolved" || r.status === "closed" ? "The issue has been resolved, and the report sets out the cause, the work carried out and our recommendations." : "Our team is still working on it, and the report sets out the current status and next steps."}\n\nPlease let us know if you have any questions or if the issue recurs.`;
   } else {
     const v = ctx.v; const c = S.contracts.get(v.amcId) || {};
     $("sh_title").textContent = "Send visit report to " + shortName(v.customerName);
@@ -1025,7 +1254,12 @@ function shareBody() {
   const sig = `<p>Best regards,<br>${esc(B().name)}<br>${esc(S.meId || "")} | Tel: ${esc(B().phone)} | ${esc(B().web)}</p>`;
   let summary = "";
   if (shareCtx.kind === "amc") summary = "<hr>" + proposalHTML(shareCtx.a.proposal, true);
-  else {
+  else if (shareCtx.kind === "incident") {
+    const r = shareCtx.r;
+    const T = rows => `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse">${rows.map(([k, v]) => `<tr><th align="left">${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}</table>`;
+    const P = t => GEN.lines(t).map(x => `<p>${esc(x)}</p>`).join("");
+    summary = `<hr><h3>Report summary</h3>${T([["Report No.", r.reportNo], ["Issue", r.title], ["Priority", GEN.INC_PRIORITY[r.priority]], ["Status", GEN.INC_STATUS[r.status]], ["Reported", GEN.fmtDT(r.reportedAt) || "-"], ["Resolved", GEN.fmtDT(r.resolvedAt) || "-"], ["Engineer(s)", r.engineers || "-"]])}${r.resolution ? "<h3>Resolution</h3>" + P(r.resolution) : ""}${r.recommendations ? "<h3>Recommendations</h3><ul>" + GEN.lines(r.recommendations).map(x => `<li>${esc(x)}</li>`).join("") + "</ul>" : ""}`;
+  } else {
     const v = shareCtx.v;
     const T = (h, rows) => `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse"><thead><tr>${h.map(x => `<th align="left">${esc(x)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => "<tr>" + r.map(c => `<td>${esc(c)}</td>`).join("") + "</tr>").join("")}</tbody></table>`;
     const UL = t => { const l = GEN.lines(t); return l.length ? "<ul>" + l.map(x => `<li>${esc(x)}</li>`).join("") + "</ul>" : "<p>None.</p>"; };
@@ -1034,6 +1268,7 @@ function shareBody() {
   return msg + sig + summary;
 }
 function shareDoc() {
+  if (shareCtx.kind === "incident") return { build: () => buildIncident(shareCtx.r, "pdf"), name: incName(shareCtx.r, "pdf") };
   return shareCtx.kind === "amc"
     ? { build: () => buildProposal(shareCtx.a, "pdf"), name: propName(shareCtx.a, "pdf") }
     : { build: () => buildVisit(shareCtx.v, "pdf"), name: visitName(shareCtx.v, "pdf") };
@@ -1045,9 +1280,10 @@ $("fShare").onsubmit = async e => {
   try {
     const d = shareDoc(); const blob = await d.build();
     if (blob.size > 3 * 1048576) throw new Error("The PDF is larger than 3 MB, too big to email. Download it and share it another way, or remove some photos.");
-    const r = await api("POST", "amc/share", { kind: shareCtx.kind, id: shareCtx.kind === "amc" ? shareCtx.a.id : shareCtx.v.id, to, cc: $("sh_cc").value, subject: $("sh_subject").value.trim(), html: shareBody(), attachment: { name: d.name, type: "application/pdf", data: await toB64(blob) } });
+    const r = await api("POST", "amc/share", { kind: shareCtx.kind, id: shareCtx.kind === "amc" ? shareCtx.a.id : shareCtx.kind === "incident" ? shareCtx.r.id : shareCtx.v.id, to, cc: $("sh_cc").value, subject: $("sh_subject").value.trim(), html: shareBody(), attachment: { name: d.name, type: "application/pdf", data: await toB64(blob) } });
     $("dShare").close(); toast("Sent to " + r.to.join(", "));
     if (shareCtx.kind === "amc") await loadFull(shareCtx.a.id).catch(() => {}); else await refresh();
+    if (shareCtx.kind === "incident" && iDraft && $("sInc").open) { iDraft = JSON.parse(JSON.stringify(S.incidents.get(iDraft.id))); renderIncidentSheet(); }
     renderAll(); if (S.openVisit && $("sVisit").open) { vDraft = JSON.parse(JSON.stringify(S.visits.get(S.openVisit))); renderVisitSheet(); }
   } catch (err) { $("sh_err").textContent = errMsg(err); }
   finally { busy($("sh_send"), false); $("sh_send").disabled = !S.features.mail; }
@@ -1060,6 +1296,9 @@ document.addEventListener("click", e => {
   const act = b.dataset.act;
   if (act === "new-amc") { if (!S.ready) return; if (!S.customers.size) { openCustomer(null, () => openAmcForm(null)); toast("Add the customer first"); return; } openAmcForm(null); }
   if (act === "new-visit") openNewVisit();
+  if (act === "new-incident") { if (!S.ready) return; openNewIncident(); }
+  if (act === "export-incidents") { const cols = ["report_no", "reported", "customer", "title", "type", "priority", "status", "amc", "visit_report", "engineers", "responded", "resolved", "response_time", "resolution_time", "chargeable", "sent"];
+    save("Incident Reports.csv", [cols.join(",")].concat([...S.incidents.values()].sort((a, b) => String(b.reportedAt).localeCompare(String(a.reportedAt))).map(r => [r.reportNo, r.reportedAt.replace("T", " "), r.customerName, r.title, GEN.INC_TYPES[r.type], GEN.INC_PRIORITY[r.priority], GEN.INC_STATUS[r.status], r.ref, r.visitReportNo, r.engineers, r.respondedAt.replace("T", " "), r.resolvedAt.replace("T", " "), GEN.duration(r.reportedAt, r.respondedAt), GEN.duration(r.reportedAt, r.resolvedAt), r.chargeable ? "yes" : "no", (r.shares || []).length ? "yes" : "no"].map(csvCell).join(","))).join("\n")); }
   if (act === "export-amcs") { const cols = ["ref", "customer", "systems", "value_aed_excl_vat", "status", "contract_start", "contract_end", "days_left", "lpo", "owner", "created"];
     save("AMC Register.csv", [cols.join(",")].concat([...S.amcs.values()].map(a => { const c = S.contracts.get(a.id) || {}; return [a.ref, a.customerName, a.systems, num(a.value), amcState(a), c.start || "", c.end || "", c.end ? daysTo(c.end) : "", c.lpo || "", a.owner, (a.createdAt || "").slice(0, 10)].map(csvCell).join(","); })).join("\n")); }
 });
@@ -1078,6 +1317,7 @@ async function refresh() {
   r.amcs.forEach(a => { const f = keepFull.get(a.id); S.amcs.set(a.id, f && f.updatedAt === a.updatedAt ? f : a); });
   S.contracts.clear(); r.contracts.forEach(c => S.contracts.set(c.amcId, c));
   S.visits.clear(); r.visits.forEach(v => S.visits.set(v.id, v));
+  S.incidents.clear(); (r.incidents || []).forEach(x => S.incidents.set(x.id, x));
 }
 async function boot() {
   // Links from other tools: /amc/#amc=<id> opens that AMC.

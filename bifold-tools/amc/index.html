@@ -140,6 +140,12 @@ td.r,th.r{text-align:right}
 .chip.lost,.chip.cancelled{background:var(--sunk);color:var(--muted);text-decoration:line-through}
 .chip.expiring,.chip.overdue{background:var(--warn-soft);color:var(--warn)}
 .chip.expired{background:var(--bad-soft);color:var(--bad)}
+.chip.critical{background:var(--bad);color:#fff}
+.chip.high{background:var(--bad-soft);color:var(--bad)}
+.chip.medium{background:var(--warn-soft);color:var(--warn)}
+.chip.low{background:var(--sunk);color:var(--muted)}
+.chip.open{background:var(--violet-soft);color:var(--violet)}
+.chip.resolved{background:var(--ok-soft);color:var(--ok)}
 .chip.renewed{background:var(--steel-soft);color:var(--steel-deep)}
 .chip.scheduled{background:var(--steel-soft);color:var(--steel-deep)}
 .chip.in_progress{background:var(--violet-soft);color:var(--violet)}
@@ -249,6 +255,7 @@ details.more>summary{cursor:pointer;color:var(--steel-deep);font-weight:600;font
       <a href="#overview" data-v="overview">Overview</a>
       <a href="#amcs" data-v="amcs">AMCs<span class="n" id="nAmcs">0</span></a>
       <a href="#visits" data-v="visits">Maintenance visits<span class="n" id="nVisits">0</span></a>
+      <a href="#incidents" data-v="incidents">Incident reports<span class="n" id="nIncidents">0</span></a>
     </nav>
   </div>
 </header>
@@ -307,7 +314,50 @@ details.more>summary{cursor:pointer;color:var(--steel-deep);font-weight:600;font
     </div>
   </section>
 
+  <!-- INCIDENTS -->
+  <section id="v-incidents" class="view" hidden>
+    <div class="view-head">
+      <div><h2>Incident &amp; service reports</h2><p>Reports for customer issues, from a maintenance visit or any day-to-day service call, sent to the customer as PDF.</p></div>
+      <div class="actions"><button type="button" data-act="export-incidents">Export CSV</button><button class="primary" type="button" data-act="new-incident">New incident report</button></div>
+    </div>
+    <div class="filters">
+      <input class="search" id="incSearch" type="search" placeholder="Search customer, report no., title or engineer" aria-label="Search incident reports">
+      <div class="seg" id="incSeg" role="group" aria-label="Show">
+        <button type="button" data-f="open" aria-pressed="true">Open</button><button type="button" data-f="resolved" aria-pressed="false">Resolved</button><button type="button" data-f="unsent" aria-pressed="false">Not sent yet</button><button type="button" data-f="all" aria-pressed="false">All</button>
+      </div>
+      <select id="incPriority" aria-label="Priority"><option value="">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+      <span class="count" id="incCount"></span>
+    </div>
+    <div class="register"><table><thead><tr><th>Reported</th><th>Report</th><th>Customer</th><th>Priority</th><th>Status</th><th>Engineer(s)</th><th>Sent</th></tr></thead><tbody id="incRows"></tbody></table>
+      <div class="empty" id="incEmpty" hidden><strong>No incident reports in this list</strong><span>Create one for a customer issue, or raise it from a maintenance visit.</span><button class="primary" type="button" data-act="new-incident">New incident report</button></div>
+    </div>
+  </section>
+
 </main>
+
+<!-- New incident report -->
+<dialog class="modal" id="dNewInc"><form id="fNewInc" novalidate>
+  <h2>New incident report</h2>
+  <div class="seg" id="ni_src" role="group" aria-label="Report for" style="margin-bottom:12px">
+    <button type="button" data-f="call" aria-pressed="true">Customer service call</button><button type="button" data-f="visit" aria-pressed="false">From a maintenance visit</button>
+  </div>
+  <div class="grid2">
+    <label class="f full" id="ni_visitWrap" hidden>Maintenance visit <span class="req">*</span><select id="ni_visit"></select></label>
+    <label class="f full" id="ni_custWrap">Customer <span class="req">*</span>
+      <span style="display:flex;gap:8px"><select id="ni_customer"></select><button type="button" class="sm" id="ni_newCust">New</button></span>
+      <span class="hint" id="ni_cover"></span>
+    </label>
+    <label class="f full">Title <span class="req">*</span><input id="ni_title" maxlength="200" placeholder="e.g. Internet outage at head office"></label>
+    <label class="f">Incident type<select id="ni_type"></select></label>
+    <label class="f">Priority<select id="ni_priority"><option value="critical">Critical: system down</option><option value="high">High: major function impaired</option><option value="medium" selected>Medium: degraded or single user</option><option value="low">Low: request or advice</option></select></label>
+    <label class="f">Reported by<input id="ni_by" maxlength="150" placeholder="Customer contact"></label>
+    <label class="f">Reported via<select id="ni_via"><option>Phone</option><option>Email</option><option>WhatsApp</option><option>On site</option><option>Monitoring alert</option><option>Support portal</option></select></label>
+    <label class="f">Reported at<input id="ni_at" type="datetime-local"></label>
+    <label class="f">Engineer(s)<input id="ni_eng" maxlength="200" placeholder="Who is handling it"></label>
+  </div>
+  <div class="err" id="ni_err" role="alert"></div>
+  <div class="formfoot"><span></span><div class="right"><button type="button" data-close>Cancel</button><button class="primary" type="submit" id="ni_save">Create report</button></div></div>
+</form></dialog>
 
 <!-- AMC create / edit -->
 <dialog class="modal" id="dAmc"><form id="fAmc" novalidate>
@@ -481,6 +531,14 @@ details.more>summary{cursor:pointer;color:var(--steel-deep);font-weight:600;font
 </form></dialog>
 
 <!-- Visit sheet -->
+<dialog class="sheet" id="sInc"><div class="sheet-in">
+  <div class="sheet-head">
+    <div class="top"><div style="min-width:0"><div class="ref" id="is_ref"></div><h2 id="is_title"></h2></div><button class="ghost" type="button" data-close aria-label="Close">✕</button></div>
+    <div class="docrow" id="is_chips"></div>
+  </div>
+  <div class="sheet-body" id="is_body"></div>
+</div></dialog>
+
 <dialog class="sheet" id="sVisit"><div class="sheet-in">
   <div class="sheet-head">
     <div class="top"><div style="min-width:0"><div class="ref" id="vs_ref"></div><h2 id="vs_customer"></h2></div><button class="ghost" type="button" data-close aria-label="Close">✕</button></div>

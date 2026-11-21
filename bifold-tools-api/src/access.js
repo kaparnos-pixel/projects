@@ -84,8 +84,8 @@ module.exports = function makeAccess(H) {
     if (a === "amc") {
       if (b === "bootstrap" || b === "files") return ["amc", "visits"];
       if (b === "amcs") return "amc";
-      if (b === "visits") return "visits";
-      if (b === "ai" || b === "share") return body && (body.kind === "visit") ? "visits" : "amc";
+      if (b === "visits" || b === "incidents") return "visits";
+      if (b === "ai" || b === "share") return body && (body.kind === "visit" || body.kind === "incident") ? "visits" : "amc";
       return ["amc", "visits"];
     }
     return null;

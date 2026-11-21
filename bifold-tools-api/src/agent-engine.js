@@ -105,10 +105,11 @@ const BRIEFS = {
 };
 async function claudeDraft(kind, facts, ctx) {
   if (!process.env.ANTHROPIC_API_KEY || !BRIEFS[kind]) return null;
+  const extra = ctx.instruction ? `\nEXTRA INSTRUCTION FROM THE SENDER (follow it unless it breaks the rules below): ${String(ctx.instruction).slice(0, 500)}\n` : "";
   const prompt = `You write short business emails for ${ctx.company}, an IT solutions company in the UAE.
 
 TASK: ${BRIEFS[kind]}
-
+${extra}
 FACTS (the only facts you may use; never invent prices, dates, quantities, discounts or commitments):
 ${facts.map(([k, v]) => `- ${k}: ${v}`).join("\n")}
 
@@ -400,6 +401,7 @@ module.exports = function makeEngine({ tableFor, log = console.log, now = () => 
   return { runCompany, loadSettings };
 };
 module.exports.AGENTS = AGENTS;
+module.exports.claudeDraft = claudeDraft;
 module.exports.DEFAULTS = DEFAULTS;
 module.exports.DEFAULT_SIGS = DEFAULT_SIGS;
 module.exports.SIG_KEYS = SIG_KEYS;

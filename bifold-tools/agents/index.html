@@ -67,8 +67,19 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
 .sigbox{border:1px dashed var(--line);border-radius:8px;padding:12px 14px;background:#fff;color:#111;overflow-x:auto}
 
 .sighead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.attlist{display:grid;gap:6px}
+.att{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer}
+.att input{width:auto;flex:0 0 auto}
+.att .nm{font-weight:600;overflow-wrap:anywhere}
+.att .sub{font-size:11.5px;color:var(--muted)}
+.att .grow{flex:1;min-width:0}
+.att .rm{border:0;background:none;box-shadow:none;padding:2px 6px;color:var(--muted);font-size:16px}
+.attfoot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--muted)}
+.aibar{display:flex;gap:8px;align-items:center;margin-top:6px}
+.aibar input{flex:1;min-width:0;font-size:13px}
+.aibar button{white-space:nowrap}
 .linkbtn{border:0;background:none;padding:0;color:var(--accent);font-weight:600;box-shadow:none;cursor:pointer;font-size:12.5px}
-[data-modern][hidden],#credRow[hidden]{display:none}
+[data-modern][hidden],#credRow[hidden],#aiRow[hidden]{display:none}
 .sgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
 @media (max-width:640px){.sgrid{grid-template-columns:1fr}}
 .banner{border:1px solid var(--line);background:var(--surface);border-left:4px solid var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px}
@@ -138,6 +149,10 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
       <label class="full"><span class="lbl">Cc</span><input id="d_cc" autocomplete="off" placeholder="Optional"></label>
       <label class="full"><span class="lbl">Subject</span><input id="d_subject" autocomplete="off"></label>
       <label class="full"><span class="lbl">Message</span><textarea id="d_body" rows="12"></textarea></label>
+      <div class="full" id="aiRow"><div class="aibar"><input id="aiNote" placeholder="Optional: tell Claude what to change, e.g. mention the site visit on Tuesday"><button type="button" id="aiBtn">Personalise with Claude</button></div></div>
+      <div class="full"><div class="sighead"><span class="lbl">Attachments</span></div>
+        <div class="attlist" id="dAtt"></div>
+        <div class="attfoot"><span id="attInfo"></span><button type="button" class="linkbtn" id="attAdd">+ Add files from your computer</button><input type="file" id="attFile" multiple hidden></div></div>
       <div class="full"><div class="sighead"><span class="lbl">Signature (added when sent)</span><button type="button" class="linkbtn" id="dSigEdit">Edit my details</button></div><div class="sigbox" id="dSig"></div></div>
     </div>
     <div class="hint" id="dHint"></div>
@@ -346,6 +361,63 @@ const sigFields=()=>[...document.querySelectorAll("[data-sig]")];
 const sigBody=()=>Object.fromEntries(sigFields().map(i=>[i.dataset.sig,i.value]));
 sigFields().forEach(i=>i.addEventListener("input",()=>livePreview($("sPrev"),{sig:sigBody()})));
 
+/* attachments */
+let ATT={items:[],uploads:[],seq:0};
+const kb=n=>n>=1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024))+" KB";
+function attRender(){
+  const box=$("dAtt");box.textContent="";
+  const rows=ATT.items.map(a=>({...a,key:"c"+a.source+a.id})).concat(ATT.uploads.map(u=>({...u,upload:true})));
+  if(!rows.length){box.append(el("div","state",ATT.loading?"Looking for the proposal, quotation or invoice…":"Nothing linked to this item. Add files from your computer if needed."));}
+  rows.forEach(a=>{
+    const l=el("label","att");const c=el("input");c.type="checkbox";c.checked=!!a.on;c.onchange=()=>{a.upload?ATT.uploads.find(u=>u.key===a.key).on=c.checked:ATT.items.find(x=>"c"+x.source+x.id===a.key).on=c.checked;attInfo()};
+    const g=el("div","grow");g.append(el("div","nm",a.name),el("div","sub",a.upload?"From your computer · "+kb(a.size):a.label+(a.size?" · "+kb(a.size):a.source==="books"?" · PDF made when you send":"")));
+    l.append(c,g);
+    if(a.upload){const x=el("button","rm","×");x.type="button";x.title="Remove";x.onclick=ev=>{ev.preventDefault();ATT.uploads=ATT.uploads.filter(u=>u.key!==a.key);attRender()};l.append(x)}
+    box.append(l);
+  });
+  attInfo();
+}
+function attInfo(){const on=ATT.items.filter(a=>a.on).length+ATT.uploads.filter(u=>u.on).length;$("attInfo").textContent=on?`${on} file${on===1?"":"s"} will be attached`:"No files attached";}
+async function attLoad(i){
+  ATT={items:[],uploads:[],seq:0,loading:true};attRender();
+  try{const r=await api("GET","agents/items/"+encodeURIComponent(i.id)+"/attachments");if(EDIT!==i)return;ATT.items=r.items.map(a=>({...a,on:!!a.suggested}));ATT.books=r.booksAccess}catch(e){ATT.err=e.message}
+  ATT.loading=false;attRender();
+}
+$("attAdd").onclick=()=>$("attFile").click();
+$("attFile").onchange=e=>{[...e.target.files].forEach(f=>{if(f.size>10*1048576)return toast(f.name+" is larger than 10 MB.",true);ATT.uploads.push({key:"u"+(++ATT.seq),file:f,name:f.name,size:f.size,type:f.type||"application/octet-stream",on:true})});e.target.value="";attRender()};
+const b64=blob=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(",")[1]||"");r.onerror=()=>rej(new Error("Couldn't read a file."));r.readAsDataURL(blob)});
+let booksPdfReady=null;
+function booksPdf(){
+  // The Books PDF builder (books/pdf.js) runs here with the Books settings, so quotations and invoices look exactly as in Books.
+  return booksPdfReady||(booksPdfReady=(async()=>{
+    const D=await api("GET","books/bootstrap");
+    const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
+    window.BK={D,num,r2:n=>Math.round(num(n)*100)/100,esc:t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])),
+      aed:(n,d=2)=>(num(n)<0?"-":"")+Math.abs(num(n)).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}),
+      fd:d=>d?new Date(String(d).slice(0,10)+"T00:00:00Z").toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"}):"",
+      addDays:(d,n)=>new Date(Date.parse(d+"T00:00:00Z")+n*864e5).toISOString().slice(0,10),brand:()=>window.BIFOLD_BRAND||{}};
+    await new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="/books/pdf.js";sc.onload=res;sc.onerror=()=>rej(new Error("Couldn't load the PDF builder."));document.head.append(sc)});
+    return window.BKPDF;
+  })().catch(e=>{booksPdfReady=null;throw e}));
+}
+async function attPayload(){
+  const out=[];
+  for(const a of ATT.items.filter(x=>x.on)){
+    if(a.source==="books"){
+      const P=await booksPdf();const full=await api("GET","books/docs/"+encodeURIComponent(a.id));
+      out.push({name:a.name,type:"application/pdf",data:await b64(await P.doc(full))});
+    }else out.push({source:a.source,id:a.id});
+  }
+  for(const u of ATT.uploads.filter(x=>x.on))out.push({name:u.name,type:u.type,data:await b64(u.file)});
+  return out;
+}
+$("aiBtn").onclick=async()=>{
+  if(BUSY)return;BUSY=true;const b=$("aiBtn");b.disabled=true;b.textContent="Writing…";$("dErr").textContent="";
+  try{const r=await api("POST","agents/items/"+encodeURIComponent(EDIT.id)+"/rewrite",{instruction:$("aiNote").value,attachNames:ATT.items.filter(a=>a.on).map(a=>a.name).concat(ATT.uploads.filter(u=>u.on).map(u=>u.name))});
+    $("d_subject").value=r.subject;$("d_body").value=r.body;const m=$("dMeta");m.textContent="";m.append(el("span","src claude","Written by Claude, not saved yet"));toast("Draft rewritten. Check it, then save or send.")}
+  catch(e){$("dErr").textContent=e.message}finally{BUSY=false;b.disabled=false;b.textContent="Personalise with Claude"}
+};
+
 /* draft dialog */
 function draftBody(){return{to:$("d_to").value.trim(),cc:$("d_cc").value.trim(),subject:$("d_subject").value.trim(),body:$("d_body").value,etag:EDIT.etag}}
 function openDraft(i){
@@ -354,6 +426,7 @@ function openDraft(i){
   const m=$("dMeta");m.textContent="";m.append(el("span","src"+(d.source==="claude"?" claude":""),d.source==="claude"?"Drafted by Claude":"Template draft"));if(d.edited)m.append(el("span",null,"Edited"));
   $("d_to").value=d.to||"";$("d_cc").value=d.cc||"";$("d_subject").value=d.subject||"";$("d_body").value=d.body||"";
   $("dSig").innerHTML=D.signature.html;
+  $("aiRow").hidden=!D.claudeReady;$("aiNote").value="";attLoad(i);
   $("dHint").textContent=D.mailReady?`Sends from your mailbox (${D.me}) and saves a copy in your Sent Items. Check the facts before sending: the agent only used what is in the tools.`:"Email sending isn't set up on the tools site yet, so use Copy or Open in Outlook, send it yourself, then mark the item done.";
   $("dSend").disabled=!D.mailReady;$("dErr").textContent="";
   if(!d.to)$("dErr").textContent="No email address on file for this customer. Add one before sending.";
@@ -368,7 +441,7 @@ $("draftForm").addEventListener("submit",async ev=>{
   if(!b.to)return $("dErr").textContent="Add the customer's email address.";
   if(!b.subject||b.body.trim().length<20)return $("dErr").textContent="Write a subject and a message first.";
   BUSY=true;$("dSend").disabled=true;$("dSend").textContent="Sending…";
-  try{replace(await api("POST","agents/items/"+encodeURIComponent(EDIT.id)+"/send",b));$("draftDlg").close();toast("Email sent to "+b.to)}
+  try{b.attach=await attPayload();const n=b.attach.length;replace(await api("POST","agents/items/"+encodeURIComponent(EDIT.id)+"/send",b));$("draftDlg").close();toast("Email sent to "+b.to+(n?` with ${n} attachment${n===1?"":"s"}`:""))}
   catch(e){$("dErr").textContent=e.message}
   finally{BUSY=false;$("dSend").disabled=!D.mailReady;$("dSend").textContent="Send email"}
 });

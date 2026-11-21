@@ -708,7 +708,10 @@ const hr = () => hrMod || (hrMod = require("./hr")({ table, getOrNull, all, pack
 
 // ---------- Agent Inbox (src/agents.js; the agents themselves run daily from .github/scripts/agents-run.cjs) ----------
 let agentsMod;
-const agents = () => agentsMod || (agentsMod = require("./agents")({ table, getOrNull, fail, clean, CO, writeCo, mailReadyFor, sameCoEmail, emailOk, dealNote: addDealNote }));
+const agents = () => agentsMod || (agentsMod = require("./agents")({ table, getOrNull, fail, clean, CO, writeCo, mailReadyFor, sameCoEmail, emailOk, dealNote: addDealNote, unpackJson,
+  // Deal files the person may see (loadDeal checks owner / manager) and their bytes.
+  dealInfo: async (user, id) => { const e = await loadDeal(user, id); return { title: e.title || "", value: e.value, stage: e.stage, files: dealFiles(e), log: unpackJson(e).log || [] }; },
+  dealFileBuf: async (user, id, fid) => (await getDealFile(user, id, fid, true)).__binary }));
 
 // ---------- team access (src/access.js) ----------
 let accessMod;

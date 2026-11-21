@@ -23,7 +23,7 @@ const nameOf = e => String(e || "").split("@")[0].split(/[._-]+/).filter(Boolean
 const STATUSES = ["open", "snoozed", "sent", "done", "dismissed", "resolved"];
 
 module.exports = function makeAgents(H) {
-  const { table, getOrNull, fail, clean, CO, writeCo, mailReadyFor, sameCoEmail, emailOk, dealNote } = H;
+  const { table, getOrNull, fail, clean, CO, writeCo, mailReadyFor, sameCoEmail, emailOk, dealNote, unpackJson, dealInfo, dealFileBuf } = H;
   const coOf = user => user.co === "all" ? user.homeCo : user.co;
   const today = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
   const now = () => new Date().toISOString();
@@ -72,9 +72,9 @@ module.exports = function makeAgents(H) {
     let p = {};
     try {
       const r = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(email)}?$select=displayName,jobTitle,mobilePhone,businessPhones`, { headers: { Authorization: "Bearer " + await graphToken() } });
-      if (r.ok) { const j = await r.json(); p = { name: j.displayName || "", title: j.jobTitle || "", mobile: j.mobilePhone || "" }; }
+      if (r.ok) { const j = await r.json(); p = { name: j.displayName || "", title: j.jobTitle || "", mobile: j.mobilePhone || "" }; profileCache.set(email, p); }
     } catch {}
-    profileCache.set(email, p); return p;
+    return p;
   }
   // The person's details: what they saved, else their Microsoft 365 profile, else a name from the email.
   async function person(email) {
@@ -169,6 +169,110 @@ module.exports = function makeAgents(H) {
     return { html: sigBuild(co, sig, p, user.email, "data").html };
   }
 
+  /* -------- attachments: reference files for the email --------
+     a2 follow-up: the deal's files (proposal, quotation, BoQ...) and Books quotations linked to the deal.
+     a4 collection: the invoice itself (a Books document). a1 renewal: the AMC record's files.
+     Books documents are listed here and turned into PDFs in the browser (the same builder as Books);
+     deal and AMC files are read from storage by the server when the email is sent. */
+  const MAX_EACH = 10 * 1048576, MAX_TOTAL = 20 * 1048576;
+  const canAmc = user => user.isManager || (user.sections || []).includes("amc");
+  const canBooks = user => user.isManager || (user.sections || []).some(x => ["books", "bk_sales", "quotes"].includes(x));
+  let amcContainer;
+  async function amcBlobs() {
+    if (!amcContainer) { const { BlobServiceClient } = require("@azure/storage-blob"); amcContainer = BlobServiceClient.fromConnectionString(process.env.STORAGE_CONNECTION).getContainerClient("amc-files"); }
+    return amcContainer;
+  }
+  async function amcFiles(user, amcId) {
+    if (!amcId || !canAmc(user)) return [];
+    const e = await getOrNull(await table("amc"), "amc", amcId);
+    if (!e || (e.co || "bifold") !== coOf(user)) return [];
+    return (unpackJson(e).files || []).filter(f => f && f.id);
+  }
+  async function booksDocs(user, co, pred) {
+    if (!canBooks(user)) return [];
+    const t = await table("books"), out = [];
+    try { for await (const e of t.listEntities({ queryOptions: { filter: `PartitionKey eq 'doc-${co}'`, select: ["RowKey", "type", "number", "status", "contactName", "total", "dealId", "updatedAt", "date"] } })) if (pred(e)) out.push(e); }
+    catch (err) { if (err.statusCode !== 404) throw err; }
+    return out.sort((a, b) => String(b.updatedAt || b.date).localeCompare(String(a.updatedAt || a.date)));
+  }
+  const pdfName = (type, d) => `${type === "invoice" ? "Invoice" : "Quotation"} ${d.number || "draft"} ${d.contactName || ""}`.trim() + ".pdf";
+  async function attachments(user, id) {
+    const e = await load(user, id), co = e.partitionKey, out = [];
+    if (e.agent === "a2" && e.refId) {
+      let info = null; try { info = await dealInfo(user, e.refId); } catch {}
+      const quotes = await booksDocs(user, co, d => d.type === "quote" && d.dealId === e.refId && d.status !== "void");
+      quotes.forEach((q, i) => out.push({ source: "books", id: q.rowKey || q.RowKey, docType: "quote", name: pdfName("quote", q), label: `Quotation from Books (${q.status})`, suggested: i === 0 }));
+      (info ? info.files : []).slice().reverse().forEach(f => {
+        const isQuote = f.kind === "quote", isProp = f.kind === "proposal";
+        out.push({ source: "deal", id: f.id, name: f.name, size: f.size, label: "Deal file: " + ({ proposal: "Proposal", quote: "Quotation", estimation: "Estimation", photo: "Site photo", survey: "Survey report", drawing: "BoQ / drawing", po: "Customer PO", customer: "Customer document" }[f.kind] || "Other"),
+          suggested: isProp ? !out.some(x => x.suggested && x.source === "deal" && /^Deal file: Proposal/.test(x.label)) : isQuote && !quotes.length && !out.some(x => x.suggested) });
+      });
+    }
+    if (e.agent === "a4" && e.refId) {
+      const inv = await booksDocs(user, co, d => (d.rowKey || d.RowKey) === e.refId);
+      inv.forEach(d => out.push({ source: "books", id: e.refId, docType: d.type, name: pdfName(d.type, d), label: "The invoice, from Books", suggested: true }));
+    }
+    if (e.agent === "a1" && e.kind === "renewal" && e.refId)
+      (await amcFiles(user, e.refId)).forEach(f => out.push({ source: "amc", id: f.id, name: f.name, size: f.size, label: "AMC file", suggested: false }));
+    return { items: out, booksAccess: canBooks(user), limitMb: MAX_TOTAL / 1048576 };
+  }
+  // Collects the chosen files as Graph file attachments; refuses anything this person can't see.
+  async function gather(user, e, list) {
+    const out = []; let total = 0;
+    const allowed = list && list.length ? await attachments(user, e.rowKey) : { items: [] };
+    for (const a of (Array.isArray(list) ? list : []).slice(0, 15)) {
+      let name, type, buf;
+      if (a.source === "deal" || a.source === "amc") {
+        const ok = allowed.items.find(x => x.source === a.source && x.id === a.id);
+        if (!ok) fail(400, "One of the chosen files is no longer available. Reopen the email and try again.");
+        name = ok.name; type = /\.pdf$/i.test(name) ? "application/pdf" : "application/octet-stream";
+        try { buf = a.source === "deal" ? await dealFileBuf(user, e.refId, a.id) : await (await amcBlobs()).getBlockBlobClient(a.id).downloadToBuffer(); }
+        catch { fail(404, `${name} couldn't be read from storage.`); }
+      } else {
+        name = clean(a.name, 200) || "attachment"; type = clean(a.type, 120) || "application/octet-stream";
+        buf = Buffer.from(String(a.data || ""), "base64");
+        if (!buf.length) fail(400, `${name} is empty.`);
+      }
+      if (buf.length > MAX_EACH) fail(413, `${name} is larger than 10 MB. Send it from Outlook instead.`);
+      total += buf.length;
+      if (total > MAX_TOTAL) fail(413, "The attachments add up to more than 20 MB. Remove some, or send from Outlook.");
+      out.push({ name, type, buf });
+    }
+    return out;
+  }
+
+  // Personalise the draft with Claude in the tools site (uses the site's ANTHROPIC_API_KEY), with more context than
+  // the morning job had: the deal's notes, the quotation lines, and the files being attached. Saves nothing.
+  async function rewrite(user, id, b) {
+    const e = await load(user, id), co = e.partitionKey;
+    if (!e.draft) fail(400, "This item has no email to write.");
+    if (!process.env.ANTHROPIC_API_KEY) fail(501, "Claude isn't connected on the tools site. Add ANTHROPIC_API_KEY to the Static Web App settings.");
+    // Internal facts (value, cost, margin, days quiet, notes) stay out of what Claude may write to the customer.
+    const facts = json(e.facts, []).filter(([k]) => !/internal|cost|margin|value|quiet|last note|lpo|outstanding \(internal\)/i.test(k));
+    if (e.agent === "a2" && e.refId) {
+      try {
+        const info = await dealInfo(user, e.refId);
+        info.log.filter(l => l.kind === "note").slice(-3).forEach(l => facts.push(["Internal note (context only, do not quote)", String(l.text).slice(0, 300)]));
+        const q = (await booksDocs(user, co, d => d.type === "quote" && d.dealId === e.refId && d.status !== "void"))[0];
+        if (q) {
+          const full = await getOrNull(await table("books"), "doc-" + co, q.rowKey || q.RowKey);
+          const lines = full ? (unpackJson(full).lines || []) : [];
+          facts.push(["Quotation", q.number || "draft"]);
+          if (lines.length) facts.push(["What was quoted", lines.slice(0, 12).map(l => `${num(l.qty)} x ${l.name}`).join("; ")]);
+        }
+      } catch {}
+    }
+    const att = (Array.isArray(b.attachNames) ? b.attachNames : []).map(n => clean(n, 150)).filter(Boolean).slice(0, 10);
+    if (att.length) facts.push(["Attached to this email", att.join(", ")]);
+    const d = json(e.draft, {});
+    const contact = (String(d.body || "").match(/^Dear ([^,\n]+),/) || [])[1] || "Sir / Madam";
+    const p = await person(user.email);
+    const out = await ENGINE.claudeDraft(e.kind, facts, { company: CO[co].name, signer: p.name, greeting: contact, instruction: clean(b.instruction, 500), log: () => {} });
+    if (!out) fail(502, "Claude couldn't write the email just now. Try again in a minute.");
+    return out;
+  }
+  const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
   async function list(user) {
     const co = coOf(user);
     const cutoff = new Date(Date.now() - 45 * 864e5).toISOString();
@@ -253,8 +357,35 @@ module.exports = function makeAgents(H) {
     if (user.aud) { user.aud.name = e.title; user.aud.changes = [`Emailed ${to.join(", ")}: ${subject}`]; }
     const sb = sigBuild(co, sigFor(co, (await settings(co)).sig, (await settings(co)).sigV), await person(user.email), user.email, "cid");
     const html = toHtml(body) + sb.html;
-    const attachments = sb.icons.map(k => ({ "@odata.type": "#microsoft.graph.fileAttachment", name: `${k}.png`, contentType: "image/png", contentBytes: ICONS[k], isInline: true, contentId: `sig-${k}` }));
-    const post = (mailbox, extraCc) => fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/sendMail`, {
+    const files = await gather(user, e, b.attach);
+    const attachments = sb.icons.map(k => ({ "@odata.type": "#microsoft.graph.fileAttachment", name: `${k}.png`, contentType: "image/png", contentBytes: ICONS[k], isInline: true, contentId: `sig-${k}` }))
+      .concat(files.map(f => ({ "@odata.type": "#microsoft.graph.fileAttachment", name: f.name, contentType: f.type, contentBytes: f.buf.toString("base64") })));
+    const bigTotal = files.reduce((n, f) => n + f.buf.length, 0) > 2.8 * 1048576;
+    // Over about 3 MB of files, Microsoft needs the email built as a draft with the files uploaded in parts, then sent.
+    const postBig = async (mailbox, extraCc) => {
+      const G = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}`, H2 = { Authorization: "Bearer " + tokenNow, "Content-Type": "application/json" };
+      const small = attachments.filter(a => a.isInline);
+      const r1 = await fetch(`${G}/messages`, { method: "POST", headers: H2, body: JSON.stringify({ subject, body: { contentType: "HTML", content: html }, attachments: small,
+        toRecipients: to.map(a => ({ emailAddress: { address: a } })), ccRecipients: cc.concat(extraCc).map(a => ({ emailAddress: { address: a } })), replyTo: [{ emailAddress: { address: user.email } }] }) });
+      if (!r1.ok) return r1;
+      const msg = await r1.json();
+      for (const f of files) {
+        if (f.buf.length < 3 * 1048576) {
+          const ra = await fetch(`${G}/messages/${msg.id}/attachments`, { method: "POST", headers: H2, body: JSON.stringify({ "@odata.type": "#microsoft.graph.fileAttachment", name: f.name, contentType: f.type, contentBytes: f.buf.toString("base64") }) });
+          if (!ra.ok) return ra; continue;
+        }
+        const rs = await fetch(`${G}/messages/${msg.id}/attachments/createUploadSession`, { method: "POST", headers: H2, body: JSON.stringify({ AttachmentItem: { attachmentType: "file", name: f.name, size: f.buf.length, contentType: f.type } }) });
+        if (!rs.ok) return rs;
+        const { uploadUrl } = await rs.json(); const CH = 320 * 1024 * 10;
+        for (let i = 0; i < f.buf.length; i += CH) {
+          const part = f.buf.subarray(i, Math.min(i + CH, f.buf.length));
+          const ru = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Length": String(part.length), "Content-Range": `bytes ${i}-${i + part.length - 1}/${f.buf.length}` }, body: part });
+          if (!ru.ok) return ru;
+        }
+      }
+      return fetch(`${G}/messages/${msg.id}/send`, { method: "POST", headers: { Authorization: "Bearer " + tokenNow } });
+    };
+    const post = (mailbox, extraCc) => bigTotal ? postBig(mailbox, extraCc) : fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/sendMail`, {
       method: "POST", headers: { Authorization: "Bearer " + tokenNow, "Content-Type": "application/json" },
       body: JSON.stringify({ message: { subject, body: { contentType: "HTML", content: html }, attachments, toRecipients: to.map(a => ({ emailAddress: { address: a } })),
         ccRecipients: cc.concat(extraCc).map(a => ({ emailAddress: { address: a } })), replyTo: [{ emailAddress: { address: user.email } }] }, saveToSentItems: true }),
@@ -267,15 +398,17 @@ module.exports = function makeAgents(H) {
     if (!r.ok) {
       const detail = await r.json().catch(() => ({}));
       const code = detail.error && detail.error.code || r.status;
-      fail(502, r.status === 403 || r.status === 404
+      fail(502, (r.status === 403 || r.status === 404) && bigTotal
+        ? `Attachments over 3 MB need one more Microsoft 365 permission for the tools app: Mail.ReadWrite (Application), with admin consent. Until then, attach smaller files or send from Outlook. (${code})`
+        : r.status === 403 || r.status === 404
         ? `Microsoft 365 won't let the tools site send from ${user.email} (${code}). Ask your Microsoft 365 admin to allow it (the tools app needs Mail.Send), or use Copy or Open in Outlook for now.`
         : `Microsoft 365 didn't send the email (${code}). Try again, or copy the text and send it from Outlook.`);
     }
-    const d = { ...json(e.draft, {}), to: to.join(", "), cc: cc.join(", "), subject, body };
+    const d = { ...json(e.draft, {}), to: to.join(", "), cc: cc.join(", "), subject, body, attached: files.map(f => f.name) };
     await (await table(TABLES.INBOX)).updateEntity({ partitionKey: e.partitionKey, rowKey: e.rowKey, status: "sent", draft: JSON.stringify(d), sentTo: to.join(", "),
       decidedBy: user.email, decidedAt: now(), note: via === user.email ? "" : `Sent from ${via}`, updatedAt: now() }, "Merge");
     // Keep the deal's activity complete.
-    if (e.agent === "a2" && e.refId && dealNote) await dealNote(user, e.refId, { text: `Follow-up emailed to ${to.join(", ")} from the Agent Inbox: ${subject}` }).catch(() => {});
+    if (e.agent === "a2" && e.refId && dealNote) await dealNote(user, e.refId, { text: `Follow-up emailed to ${to.join(", ")} from the Agent Inbox: ${subject}${files.length ? ` (attached: ${files.map(f => f.name).join(", ")})` : ""}` }).catch(() => {});
     return itemOut(await (await table(TABLES.INBOX)).getEntity(e.partitionKey, e.rowKey));
   }
 
@@ -314,6 +447,8 @@ module.exports = function makeAgents(H) {
       if (sub === "send" && method === "POST") return send(user, id, body);
       if (sub === "status" && method === "POST") return setStatus(user, id, body);
       if (sub === "assign" && method === "POST") return assign(user, id, body);
+      if (sub === "attachments" && method === "GET") return attachments(user, id);
+      if (sub === "rewrite" && method === "POST") return rewrite(user, id, body);
     }
     fail(404, "Unknown request.");
   }

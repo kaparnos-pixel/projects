@@ -14,7 +14,7 @@
 //                          agentruns  PK "run-<co>" (newest first) and PK "usage" RowKey "<co>-<YYYY-MM>"
 
 const ENGINE = require("./agent-engine");
-const { AGENTS, settingsIn, TABLES, tidy, DEFAULT_SIGS, SIG_KEYS, SIG_LAYOUT, sigFor, noEm } = ENGINE;
+const { AGENTS, settingsIn, TABLES, tidy, DEFAULT_SIGS, SIG_KEYS, SIG_LAYOUT, SIG_V, sigFor, noEm } = ENGINE;
 const ICONS = require("./sig-icons");
 const ACCENT = { bifold: "#2E6DA4", techhub: "#28A08C" };
 const SOCIAL = [["linkedin", "LinkedIn"], ["x", "X"], ["facebook", "Facebook"], ["instagram", "Instagram"], ["whatsapp", "WhatsApp"], ["tiktok", "TikTok"]];
@@ -148,7 +148,7 @@ module.exports = function makeAgents(H) {
   async function signature(co, user, S) {
     S = S || await settings(co);
     const p = await person(user.email);
-    const b = sigBuild(co, sigFor(co, S.sig), p, user.email, "data");
+    const b = sigBuild(co, sigFor(co, S.sig, S.sigV), p, user.email, "data");
     return { html: b.html, text: b.text, person: p };
   }
   const personIn = b => ({ name: noEm(clean(b.name, 80)), title: noEm(clean(b.title, 100)), mobile: noEm(clean(b.mobile, 40)), credential: noEm(clean(b.credential, 80)) });
@@ -164,7 +164,8 @@ module.exports = function makeAgents(H) {
   async function preview(user, b) {
     const co = coOf(user);
     const p = b.person ? { ...personIn(b.person), saved: true } : await person(user.email);
-    const sig = b.sig && user.isManager ? sigFor(co, b.sig) : sigFor(co, (await settings(co)).sig);
+    const S = await settings(co);
+    const sig = b.sig && user.isManager ? sigFor(co, b.sig, SIG_V) : sigFor(co, S.sig, S.sigV);
     return { html: sigBuild(co, sig, p, user.email, "data").html };
   }
 
@@ -178,7 +179,7 @@ module.exports = function makeAgents(H) {
     for await (const e of runsT.listEntities({ queryOptions: { filter: `PartitionKey eq 'run-${co}'` } })) { runs.push({ at: e.at, created: e.created, resolved: e.resolved, drafted: e.drafted, counts: json(e.counts, {}) }); if (runs.length >= 7) break; }
     const usage = await getOrNull(runsT, "usage", `${co}-${today().slice(0, 7)}`);
     const S = await settings(co);
-    return { items, agents: AGENTS, settings: { ...S, sig: sigFor(co, S.sig) }, defaultSig: DEFAULT_SIGS[co], sigLayout: SIG_LAYOUT[co], signature: await signature(co, user, S), runs, draftsThisMonth: usage ? Number(usage.drafts) || 0 : 0,
+    return { items, agents: AGENTS, settings: { ...S, sig: sigFor(co, S.sig, S.sigV) }, defaultSig: DEFAULT_SIGS[co], sigLayout: SIG_LAYOUT[co], signature: await signature(co, user, S), runs, draftsThisMonth: usage ? Number(usage.drafts) || 0 : 0,
       isManager: user.isManager, me: user.email, mailReady: graphReady(), claudeReady: !!process.env.ANTHROPIC_API_KEY, company: CO[co].name };
   }
 
@@ -250,7 +251,7 @@ module.exports = function makeAgents(H) {
     if (!to.length) fail(400, "Add the customer's email address."); if (bad) fail(400, `${bad} isn't a valid email address.`);
     if (!subject || body.trim().length < 20) fail(400, "Write a subject and a message before sending.");
     if (user.aud) { user.aud.name = e.title; user.aud.changes = [`Emailed ${to.join(", ")}: ${subject}`]; }
-    const sb = sigBuild(co, sigFor(co, (await settings(co)).sig), await person(user.email), user.email, "cid");
+    const sb = sigBuild(co, sigFor(co, (await settings(co)).sig, (await settings(co)).sigV), await person(user.email), user.email, "cid");
     const html = toHtml(body) + sb.html;
     const attachments = sb.icons.map(k => ({ "@odata.type": "#microsoft.graph.fileAttachment", name: `${k}.png`, contentType: "image/png", contentBytes: ICONS[k], isInline: true, contentId: `sig-${k}` }));
     const post = (mailbox, extraCc) => fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/sendMail`, {
@@ -282,7 +283,7 @@ module.exports = function makeAgents(H) {
     if (!user.isManager) fail(403, "Only managers can change the agent settings.");
     const co = writeCo(user);
     const s = settingsIn(b);
-    s.sig = sigFor(co, s.sig);
+    s.sig = sigFor(co, s.sig, SIG_V); s.sigV = SIG_V;
     for (const k of ["linkedin", "x", "facebook", "instagram", "whatsapp", "tiktok"]) if (s.sig[k] && !/^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/\S*)?$/i.test(s.sig[k])) fail(400, `The ${k === "x" ? "X" : k[0].toUpperCase() + k.slice(1)} link doesn't look like a web address.`);
     if (b.financeEmail && !s.financeEmail) fail(400, "Enter a valid email address for collections, or leave it empty.");
     if (s.financeEmail && !sameCoEmail(s.financeEmail, user)) fail(400, "The collections contact must be someone in your company.");

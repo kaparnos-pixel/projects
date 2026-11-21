@@ -26,19 +26,31 @@ const DEFAULT_SIGS = {
   // Bifold keeps its own classic layout (red bar, labelled lines); tagline, brands and the other social links aren't used.
   bifold: { company: "BIFOLD TECHNOLOGIES LLC", tagline: "", brands: "", office: "+971 04 2640 374", website: "www.bifoldtech.com",
     address: "Office A306, Saraya Avenue | PO Box 554567\nAl Garhoud | Dubai | United Arab Emirates",
-    linkedin: "", x: "", facebook: "", instagram: "", whatsapp: "", tiktok: "", disclaimer: DISCLAIMER },
+    // LinkedIn as linked from the footer of bifoldtech.com
+    linkedin: "https://www.linkedin.com/company/bifold-technologies-l-l-c/", x: "", facebook: "", instagram: "", whatsapp: "", tiktok: "", disclaimer: DISCLAIMER },
+  // Social links as connected in the Tech Hub Buffer account (LinkedIn page techhub-rak, X and Instagram techhubrak,
+  // Facebook page 1054775867712455); WhatsApp is the office number.
   techhub: { company: "TECH HUB INFORMATION TECHNOLOGY", tagline: "Business IT Solutions | Laptops | Desktops | Cloud | Software",
     brands: "HP | Dell | Lenovo | Cisco | HPE | Fortinet | H3C | Huawei | UNV", office: "+971 07 2581926", website: "www.techhubrak.ae",
-    address: "Expo Road, Opp. RAK Chamber, Al Nakheel, Ras Al Khaimah, UAE", linkedin: "https://www.linkedin.com/company/techhub-rak", x: "https://x.com/techhubrak",
-    facebook: "https://www.facebook.com/techhubrak", instagram: "https://www.instagram.com/techhubrak", whatsapp: "https://wa.me/97172581926", tiktok: "", disclaimer: DISCLAIMER },
+    address: "Expo Road, Opp. RAK Chamber, Al Nakheel, Ras Al Khaimah, UAE", linkedin: "https://www.linkedin.com/company/techhub-rak/", x: "https://x.com/techhubrak",
+    facebook: "https://www.facebook.com/1054775867712455", instagram: "https://www.instagram.com/techhubrak/", whatsapp: "https://wa.me/97172581926", tiktok: "", disclaimer: DISCLAIMER },
 };
+// Settings saved before the social links were checked (21 Nov 2026) may hold the old unverified values; those are
+// read as the new defaults until a manager saves the signature again.
+const SIG_V = 2;
+const OLD_SOCIAL = { bifold: { linkedin: [""] }, techhub: { linkedin: ["https://www.linkedin.com/company/techhub-rak"], facebook: ["https://www.facebook.com/techhubrak"], instagram: ["https://www.instagram.com/techhubrak"] } };
 // No em dashes; line breaks are kept (the address may span two lines), other control characters dropped.
 const noEm = v => String(v == null ? "" : v).replace(/\s*\u2014\s*/g, ", ").replace(/\r/g, "").replace(/[\u0000-\u0009\u000b-\u001f]/g, " ").split("\n").map(l => l.trim()).filter(Boolean).slice(0, 4).join("\n");
 const SIG_LAYOUT = { bifold: "classic", techhub: "modern" };
 // Company signature for co: the saved fields over the defaults.
-function sigFor(co, saved) {
+function sigFor(co, saved, version) {
   const out = { ...DEFAULT_SIGS[co] };
-  if (saved && typeof saved === "object") SIG_KEYS.forEach(k => { if (saved[k] !== undefined) out[k] = noEm(saved[k]).slice(0, k === "disclaimer" ? 800 : 300); });
+  if (saved && typeof saved === "object") SIG_KEYS.forEach(k => {
+    if (saved[k] === undefined) return;
+    const v = noEm(saved[k]).slice(0, k === "disclaimer" ? 800 : 300);
+    if ((version || 0) < SIG_V && ((OLD_SOCIAL[co] || {})[k] || []).includes(v)) return;
+    out[k] = v;
+  });
   return out;
 }
 const INBOX = "agentinbox", SETTINGS = "agentsettings", RUNS = "agentruns";
@@ -78,6 +90,7 @@ function settingsIn(raw) {
     financeEmail: emailLike(s.financeEmail) ? String(s.financeEmail).trim().toLowerCase() : "",
     monthlyDrafts: clamp(s.monthlyDrafts, 0, 5000, DEFAULTS.monthlyDrafts),
     digest: s.digest === undefined ? true : !!s.digest,
+    sigV: num(s.sigV),
     sig: s.sig && typeof s.sig === "object" ? Object.fromEntries(SIG_KEYS.filter(k => s.sig[k] !== undefined).map(k => [k, noEm(s.sig[k]).slice(0, k === "disclaimer" ? 800 : 300)])) : {},
   };
 }
@@ -391,6 +404,7 @@ module.exports.DEFAULTS = DEFAULTS;
 module.exports.DEFAULT_SIGS = DEFAULT_SIGS;
 module.exports.SIG_KEYS = SIG_KEYS;
 module.exports.SIG_LAYOUT = SIG_LAYOUT;
+module.exports.SIG_V = SIG_V;
 module.exports.sigFor = sigFor;
 module.exports.noEm = noEm;
 module.exports.settingsIn = settingsIn;

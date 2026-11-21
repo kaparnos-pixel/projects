@@ -68,6 +68,7 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
 
 .sighead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .linkbtn{border:0;background:none;padding:0;color:var(--accent);font-weight:600;box-shadow:none;cursor:pointer;font-size:12.5px}
+[data-modern][hidden],#credRow[hidden]{display:none}
 .sgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
 @media (max-width:640px){.sgrid{grid-template-columns:1fr}}
 .banner{border:1px solid var(--line);background:var(--surface);border-left:4px solid var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px}
@@ -179,6 +180,7 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
       <label class="full"><span class="lbl">Name</span><input id="m_name" autocomplete="name"></label>
       <label class="full"><span class="lbl">Job title</span><input id="m_title" autocomplete="organization-title" placeholder="e.g. Sales Manager"></label>
       <label class="full"><span class="lbl">Mobile</span><input id="m_mobile" autocomplete="tel" placeholder="+971 50 000 0000"></label>
+      <label class="full" id="credRow"><span class="lbl">Certification line (optional)</span><input id="m_credential" placeholder="e.g. CCIE# 35933"></label>
       <div class="full"><span class="lbl">Preview</span><div class="sigbox" id="mPrev"></div></div>
     </div>
     <div class="err" id="meErr" role="alert"></div>
@@ -204,16 +206,16 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
         <div class="sgrid">
           <label><span class="lbl">Company name</span><input data-sig="company"></label>
           <label><span class="lbl">Office phone</span><input data-sig="office"></label>
-          <label class="full"><span class="lbl">Tagline</span><input data-sig="tagline"></label>
-          <label class="full"><span class="lbl">Brands</span><input data-sig="brands"></label>
+          <label class="full" data-modern><span class="lbl">Tagline</span><input data-sig="tagline"></label>
+          <label class="full" data-modern><span class="lbl">Brands</span><input data-sig="brands"></label>
           <label><span class="lbl">Website</span><input data-sig="website"></label>
-          <label><span class="lbl">Address</span><input data-sig="address"></label>
+          <label class="full"><span class="lbl">Address (up to 4 lines)</span><textarea data-sig="address" rows="2"></textarea></label>
           <label><span class="lbl">LinkedIn link</span><input data-sig="linkedin" placeholder="https://"></label>
-          <label><span class="lbl">X link</span><input data-sig="x" placeholder="https://"></label>
-          <label><span class="lbl">Facebook link</span><input data-sig="facebook" placeholder="https://"></label>
-          <label><span class="lbl">Instagram link</span><input data-sig="instagram" placeholder="https://"></label>
-          <label><span class="lbl">WhatsApp link</span><input data-sig="whatsapp" placeholder="https://wa.me/971..."></label>
-          <label><span class="lbl">TikTok link</span><input data-sig="tiktok" placeholder="https://"></label>
+          <label data-modern><span class="lbl">X link</span><input data-sig="x" placeholder="https://"></label>
+          <label data-modern><span class="lbl">Facebook link</span><input data-sig="facebook" placeholder="https://"></label>
+          <label data-modern><span class="lbl">Instagram link</span><input data-sig="instagram" placeholder="https://"></label>
+          <label data-modern><span class="lbl">WhatsApp link</span><input data-sig="whatsapp" placeholder="https://wa.me/971..."></label>
+          <label data-modern><span class="lbl">TikTok link</span><input data-sig="tiktok" placeholder="https://"></label>
           <label class="full"><span class="lbl">Disclaimer</span><textarea data-sig="disclaimer" rows="3"></textarea></label>
         </div>
         <span class="lbl" style="display:block;margin-top:10px">Preview (with your details)</span><div class="sigbox" id="sPrev"></div>
@@ -329,12 +331,13 @@ async function setStatus(i,body,msg){try{replace(await api("POST","agents/items/
 let prevTimer=null;
 function livePreview(box,body){clearTimeout(prevTimer);prevTimer=setTimeout(async()=>{try{box.innerHTML=(await api("POST","agents/preview",body)).html}catch{}},250)}
 function openMe(){
-  const p=D.signature.person;$("m_name").value=p.name||"";$("m_title").value=p.title||"";$("m_mobile").value=p.mobile||"";$("meErr").textContent="";
+  const p=D.signature.person;$("m_name").value=p.name||"";$("m_title").value=p.title||"";$("m_mobile").value=p.mobile||"";$("m_credential").value=p.credential||"";$("meErr").textContent="";
+  $("credRow").hidden=D.sigLayout!=="classic";
   $("meHint").textContent=p.saved?"These details go into your company's signature on every email you send from the Agent Inbox.":"Check these details: they were taken from your Microsoft 365 profile or your email address and haven't been saved yet.";
   $("mPrev").innerHTML=D.signature.html;$("meDlg").showModal();
 }
-const meBody=()=>({person:{name:$("m_name").value,title:$("m_title").value,mobile:$("m_mobile").value}});
-["m_name","m_title","m_mobile"].forEach(id=>$(id).addEventListener("input",()=>livePreview($("mPrev"),meBody())));
+const meBody=()=>({person:{name:$("m_name").value,title:$("m_title").value,mobile:$("m_mobile").value,credential:$("m_credential").value}});
+["m_name","m_title","m_mobile","m_credential"].forEach(id=>$(id).addEventListener("input",()=>livePreview($("mPrev"),meBody())));
 $("meBtn").onclick=openMe;$("dSigEdit").onclick=openMe;
 $("meX").onclick=$("meCancel").onclick=()=>$("meDlg").close();
 $("meForm").addEventListener("submit",async ev=>{ev.preventDefault();clearTimeout(prevTimer);
@@ -389,7 +392,8 @@ function openSettings(){
   const box=$("setAgents");box.textContent="";
   Object.entries(D.agents).forEach(([k,n])=>{const l=el("label","tg");const c=el("input");c.type="checkbox";c.checked=!!s.enabled[k];c.dataset.k=k;const d=el("div");d.append(el("b",null,n),el("span",null,AGDESC[k]));l.append(c,d);box.append(l)});
   SET_FIELDS.forEach(k=>$("s_"+k).value=s[k]??"");$("s_digest").checked=!!s.digest;
-  sigFields().forEach(i=>i.value=s.sig[i.dataset.sig]||"");$("sigCo").textContent=D.company;$("sPrev").innerHTML=D.signature.html;$("setErr").textContent="";$("setDlg").showModal();
+  sigFields().forEach(i=>i.value=s.sig[i.dataset.sig]||"");$("sigCo").textContent=D.company;
+  document.querySelectorAll("[data-modern]").forEach(l=>l.hidden=D.sigLayout==="classic");$("sPrev").innerHTML=D.signature.html;$("setErr").textContent="";$("setDlg").showModal();
 }
 $("setBtn").onclick=openSettings;
 $("sigReset").onclick=()=>{sigFields().forEach(i=>i.value=D.defaultSig[i.dataset.sig]||"");livePreview($("sPrev"),{sig:sigBody()})};

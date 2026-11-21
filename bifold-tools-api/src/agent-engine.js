@@ -23,15 +23,18 @@ const DEFAULTS = { enabled: { a1: true, a2: true, a3: true, a4: true }, renewalD
 const SIG_KEYS = ["company", "tagline", "brands", "office", "website", "address", "linkedin", "x", "facebook", "instagram", "whatsapp", "tiktok", "disclaimer"];
 const DISCLAIMER = "The content of this email is confidential and intended for the recipient specified in message. If you received this message by mistake, please reply to this message and follow with its deletion, so that we can ensure such a mistake does not occur in the future.";
 const DEFAULT_SIGS = {
-  bifold: { company: "BIFOLD TECHNOLOGIES LLC", tagline: "Enterprise IT Solutions | Networking | Security | Unified Communications | Managed Services",
-    brands: "Cisco | HPE | Fortinet | Microsoft | Avaya | Mitel | Ribbon", office: "", website: "www.bifoldtech.com", address: "Al Garhoud, Dubai, UAE",
+  // Bifold keeps its own classic layout (red bar, labelled lines); tagline, brands and the other social links aren't used.
+  bifold: { company: "BIFOLD TECHNOLOGIES LLC", tagline: "", brands: "", office: "+971 04 2640 374", website: "www.bifoldtech.com",
+    address: "Office A306, Saraya Avenue | PO Box 554567\nAl Garhoud | Dubai | United Arab Emirates",
     linkedin: "", x: "", facebook: "", instagram: "", whatsapp: "", tiktok: "", disclaimer: DISCLAIMER },
   techhub: { company: "TECH HUB INFORMATION TECHNOLOGY", tagline: "Business IT Solutions | Laptops | Desktops | Cloud | Software",
     brands: "HP | Dell | Lenovo | Cisco | HPE | Fortinet | H3C | Huawei | UNV", office: "+971 07 2581926", website: "www.techhubrak.ae",
     address: "Expo Road, Opp. RAK Chamber, Al Nakheel, Ras Al Khaimah, UAE", linkedin: "https://www.linkedin.com/company/techhub-rak", x: "https://x.com/techhubrak",
     facebook: "https://www.facebook.com/techhubrak", instagram: "https://www.instagram.com/techhubrak", whatsapp: "https://wa.me/97172581926", tiktok: "", disclaimer: DISCLAIMER },
 };
-const noEm = v => String(v == null ? "" : v).replace(/\s*\u2014\s*/g, ", ").replace(/[\u0000-\u001f]/g, " ").trim();
+// No em dashes; line breaks are kept (the address may span two lines), other control characters dropped.
+const noEm = v => String(v == null ? "" : v).replace(/\s*\u2014\s*/g, ", ").replace(/\r/g, "").replace(/[\u0000-\u0009\u000b-\u001f]/g, " ").split("\n").map(l => l.trim()).filter(Boolean).slice(0, 4).join("\n");
+const SIG_LAYOUT = { bifold: "classic", techhub: "modern" };
 // Company signature for co: the saved fields over the defaults.
 function sigFor(co, saved) {
   const out = { ...DEFAULT_SIGS[co] };
@@ -387,6 +390,7 @@ module.exports.AGENTS = AGENTS;
 module.exports.DEFAULTS = DEFAULTS;
 module.exports.DEFAULT_SIGS = DEFAULT_SIGS;
 module.exports.SIG_KEYS = SIG_KEYS;
+module.exports.SIG_LAYOUT = SIG_LAYOUT;
 module.exports.sigFor = sigFor;
 module.exports.noEm = noEm;
 module.exports.settingsIn = settingsIn;

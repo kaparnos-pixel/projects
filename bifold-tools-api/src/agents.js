@@ -14,7 +14,7 @@
 //                          agentruns  PK "run-<co>" (newest first) and PK "usage" RowKey "<co>-<YYYY-MM>"
 
 const ENGINE = require("./agent-engine");
-const { AGENTS, settingsIn, TABLES, tidy, DEFAULT_SIGS, SIG_KEYS, sigFor, noEm } = ENGINE;
+const { AGENTS, settingsIn, TABLES, tidy, DEFAULT_SIGS, SIG_KEYS, SIG_LAYOUT, sigFor, noEm } = ENGINE;
 const ICONS = require("./sig-icons");
 const ACCENT = { bifold: "#2E6DA4", techhub: "#28A08C" };
 const SOCIAL = [["linkedin", "LinkedIn"], ["x", "X"], ["facebook", "Facebook"], ["instagram", "Instagram"], ["whatsapp", "WhatsApp"], ["tiktok", "TikTok"]];
@@ -79,13 +79,14 @@ module.exports = function makeAgents(H) {
   // The person's details: what they saved, else their Microsoft 365 profile, else a name from the email.
   async function person(email) {
     const e = await getOrNull(await sigTable(), "person", email);
-    if (e) return { name: e.name || "", title: e.title || "", mobile: e.mobile || "", saved: true };
+    if (e) return { name: e.name || "", title: e.title || "", mobile: e.mobile || "", credential: e.credential || "", saved: true };
     const g = await graphProfile(email);
-    return { name: g.name || nameOf(email), title: g.title || "", mobile: g.mobile || "", saved: false };
+    return { name: g.name || nameOf(email), title: g.title || "", mobile: g.mobile || "", credential: "", saved: false };
   }
   const tel = v => "tel:" + String(v).replace(/[^\d+]/g, "");
   const href = v => /^https?:\/\//i.test(v) ? v : "https://" + String(v).replace(/^\/+/, "");
   function sigBuild(co, sig, p, email, mode) {
+    if (SIG_LAYOUT[co] === "classic") return sigClassic(co, sig, p, email, mode);
     const acc = ACCENT[co], used = new Set();
     const img = (key, size) => { used.add(key); const src = mode === "cid" ? `cid:sig-${key}` : `data:image/png;base64,${ICONS[key]}`; return `<img src="${src}" width="${size}" height="${size}" alt="" style="display:block;width:${size}px;height:${size}px;border:0">`; };
     const font = "font-family:'Segoe UI',Arial,Helvetica,sans-serif;";
@@ -105,7 +106,7 @@ module.exports = function makeAgents(H) {
       phones.length ? contact("phone", phones.map(v => link(tel(v), v)).join(' <span style="color:#111111">&nbsp;|&nbsp;</span> ')) : "",
       contact("mail", link("mailto:" + email, email, "#0563C1")),
       sig.website ? contact("globe", link(href(sig.website), sig.website)) : "",
-      sig.address ? contact("map-pin", esc(sig.address)) : "",
+      sig.address ? contact("map-pin", sig.address.split("\n").map(esc).join("<br>")) : "",
       rule,
       socials.length ? `<tr><td><table cellpadding="0" cellspacing="0" role="presentation" bgcolor="${acc}" style="background:${acc}"><tr>${socials.map(([k, n]) => `<td style="padding:5px 6px"><a href="${esc(href(sig[k]))}" title="${n}">${img("social-" + k, 18)}</a></td>`).join("")}</tr></table></td></tr>` : "",
       line(sig.disclaimer, "font-size:12px;color:#222222;padding-top:4px;line-height:1.4"),
@@ -114,13 +115,43 @@ module.exports = function makeAgents(H) {
     const text = [p.name, p.title, sig.company, sig.tagline, sig.brands, phones.join(" | "), email, sig.website, sig.address].filter(v => String(v || "").trim()).join("\n");
     return { html, text, icons: [...used] };
   }
+  // Bifold's Outlook signature: a red bar beside blue name and company, grey labelled lines, bold website, round LinkedIn.
+  function sigClassic(co, sig, p, email, mode) {
+    const RED = "#E31B23", BLUE = "#2F5496", GREY = "#7F7F7F", used = new Set();
+    const base = `font-family:Calibri,Carlito,Arial,sans-serif;font-size:15px;line-height:1.35;color:${GREY}`;
+    const strong = `font-family:Arial,Helvetica,sans-serif;font-weight:bold;color:${BLUE}`;
+    const div = (inner, st = "") => inner ? `<div style="${st}">${inner}</div>` : "";
+    const plain = (u, t) => `<a href="${esc(u)}" style="color:${GREY};text-decoration:none">${esc(t)}</a>`;
+    const titleLine = p.title && sig.company ? `${esc(p.title)} at <span style="${strong}">${esc(sig.company)}</span>` : p.title ? esc(p.title) : sig.company ? `<span style="${strong}">${esc(sig.company)}</span>` : "";
+    let li = "";
+    if (String(sig.linkedin || "").trim()) { used.add("round-linkedin"); const src = mode === "cid" ? "cid:sig-round-linkedin" : `data:image/png;base64,${ICONS["round-linkedin"]}`;
+      li = `<div style="padding-top:4px"><a href="${esc(href(sig.linkedin))}" title="LinkedIn"><img src="${src}" width="22" height="22" alt="LinkedIn" style="display:block;width:22px;height:22px;border:0"></a></div>`; }
+    const inner = [
+      div(esc(p.name), strong + ";font-size:15px"),
+      div(titleLine),
+      div(esc(p.credential), strong),
+      sig.office ? div("Phone: " + plain(tel(sig.office), sig.office)) : "",
+      p.mobile ? div("Mobile: " + plain(tel(p.mobile), p.mobile)) : "",
+      div(`Email:&nbsp; <a href="mailto:${esc(email)}" style="color:#0563C1;text-decoration:underline">${esc(email)}</a>`),
+      ...(sig.address ? sig.address.split("\n").map(l => div(esc(l))) : []),
+      sig.website ? div(`<a href="${esc(href(sig.website))}" style="font-family:Arial,Helvetica,sans-serif;font-weight:bold;color:#1F2A5A;text-decoration:underline">${esc(sig.website)}</a>`) : "",
+      li,
+    ].join("");
+    const html = `<table cellpadding="0" cellspacing="0" role="presentation" style="margin-top:6px;border-collapse:collapse;max-width:720px">`
+      + `<tr><td style="border-left:5px solid ${RED};padding:2px 0 2px 9px;${base}">${inner}</td></tr>`
+      + (sig.disclaimer ? `<tr><td style="padding-top:6px;font-family:Arial,Helvetica,sans-serif;font-size:11.5px;line-height:1.4;color:${GREY}">${esc(sig.disclaimer)}</td></tr>` : "")
+      + `</table>`;
+    const text = [p.name, [p.title, sig.company].filter(Boolean).join(" at "), p.credential, sig.office && "Phone: " + sig.office, p.mobile && "Mobile: " + p.mobile,
+      "Email: " + email, sig.address, sig.website].filter(v => String(v || "").trim()).join("\n");
+    return { html, text, icons: [...used] };
+  }
   async function signature(co, user, S) {
     S = S || await settings(co);
     const p = await person(user.email);
     const b = sigBuild(co, sigFor(co, S.sig), p, user.email, "data");
     return { html: b.html, text: b.text, person: p };
   }
-  const personIn = b => ({ name: noEm(clean(b.name, 80)), title: noEm(clean(b.title, 100)), mobile: noEm(clean(b.mobile, 40)) });
+  const personIn = b => ({ name: noEm(clean(b.name, 80)), title: noEm(clean(b.title, 100)), mobile: noEm(clean(b.mobile, 40)), credential: noEm(clean(b.credential, 80)) });
   async function saveMe(user, b) {
     writeCo(user);
     const v = personIn(b);
@@ -147,7 +178,7 @@ module.exports = function makeAgents(H) {
     for await (const e of runsT.listEntities({ queryOptions: { filter: `PartitionKey eq 'run-${co}'` } })) { runs.push({ at: e.at, created: e.created, resolved: e.resolved, drafted: e.drafted, counts: json(e.counts, {}) }); if (runs.length >= 7) break; }
     const usage = await getOrNull(runsT, "usage", `${co}-${today().slice(0, 7)}`);
     const S = await settings(co);
-    return { items, agents: AGENTS, settings: { ...S, sig: sigFor(co, S.sig) }, defaultSig: DEFAULT_SIGS[co], signature: await signature(co, user, S), runs, draftsThisMonth: usage ? Number(usage.drafts) || 0 : 0,
+    return { items, agents: AGENTS, settings: { ...S, sig: sigFor(co, S.sig) }, defaultSig: DEFAULT_SIGS[co], sigLayout: SIG_LAYOUT[co], signature: await signature(co, user, S), runs, draftsThisMonth: usage ? Number(usage.drafts) || 0 : 0,
       isManager: user.isManager, me: user.email, mailReady: graphReady(), claudeReady: !!process.env.ANTHROPIC_API_KEY, company: CO[co].name };
   }
 

@@ -64,6 +64,11 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
 .qr{display:flex;flex-wrap:wrap;gap:6px}
 .qr button{font-size:12px;padding:4px 9px;font-weight:500}
 .note{font-size:12px;color:var(--muted);margin-top:14px;max-width:90ch}
+.sigbox{border:1px dashed var(--line);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.45;color:var(--muted);white-space:pre-line;background:var(--surface)}
+.sigbox b{color:var(--fg)}
+.sighead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.linkbtn{border:0;background:none;padding:0;color:var(--accent);font-weight:600;box-shadow:none;cursor:pointer;font-size:12.5px}
+#s_signature{font-family:var(--f-num);font-size:12.5px;line-height:1.5}
 .banner{border:1px solid var(--line);background:var(--surface);border-left:4px solid var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px}
 @media (max-width:640px){.kpis{grid-template-columns:1fr 1fr;gap:8px}.kpi .v{font-size:18px}.card{padding:14px 14px 12px 18px}}
 </style>
@@ -83,6 +88,7 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
     </div>
     <div class="acts">
       <span class="lastrun" id="lastRun"></span>
+      <button type="button" id="meBtn">My signature</button>
       <button type="button" id="setBtn" hidden>Agent settings</button>
     </div>
   </header>
@@ -129,7 +135,8 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
       <label class="full"><span class="lbl">To</span><input id="d_to" autocomplete="off" placeholder="customer@example.com"></label>
       <label class="full"><span class="lbl">Cc</span><input id="d_cc" autocomplete="off" placeholder="Optional"></label>
       <label class="full"><span class="lbl">Subject</span><input id="d_subject" autocomplete="off"></label>
-      <label class="full"><span class="lbl">Message</span><textarea id="d_body" rows="15"></textarea></label>
+      <label class="full"><span class="lbl">Message</span><textarea id="d_body" rows="12"></textarea></label>
+      <div class="full"><div class="sighead"><span class="lbl">Signature (added when sent)</span><button type="button" class="linkbtn" id="dSigEdit">Edit my details</button></div><div class="sigbox" id="dSig"></div></div>
     </div>
     <div class="hint" id="dHint"></div>
     <div class="err" id="dErr" role="alert"></div>
@@ -163,6 +170,21 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
   </form>
 </dialog>
 
+<dialog id="meDlg">
+  <form id="meForm" novalidate>
+    <div class="dhead"><h3>My signature</h3><button type="button" class="x" id="meX" aria-label="Close">×</button></div>
+    <p class="hint" style="margin:0" id="meHint">These details fill your company's signature on every email you send from the Agent Inbox.</p>
+    <div class="fields">
+      <label class="full"><span class="lbl">Name</span><input id="m_name" autocomplete="name"></label>
+      <label><span class="lbl">Job title</span><input id="m_title" autocomplete="organization-title" placeholder="e.g. Sales Manager"></label>
+      <label><span class="lbl">Mobile</span><input id="m_mobile" autocomplete="tel" placeholder="+971 50 000 0000"></label>
+      <div class="full"><span class="lbl">Preview</span><div class="sigbox" id="mPrev"></div></div>
+    </div>
+    <div class="err" id="meErr" role="alert"></div>
+    <div class="foot"><div class="r2"><button type="button" id="meCancel">Cancel</button><button type="submit" class="primary">Save</button></div></div>
+  </form>
+</dialog>
+
 <dialog id="setDlg">
   <form id="setForm" novalidate>
     <div class="dhead"><h3>Agent settings</h3><button type="button" class="x" id="setX" aria-label="Close">×</button></div>
@@ -176,6 +198,9 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
       <label><span class="lbl">Margin floor on quotations (%)</span><input id="s_marginFloor" class="num" type="number" min="0" max="80" step="0.5"></label>
       <label><span class="lbl">Claude drafts per month (cap)</span><input id="s_monthlyDrafts" class="num" type="number" min="0" max="5000"></label>
       <label class="full"><span class="lbl">Collections and cash outlook go to</span><input id="s_financeEmail" type="email" placeholder="Leave empty to send each reminder to the person who issued the invoice"></label>
+      <label class="full"><span class="lbl">Email signature for <span id="sigCo"></span></span><textarea id="s_signature" rows="7"></textarea>
+        <span class="hint">{name}, {title}, {mobile} and {email} are filled from each person's "My signature" details. A line or " | " part whose detail is empty is left out. The first line is shown in bold. <button type="button" class="linkbtn" id="sigReset">Reset to default</button></span></label>
+      <label class="full tg" style="cursor:pointer"><input type="checkbox" id="s_sigLogo"><div><b>Company logo in the signature</b><span>Shown beside the signature in the colours of the company.</span></div></label>
       <label class="full tg" style="cursor:pointer"><input type="checkbox" id="s_digest"><div><b>Morning digest email</b><span>Each person gets one email listing their new items. Nothing goes to customers.</span></div></label>
     </div>
     <div class="err" id="setErr" role="alert"></div>
@@ -283,6 +308,25 @@ function card(i){
 function replace(item){const k=D.items.findIndex(x=>x.id===item.id);if(k>=0)D.items[k]=item;else D.items.push(item);render()}
 async function setStatus(i,body,msg){try{replace(await api("POST","agents/items/"+encodeURIComponent(i.id)+"/status",body));toast(msg)}catch(e){toast(e.message,true)}}
 
+/* signature */
+function fillSig(tpl,p,email){
+  const vals={name:p.name,title:p.title,mobile:p.mobile,email};
+  return String(tpl||"").split("\n").map(line=>line.split(" | ").filter(part=>!(part.match(/\{(\w+)\}/g)||[]).some(k=>!String(vals[k.slice(1,-1)]||"").trim())).map(part=>part.replace(/\{(\w+)\}/g,(m,k)=>vals[k]!==undefined?String(vals[k]).trim():m)).join(" | ").trim()).filter(Boolean);
+}
+function sigInto(box,lines){box.textContent="";lines.forEach((l,i)=>{if(i)box.append(document.createTextNode("\n"));box.append(i?document.createTextNode(l):el("b",null,l))});if(!lines.length)box.textContent="No signature"}
+const sigText=()=>D.signature.lines.join("\n");
+function openMe(){
+  const p=D.signature.person;$("m_name").value=p.name||"";$("m_title").value=p.title||"";$("m_mobile").value=p.mobile||"";$("meErr").textContent="";
+  $("meHint").textContent=p.saved?"These details fill your company's signature on every email you send from the Agent Inbox.":"Check these details: they were taken from your Microsoft 365 profile or your email address and haven't been saved yet.";
+  mePrev();$("meDlg").showModal();
+}
+function mePrev(){sigInto($("mPrev"),fillSig(D.settings.signature,{name:$("m_name").value,title:$("m_title").value,mobile:$("m_mobile").value},D.me))}
+["m_name","m_title","m_mobile"].forEach(id=>$(id).addEventListener("input",mePrev));
+$("meBtn").onclick=openMe;$("dSigEdit").onclick=openMe;
+$("meX").onclick=$("meCancel").onclick=()=>$("meDlg").close();
+$("meForm").addEventListener("submit",async ev=>{ev.preventDefault();
+  try{D.signature=await api("PUT","agents/me",{name:$("m_name").value,title:$("m_title").value,mobile:$("m_mobile").value});$("meDlg").close();if($("draftDlg").open)sigInto($("dSig"),D.signature.lines);toast("Signature details saved")}catch(e){$("meErr").textContent=e.message}});
+
 /* draft dialog */
 function draftBody(){return{to:$("d_to").value.trim(),cc:$("d_cc").value.trim(),subject:$("d_subject").value.trim(),body:$("d_body").value,etag:EDIT.etag}}
 function openDraft(i){
@@ -290,15 +334,16 @@ function openDraft(i){
   $("dTitle").textContent=i.title;
   const m=$("dMeta");m.textContent="";m.append(el("span","src"+(d.source==="claude"?" claude":""),d.source==="claude"?"Drafted by Claude":"Template draft"));if(d.edited)m.append(el("span",null,"Edited"));
   $("d_to").value=d.to||"";$("d_cc").value=d.cc||"";$("d_subject").value=d.subject||"";$("d_body").value=d.body||"";
-  $("dHint").textContent=D.mailReady?`Sends from the ${D.company} mailbox, with you in copy and as the reply-to address. Check the facts before sending: the agent only used what is in the tools.`:"Email isn't set up for your company, so use Copy or Open in Outlook, send it yourself, then mark the item done.";
+  sigInto($("dSig"),D.signature.lines);
+  $("dHint").textContent=D.mailReady?`Sends from your mailbox (${D.me}) and saves a copy in your Sent Items. Check the facts before sending: the agent only used what is in the tools.`:"Email sending isn't set up on the tools site yet, so use Copy or Open in Outlook, send it yourself, then mark the item done.";
   $("dSend").disabled=!D.mailReady;$("dErr").textContent="";
   if(!d.to)$("dErr").textContent="No email address on file for this customer. Add one before sending.";
   $("draftDlg").showModal();
 }
 $("dX").onclick=()=>$("draftDlg").close();
 $("dSave").onclick=async()=>{if(BUSY)return;BUSY=true;try{const it=await api("PUT","agents/items/"+encodeURIComponent(EDIT.id),draftBody());EDIT=it;replace(it);toast("Draft saved")}catch(e){$("dErr").textContent=e.message}finally{BUSY=false}};
-$("dCopy").onclick=async()=>{const b=draftBody();try{await navigator.clipboard.writeText(`Subject: ${b.subject}\n\n${b.body}`);toast("Copied")}catch{toast("Copy didn't work in this browser. Select the text and copy it.",true)}};
-$("dMailto").onclick=()=>{const b=draftBody();location.href=`mailto:${encodeURIComponent(b.to).replace(/%2C/g,",")}?${b.cc?"cc="+encodeURIComponent(b.cc)+"&":""}subject=${encodeURIComponent(b.subject)}&body=${encodeURIComponent(b.body)}`};
+$("dCopy").onclick=async()=>{const b=draftBody();try{await navigator.clipboard.writeText(`Subject: ${b.subject}\n\n${b.body}\n${sigText()}`);toast("Copied")}catch{toast("Copy didn't work in this browser. Select the text and copy it.",true)}};
+$("dMailto").onclick=()=>{const b=draftBody();location.href=`mailto:${encodeURIComponent(b.to).replace(/%2C/g,",")}?${b.cc?"cc="+encodeURIComponent(b.cc)+"&":""}subject=${encodeURIComponent(b.subject)}&body=${encodeURIComponent(b.body+"\n"+sigText())}`};
 $("draftForm").addEventListener("submit",async ev=>{
   ev.preventDefault();if(BUSY)return;const b=draftBody();
   if(!b.to)return $("dErr").textContent="Add the customer's email address.";
@@ -327,15 +372,17 @@ function openSettings(){
   const s=D.settings;$("setCo").textContent=`Settings for ${D.company}. Changes apply from the next morning run.`;
   const box=$("setAgents");box.textContent="";
   Object.entries(D.agents).forEach(([k,n])=>{const l=el("label","tg");const c=el("input");c.type="checkbox";c.checked=!!s.enabled[k];c.dataset.k=k;const d=el("div");d.append(el("b",null,n),el("span",null,AGDESC[k]));l.append(c,d);box.append(l)});
-  SET_FIELDS.forEach(k=>$("s_"+k).value=s[k]??"");$("s_digest").checked=!!s.digest;$("setErr").textContent="";$("setDlg").showModal();
+  SET_FIELDS.forEach(k=>$("s_"+k).value=s[k]??"");$("s_digest").checked=!!s.digest;$("s_sigLogo").checked=!!s.sigLogo;
+  $("s_signature").value=s.signature||D.defaultSignature;$("sigCo").textContent=D.company;$("setErr").textContent="";$("setDlg").showModal();
 }
 $("setBtn").onclick=openSettings;
+$("sigReset").onclick=()=>{$("s_signature").value=D.defaultSignature};
 $("setX").onclick=$("setCancel").onclick=()=>$("setDlg").close();
 $("setForm").addEventListener("submit",async ev=>{
-  ev.preventDefault();const b={enabled:{},digest:$("s_digest").checked};
+  ev.preventDefault();const b={enabled:{},digest:$("s_digest").checked,sigLogo:$("s_sigLogo").checked,signature:$("s_signature").value};
   $("setAgents").querySelectorAll("input[data-k]").forEach(c=>b.enabled[c.dataset.k]=c.checked);
   SET_FIELDS.forEach(k=>b[k]=$("s_"+k).value.trim());
-  try{D.settings=await api("PUT","agents/settings",b);$("setDlg").close();toast("Settings saved");render()}catch(e){$("setErr").textContent=e.message}
+  try{D.settings=await api("PUT","agents/settings",b);D.signature={...D.signature,lines:fillSig(D.settings.signature,D.signature.person,D.me)};$("setDlg").close();toast("Settings saved");render()}catch(e){$("setErr").textContent=e.message}
 });
 
 /* filters */
@@ -359,7 +406,8 @@ async function load(){
   const off=Object.entries(D.settings.enabled).filter(([,v])=>!v).map(([k])=>D.agents[k]);
   const notes=[];
   if(off.length)notes.push(`Switched off: ${off.join(", ")}.`);
-  if(!D.mailReady)notes.push("Email isn't set up for your company yet, so drafts can be copied or opened in Outlook but not sent from here.");
+  if(!D.mailReady)notes.push("Email sending isn't set up on the tools site yet, so drafts can be copied or opened in Outlook but not sent from here.");
+  if(!D.signature.person.saved)notes.push('Check your email signature details with "My signature".');
   if(D.isManager&&!D.settings.financeEmail)notes.push("Tip: set a collections contact in Agent settings so invoice reminders and the Monday cash outlook go to finance.");
   $("banner").hidden=!notes.length;$("banner").textContent=notes.join(" ");
   render();

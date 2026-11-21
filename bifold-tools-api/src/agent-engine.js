@@ -17,7 +17,13 @@
 const CO_NAMES = { bifold: "Bifold Technologies LLC", techhub: "Tech Hub Information Technology" };
 const AGENTS = { a1: "AMC Renewal and Warranty", a2: "Pipeline Follow-up", a3: "Margin Guard", a4: "Collections and Cash" };
 const DEFAULTS = { enabled: { a1: true, a2: true, a3: true, a4: true }, renewalDays: 90, warrantyDays: 90, followupDays: 7, surveyDays: 5,
-  marginFloor: 15, financeEmail: "", monthlyDrafts: 300, digest: true };
+  marginFloor: 15, financeEmail: "", monthlyDrafts: 300, digest: true, signature: "", sigLogo: true };
+// Default email signatures; managers change them in Agent settings. {name} {title} {mobile} {email} come from each
+// person's "My signature" details. A line (or a " | " part of it) whose placeholder is empty is left out.
+const DEFAULT_SIGS = {
+  bifold: "{name}\n{title}\nBifold Technologies LLC\nAl Garhoud, Dubai, UAE\nM: {mobile} | {email}\nwww.bifoldtech.com",
+  techhub: "{name}\n{title}\nTech Hub Information Technology\nAl Nakheel, Ras Al Khaimah, UAE\nT: +971 7 258 1926 | M: {mobile} | {email}\nwww.techhubrak.ae",
+};
 const INBOX = "agentinbox", SETTINGS = "agentsettings", RUNS = "agentruns";
 
 const json = (s, d) => { try { return s ? JSON.parse(s) : d; } catch { return d; } };
@@ -55,6 +61,8 @@ function settingsIn(raw) {
     financeEmail: emailLike(s.financeEmail) ? String(s.financeEmail).trim().toLowerCase() : "",
     monthlyDrafts: clamp(s.monthlyDrafts, 0, 5000, DEFAULTS.monthlyDrafts),
     digest: s.digest === undefined ? true : !!s.digest,
+    signature: tidy(String(s.signature || "")).replace(/\r/g, "").split("\n").map(l => l.trimEnd()).join("\n").trim().slice(0, 1500),
+    sigLogo: s.sigLogo === undefined ? true : !!s.sigLogo,
   };
 }
 
@@ -77,7 +85,7 @@ ${facts.map(([k, v]) => `- ${k}: ${v}`).join("\n")}
 
 RULES:
 - Professional UAE business English. 90 to 160 words in the body.
-- Start with "Dear ${ctx.greeting}," and end with "Kind regards," then "${ctx.signer}" then "${ctx.company}" on separate lines.
+- Start with "Dear ${ctx.greeting}," and end with the line "Kind regards," and nothing after it (the sender's signature is added automatically).
 - Plain text only. No markdown, no bullet symbols other than "-", no em dash character (use a comma, colon or full stop).
 
 Reply with ONLY one JSON object: {"subject": string, "body": string}`;
@@ -99,7 +107,7 @@ Reply with ONLY one JSON object: {"subject": string, "body": string}`;
 
 // Plain templates, used when Claude isn't set up, the monthly cap is reached, or Claude fails.
 function templateDraft(kind, f, ctx) {
-  const sign = `\n\nKind regards,\n${ctx.signer}\n${ctx.company}`;
+  const sign = "\n\nKind regards,";
   const hi = `Dear ${ctx.greeting},\n\n`;
   if (kind === "renewal") return { subject: `Renewal of your maintenance contract ${f.ref}`,
     body: hi + `Your annual maintenance contract with us (${f.ref}) ${f.left < 0 ? "ended on" : "runs until"} ${fdate(f.end)}. We would like to continue looking after your systems without any break in cover, and we will send you the renewal proposal shortly.\n\nIf anything has changed since the contract started, such as new equipment, additional sites or a different contact person, please let us know so the renewal reflects it.` + sign };
@@ -364,6 +372,7 @@ module.exports = function makeEngine({ tableFor, log = console.log, now = () => 
 };
 module.exports.AGENTS = AGENTS;
 module.exports.DEFAULTS = DEFAULTS;
+module.exports.DEFAULT_SIGS = DEFAULT_SIGS;
 module.exports.settingsIn = settingsIn;
 module.exports.TABLES = { INBOX, SETTINGS, RUNS };
 module.exports.tidy = tidy;

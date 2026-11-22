@@ -21,10 +21,10 @@
   // bullets, feature layout, buttons, call to action, dividers and footer, so consecutive campaigns look new.
   const STYLES = {
     signature: { label: "Signature", desc: "Brand colour hero, feature cards, the house look.", header: "bar", hero: "navy", heading: "plain", bullet: "square", features: "cards", stats: "plain", quote: "bar", cta: "soft", divider: "line", footer: "navy", btn: "solid", radius: 10 },
-    editorial: { label: "Editorial", desc: "Magazine feel: serif headlines on white, numbered rows, light footer.", header: "center", hero: "serif", heading: "serif", bullet: "chev", features: "rows", stats: "plain", quote: "serif", cta: "ruled", divider: "dots", footer: "light", btn: "dark", radius: 0, serif: true, heroAlign: "left", page: "#F6F7F9" },
+    editorial: { label: "Editorial", desc: "Magazine feel: newspaper masthead, serif headlines with a standfirst, numbered panel, dark finish.", header: "center", hero: "serif", heading: "serif", bullet: "chev", features: "rows", stats: "serif", quote: "serif", cta: "ruled", divider: "dots", footer: "navy", btn: "dark", radius: 0, serif: true, heroAlign: "left" },
     impact: { label: "Impact", desc: "Big, bold launch look: strong colour hero, pill buttons, numbered circles.", header: "compact", hero: "bold", heading: "big", bullet: "arrow", features: "circles", stats: "big", quote: "card", cta: "navy", divider: "short", footer: "navy", btn: "pill", radius: 16, heroAlign: "center" },
     advisory: { label: "Advisory", desc: "For security notices and end of life news: alert strip, checklist, step by step.", header: "banner", hero: "marker", heading: "bar", bullet: "check", features: "steps", stats: "cards", quote: "bar", cta: "navy", divider: "line", footer: "navy", btn: "solid", radius: 4, heroAlign: "left" },
-    minimal: { label: "Minimal", desc: "Reads like a personal note: plain white, small logo, no heavy colour.", header: "compact", hero: "plain", heading: "plain", bullet: "dot", features: "list", stats: "plain", quote: "bar", cta: "plain", divider: "line", footer: "plain", btn: "outline", radius: 0, heroAlign: "left", page: "#FFFFFF", small: true },
+    minimal: { label: "Clean", desc: "Calm and airy: thin colour bar, lots of white space, numbered points, soft finish.", header: "topbar", hero: "plain", heading: "plain", bullet: "dot", features: "list", stats: "plain", quote: "bar", cta: "plain", divider: "short", footer: "light", btn: "dark", radius: 8, heroAlign: "left", small: true },
     spotlight: { label: "Spotlight", desc: "Tinted page, pill label hero, dark feature tiles, colour band to finish.", header: "bar", hero: "chip", heading: "rule", bullet: "arrow", features: "tiles", stats: "cards", quote: "card", cta: "band", divider: "short", footer: "navy", btn: "solid", radius: 12, heroAlign: "left", page: "soft" },
     briefing: { label: "Briefing", desc: "Newsletter masthead, soft hero, bordered cards, side by side call to action.", header: "masthead", hero: "soft", heading: "rule", bullet: "square", features: "bordered", stats: "cards", quote: "serif", cta: "split", divider: "line", footer: "navy", btn: "solid", radius: 6, heroAlign: "left" },
   };
@@ -119,16 +119,17 @@ ${b.text ? rich(b.text, T, base, T.onBold, 17, true) : ""}${btn(T.bold, "invert"
 ${b.text ? rich(b.text, T, base, T.onNavy, 16, true) : ""}${btn(true)}`, T.navy, `40px 44px ${pb};text-align:${al}`);
       }
       if (v === "serif") {
-        return pic + row(`${bar(48, 3, T.accent)}${kick(b.kicker, T.accent, "letter-spacing:2.5px")}<h1 class="h1" style="margin:0 0 16px;font-family:${SERIF};font-size:36px;line-height:1.18;font-weight:normal;color:${T.navy}">${esc(b.title)}</h1>
-${b.text ? rich(b.text, T, base, T.ink, 17) : ""}${btn(false)}`, "#ffffff", `${b.img ? 34 : 44}px 44px ${b.btn ? "34px" : "14px"};text-align:${al};border-bottom:1px solid ${T.line}`);
+        const stand = b.text ? `<p style="margin:0 0 22px;font-family:${SERIF};font-size:19px;font-style:italic;line-height:1.55;color:${T.navy2}">${inline(b.text.replace(/\n+/g, " "), T, base)}</p>` : "";
+        return pic + row(`${kick(b.kicker, T.accent, "letter-spacing:2.5px;margin-bottom:14px")}<h1 class="h1" style="margin:0 0 18px;font-family:${SERIF};font-size:40px;line-height:1.14;font-weight:normal;letter-spacing:-0.3px;color:${T.navy}">${esc(b.title)}</h1>
+${bar(64, 3, T.accent)}${stand}${btn(false)}`, "#ffffff", `${b.img ? 34 : 40}px 44px ${b.btn ? "36px" : "18px"};text-align:${al}`);
       }
       if (v === "marker") {
         return pic + row(`<table ${TBL} width="100%"><tr><td style="border-left:6px solid ${T.accent};padding:4px 0 4px 22px">${kick(b.kicker, T.accent)}<h1 class="h1" style="margin:0 0 12px;font-family:${FONT};font-size:28px;line-height:1.22;font-weight:bold;color:${T.navy}">${esc(b.title)}</h1>
 ${b.text ? rich(b.text, T, base, T.ink, 16) : ""}${btn(false)}</td></tr></table>`, "#ffffff", `34px 44px ${b.btn ? "30px" : "14px"}`);
       }
       if (v === "plain") {
-        return pic + row(`${kick(b.kicker, T.muted, "font-size:11px;letter-spacing:1.5px")}<h1 class="h1" style="margin:0 0 14px;font-family:${FONT};font-size:26px;line-height:1.25;font-weight:bold;color:${T.navy}">${esc(b.title)}</h1>
-${b.text ? rich(b.text, T, base, T.ink, 16) : ""}${btn(false)}`, "#ffffff", `30px 44px ${b.btn ? "28px" : "8px"};text-align:${al}`);
+        return pic + row(`${b.kicker ? `<table ${TBL} style="margin:0 0 14px"><tr><td valign="middle" width="22" style="width:22px"><div style="width:22px;height:3px;line-height:3px;font-size:1px;background:${T.accent}">&nbsp;</div></td><td style="padding-left:10px;font-family:${FONT};font-size:11.5px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:${T.accent}">${esc(b.kicker)}</td></tr></table>` : ""}<h1 class="h1" style="margin:0 0 16px;font-family:${FONT};font-size:31px;line-height:1.2;font-weight:bold;letter-spacing:-0.4px;color:${T.navy}">${esc(b.title)}</h1>
+${b.text ? rich(b.text, T, base, T.muted, 17) : ""}${btn(false)}`, "#ffffff", `40px 44px ${b.btn ? "36px" : "12px"};text-align:${al}`);
       }
       if (v === "soft") {
         return pic + row(`${b.kicker ? `<p style="margin:0 0 14px;font-family:${FONT};font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:${T.accent2}"><span style="border-bottom:3px solid ${T.accent};padding-bottom:4px">${esc(b.kicker)}</span></p>` : ""}<h1 class="h1" style="margin:0 0 14px;font-family:${FONT};font-size:29px;line-height:1.2;font-weight:bold;color:${T.navy}">${esc(b.title)}</h1>
@@ -142,7 +143,7 @@ ${b.text ? rich(b.text, T, base, T.onNavy, 16, true) : ""}${btn(true)}`, T.navy,
       const v = T.s.heading, lg = b.size !== "md", center = b.align === "center";
       const k = b.kicker ? `<p style="margin:0 0 8px;font-family:${FONT};font-size:11px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:${T.accent}">${esc(b.kicker)}</p>` : "";
       const pad = `30px 44px 6px;text-align:${center ? "center" : "left"}`;
-      if (v === "serif") return row(`${k}<h2 style="margin:0;font-family:${SERIF};font-size:${lg ? 27 : 21}px;line-height:1.28;font-weight:normal;color:${T.navy}">${esc(b.text)}</h2>`, "#ffffff", pad);
+      if (v === "serif") return row(`${bar(32, 2, T.accent, center)}${k}<h2 style="margin:0;font-family:${SERIF};font-size:${lg ? 27 : 21}px;line-height:1.28;font-weight:normal;color:${T.navy}">${esc(b.text)}</h2>`, "#ffffff", pad);
       if (v === "bar") return row(`<table ${TBL} ${center ? 'align="center"' : ""}><tr><td style="border-left:4px solid ${T.accent};padding:2px 0 2px 14px">${k}<h2 style="margin:0;font-family:${FONT};font-size:${lg ? 22 : 18}px;line-height:1.3;font-weight:bold;color:${T.navy}">${esc(b.text)}</h2></td></tr></table>`, "#ffffff", pad);
       if (v === "rule") return row(`${k}<h2 style="margin:0 0 10px;font-family:${FONT};font-size:${lg ? 21 : 17}px;line-height:1.3;font-weight:bold;color:${T.navy}">${esc(b.text)}</h2><div style="height:2px;line-height:2px;font-size:1px;background:${T.line}"><div style="width:56px;height:2px;background:${T.accent};${center ? "margin:0 auto" : ""}">&nbsp;</div></div>`, "#ffffff", pad);
       if (v === "big") return row(`${k}<h2 style="margin:0 0 12px;font-family:${FONT};font-size:${lg ? 28 : 21}px;line-height:1.2;font-weight:bold;letter-spacing:-0.3px;color:${T.navy}">${esc(b.text)}</h2>${bar(56, 4, T.accent, center)}`, "#ffffff", `34px 44px 0;text-align:${center ? "center" : "left"}`);
@@ -176,9 +177,10 @@ ${b.title ? `<h3 style="margin:0 0 10px;font-family:${hf(T)};font-size:20px;line
       const stack = (cell, gap) => items.map((i, n) => cell(i, n) + (n < items.length - 1 ? (gap || "") : "")).join("");
       let body;
       if (v === "rows") {
-        body = stack((i, n) => `<table ${TBL} width="100%"><tr><td valign="top" width="64" style="width:64px;padding:14px 0;font-family:${SERIF};font-size:34px;line-height:1;color:${T.accent}">${n2(n)}</td><td valign="top" style="padding:14px 0">
-<h3 style="margin:0 0 6px;font-family:${hf(T)};font-size:18px;line-height:1.3;${T.s.serif ? "font-weight:normal;" : ""}color:${T.navy}">${esc(i.title)}</h3><p style="margin:0;font-family:${FONT};font-size:14px;line-height:1.6;color:${T.muted}">${inline(i.text, T, base)}</p></td></tr></table>`,
+        const inner = stack((i, n) => `<table ${TBL} width="100%"><tr><td valign="top" width="70" style="width:70px;padding:18px 0;font-family:${SERIF};font-size:42px;line-height:0.9;color:${T.accent}">${n2(n)}</td><td valign="top" style="padding:18px 0">
+<h3 style="margin:0 0 6px;font-family:${hf(T)};font-size:19px;line-height:1.3;${T.s.serif ? "font-weight:normal;" : ""}color:${T.navy}">${esc(i.title)}</h3><p style="margin:0;font-family:${FONT};font-size:14px;line-height:1.6;color:${T.ink}">${inline(i.text, T, base)}</p></td></tr></table>`,
           `<div style="height:1px;line-height:1px;font-size:1px;background:${T.line}">&nbsp;</div>`);
+        body = `<table ${TBL} width="100%"><tr><td bgcolor="${T.soft}" style="background:${T.soft};border-top:4px solid ${T.navy};padding:8px 26px">${inner}</td></tr></table>`;
       } else if (v === "circles") {
         body = cols((i, n) => `<table ${TBL} width="100%"><tr><td align="center" style="text-align:center;padding:4px 4px 0">
 <table ${TBL} align="center" style="margin:0 auto 12px"><tr><td width="48" height="48" align="center" valign="middle" bgcolor="${n === 1 ? T.navy : T.accent}" style="width:48px;height:48px;border-radius:24px;background:${n === 1 ? T.navy : T.accent};font-family:${FONT};font-size:19px;font-weight:bold;color:#ffffff;text-align:center">${n + 1}</td></tr></table>
@@ -189,7 +191,10 @@ ${b.title ? `<h3 style="margin:0 0 10px;font-family:${hf(T)};font-size:20px;line
 <h3 style="margin:0 0 6px;font-family:${FONT};font-size:16px;line-height:1.3;color:${T.navy}">${esc(i.title)}</h3><p style="margin:0;font-family:${FONT};font-size:14px;line-height:1.6;color:${T.ink}">${inline(i.text, T, base)}</p></td></tr></table>`,
           `<div style="height:10px;line-height:10px;font-size:1px">&nbsp;</div>`);
       } else if (v === "list") {
-        body = stack((i, n) => `<p style="margin:0 0 14px;font-family:${FONT};font-size:15px;line-height:1.6;color:${T.ink}"><strong style="color:${T.navy}">${esc(i.title)}</strong>${i.title && i.text ? `<br>` : ""}<span style="color:${T.muted}">${inline(i.text, T, base)}</span></p>`);
+        body = stack((i, n) => `<table ${TBL} width="100%"><tr><td valign="top" width="46" style="width:46px;padding:16px 0">
+<table ${TBL}><tr><td width="30" height="30" align="center" valign="middle" bgcolor="${T.soft}" style="width:30px;height:30px;border-radius:15px;background:${T.soft};font-family:${FONT};font-size:13px;font-weight:bold;color:${T.accent};text-align:center">${n + 1}</td></tr></table></td>
+<td valign="top" style="padding:16px 0"><h3 style="margin:3px 0 5px;font-family:${FONT};font-size:16px;line-height:1.35;color:${T.navy}">${esc(i.title)}</h3><p style="margin:0;font-family:${FONT};font-size:14.5px;line-height:1.6;color:${T.muted}">${inline(i.text, T, base)}</p></td></tr></table>`,
+          `<div style="height:1px;line-height:1px;font-size:1px;background:${T.line};margin-left:46px">&nbsp;</div>`);
       } else if (v === "tiles") {
         body = cols((i, n) => `<table ${TBL} width="100%"><tr><td bgcolor="${n === 1 ? T.navy2 : T.navy}" style="background:${n === 1 ? T.navy2 : T.navy};border-radius:${T.s.radius}px;padding:22px 18px">
 <p style="margin:0 0 10px;font-family:${FONT};font-size:22px;font-weight:bold;line-height:1;color:${T.kicker}">${n2(n)}</p>
@@ -215,6 +220,10 @@ ${b.title ? `<h3 style="margin:0 0 10px;font-family:${hf(T)};font-size:20px;line
         return row(`<table ${TBL} width="100%"><tr>${items.map((i, n) => `<td class="stack" width="${w}%" valign="top" style="width:${w}%;padding:0 ${n < items.length - 1 ? 5 : 0}px 10px ${n ? 5 : 0}px"><table ${TBL} width="100%"><tr><td align="center" bgcolor="${T.soft}" style="background:${T.soft};border-radius:${Math.min(T.s.radius, 10)}px;padding:18px 8px;text-align:center">
 <p style="margin:0;font-family:${FONT};font-size:28px;font-weight:bold;line-height:1.1;color:${T.navy}">${esc(i.v)}</p><p style="margin:6px 0 0;font-family:${FONT};font-size:12px;line-height:1.4;color:${T.muted}">${esc(i.l)}</p></td></tr></table></td>`).join("")}</tr></table>`, "#ffffff", "18px 44px 8px");
       }
+      if (v === "serif") {
+        return row(`<table ${TBL} width="100%"><tr>${items.map((i, n) => `<td class="stack" width="${w}%" valign="top" style="width:${w}%;padding:0 ${n < items.length - 1 ? 10 : 0}px 12px ${n ? 10 : 0}px"><table ${TBL} width="100%"><tr><td style="border-top:3px solid ${n % 2 ? T.navy : T.accent};padding:14px 0 0">
+<p style="margin:0;font-family:${SERIF};font-size:36px;line-height:1.05;color:${T.navy}">${esc(i.v)}</p><p style="margin:6px 0 0;font-family:${SERIF};font-size:14px;font-style:italic;line-height:1.4;color:${T.muted}">${esc(i.l)}</p></td></tr></table></td>`).join("")}</tr></table>`, "#ffffff", "22px 44px 10px");
+      }
       const big = v === "big";
       return row(`<table ${TBL} width="100%"><tr>${items.map((i, n) => `<td class="stack" width="${w}%" align="center" valign="top" style="width:${w}%;padding:12px 6px;${n && !big ? `border-left:1px solid ${T.line}` : ""}">
 <p style="margin:0;font-family:${T.s.serif ? SERIF : FONT};font-size:${big ? 40 : 30}px;font-weight:bold;line-height:1.05;letter-spacing:${big ? "-1px" : "0"};color:${big ? T.accent : T.accent2}">${esc(i.v)}</p><p style="margin:6px 0 0;font-family:${FONT};font-size:12.5px;line-height:1.4;${big ? "font-weight:bold;text-transform:uppercase;letter-spacing:1px;font-size:11px;" : ""}color:${T.muted}">${esc(i.l)}</p></td>`).join("")}</tr></table>`, "#ffffff", "18px 44px");
@@ -234,8 +243,8 @@ ${b.title ? `<h3 style="margin:0 0 10px;font-family:${hf(T)};font-size:20px;line
       const h = (color, font, size) => b.title ? `<h2 style="margin:0 0 10px;font-family:${font || FONT};font-size:${size || 22}px;line-height:1.3;${font === SERIF ? "font-weight:normal;" : ""}color:${color}">${esc(b.title)}</h2>` : "";
       if (v === "navy") return box(`${h("#ffffff")}${b.text ? rich(b.text, T, base, T.onNavy, 15, true) : ""}${button(b, T, base, true, "center")}`, T.navy);
       if (v === "band") return `<tr><td class="px" bgcolor="${T.bold}" style="background:${T.bold};padding:38px 44px;text-align:center">${h("#ffffff", FONT, 24)}${b.text ? rich(b.text, T, base, T.onBold, 15, true) : ""}${button(b, T, base, T.bold, "center", "invert")}</td></tr>`;
-      if (v === "ruled") return `<tr><td class="px" bgcolor="#ffffff" style="background:#ffffff;padding:22px 44px 30px"><table ${TBL} width="100%"><tr><td align="center" style="border-top:2px solid ${T.navy};border-bottom:2px solid ${T.navy};padding:28px 16px;text-align:center">${h(T.navy, SERIF, 25)}${b.text ? rich(b.text, T, base, T.ink, 15) : ""}${button(b, T, base, false, "center")}</td></tr></table></td></tr>`;
-      if (v === "plain") return row(`<div style="height:1px;line-height:1px;font-size:1px;background:${T.line};margin:0 0 22px">&nbsp;</div>${h(T.navy, FONT, 19)}${b.text ? rich(b.text, T, base, T.ink, 15) : ""}${button(b, T, base, false, "left")}`, "#ffffff", "16px 44px 30px");
+      if (v === "ruled") return `<tr><td class="px" bgcolor="#ffffff" style="background:#ffffff;padding:22px 44px 34px"><table ${TBL} width="100%"><tr><td align="center" bgcolor="${T.navy}" style="background:${T.navy};border-top:4px solid ${T.accent};padding:34px 30px;text-align:center">${h("#ffffff", SERIF, 28)}${b.text ? `<p style="margin:0 0 20px;font-family:${SERIF};font-size:17px;font-style:italic;line-height:1.55;color:${T.onNavy}">${inline(b.text, T, base, "#ffffff")}</p>` : ""}${button(b, T, base, true, "center", "solid")}</td></tr></table></td></tr>`;
+      if (v === "plain") return row(`<table ${TBL} width="100%"><tr><td bgcolor="${T.soft}" style="background:${T.soft};border-left:4px solid ${T.accent};border-radius:0 ${r}px ${r}px 0;padding:26px 28px">${h(T.navy, FONT, 21)}${b.text ? rich(b.text, T, base, T.ink, 15) : ""}${button(b, T, base, false, "left")}</td></tr></table>`, "#ffffff", "18px 44px 34px");
       if (v === "split") {
         const btn = button(b, T, base, false, "right");
         return `<tr><td class="px" bgcolor="#ffffff" style="background:#ffffff;padding:18px 44px 26px"><table ${TBL} width="100%"><tr><td bgcolor="${T.soft}" style="background:${T.soft};border-radius:${r}px;padding:24px 26px"><table ${TBL} width="100%"><tr>
@@ -262,8 +271,11 @@ ${btn ? `<td class="stack" valign="middle" align="right" width="230" style="widt
     const edCell = color => ed ? `<td valign="middle" align="right" style="font-family:${FONT};font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:${color}">${ed}</td>` : "";
     const top = `border-radius:${R}px ${R}px 0 0`;
     if (v === "center") {
-      return `<tr><td class="px" align="center" bgcolor="#ffffff" style="background:#ffffff;padding:30px 44px 20px;text-align:center;${top};border-bottom:1px solid ${T.line}">${logo("center")}
-${ed ? `<p style="margin:14px 0 0;font-family:${SERIF};font-size:13px;font-style:italic;color:${T.muted}">${ed}</p>` : ""}</td></tr>`;
+      const pub = esc(c.mast || (brand.key === "techhub" ? "Tech Hub Insights" : "Bifold Insights"));
+      return `<tr><td class="px" align="center" bgcolor="#ffffff" style="background:#ffffff;padding:30px 44px 0;text-align:center;${top}">${logo("center")}
+<table ${TBL} width="100%" style="margin:22px 0 0"><tr><td style="border-top:3px solid ${T.navy};border-bottom:1px solid ${T.navy};padding:9px 0"><table ${TBL} width="100%"><tr>
+<td valign="middle" align="left" style="text-align:left;font-family:${SERIF};font-size:15px;font-style:italic;color:${T.navy}">${pub}</td>
+${ed ? `<td valign="middle" align="right" style="font-family:${FONT};font-size:10.5px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:${T.accent}">${ed}</td>` : ""}</tr></table></td></tr></table></td></tr>`;
     }
     const strip = (bg, left, color) => `<tr><td class="px" bgcolor="${bg}" style="background:${bg};padding:10px 44px"><table ${TBL} width="100%"><tr><td valign="middle" style="font-family:${FONT};font-size:11px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:#ffffff">${left}</td>${edCell(color)}</tr></table></td></tr>`;
     const logoRow = (pad, border) => `<tr><td class="px" bgcolor="#ffffff" style="background:#ffffff;padding:${pad};${top};${border || ""}"><table ${TBL} width="100%"><tr><td valign="middle">${logo()}</td>${v === "compact" ? edCell(T.muted) : ""}</tr></table></td></tr>`;
@@ -272,6 +284,7 @@ ${ed ? `<p style="margin:14px 0 0;font-family:${SERIF};font-size:13px;font-style
       const label = esc(c.mast || "Important update");
       return logoRow("22px 44px 18px") + strip(T.bold, `<span style="color:#ffffff">&#9679;</span>&nbsp;&nbsp;${label}`, T.onBold);
     }
+    if (v === "topbar") return `<tr><td bgcolor="${T.accent}" style="background:${T.accent};height:5px;line-height:5px;font-size:1px;${top}">&nbsp;</td></tr><tr><td class="px" bgcolor="#ffffff" style="background:#ffffff;padding:24px 44px 20px;border-bottom:1px solid ${T.line}"><table ${TBL} width="100%"><tr><td valign="middle">${logo()}</td>${edCell(T.muted)}</tr></table></td></tr>`;
     if (v === "compact") return logoRow("20px 44px 16px", `border-bottom:1px solid ${T.line}`);
     return `<tr><td class="px" bgcolor="#ffffff" style="background:#ffffff;padding:24px 44px 20px;${top};border-bottom:4px solid ${T.accent}">
 <table ${TBL} width="100%"><tr><td valign="middle">${logo()}</td>${edCell(T.muted)}</tr></table></td></tr>`;
@@ -288,7 +301,7 @@ ${ed ? `<p style="margin:14px 0 0;font-family:${SERIF};font-size:13px;font-style
     const al = v === "plain" ? "left" : "center";
     return `<tr><td class="px" bgcolor="${bg}" style="background:${bg};padding:${v === "plain" ? "22px 44px 30px" : "30px 44px"};text-align:${al};border-radius:0 0 ${R}px ${R}px;${v === "plain" ? `border-top:1px solid ${T.line}` : ""}">
 ${socials ? `<p style="margin:0 0 16px;font-family:${FONT};font-size:13px">${socials}</p>` : ""}
-<p style="margin:0 0 4px;font-family:${FONT};font-size:13px;font-weight:bold;color:${strong}">${esc(brand.name)}</p>
+<p style="margin:0 0 4px;font-family:${T.s.serif ? SERIF : FONT};font-size:${T.s.serif ? 16 : 13}px;font-weight:${T.s.serif ? "normal" : "bold"};color:${strong}">${esc(brand.name)}</p>
 <p style="margin:0 0 4px;font-family:${FONT};font-size:12px;line-height:1.6;color:${soft}">${esc(brand.address)}${web ? ` &middot; <a href="${attr(web)}" style="color:${soft};text-decoration:underline">${esc(web.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""))}</a>` : ""}</p>
 <p style="margin:14px 0 0;font-family:${FONT};font-size:11.5px;line-height:1.6;color:${soft}">${esc(brand.footerNote || `You are receiving this email because you are a customer or business contact of ${brand.name}.`)}<br>
 <a href="{{unsubscribe_url}}" style="color:${link};text-decoration:underline">Unsubscribe</a> from these emails at any time.</p></td></tr>`;

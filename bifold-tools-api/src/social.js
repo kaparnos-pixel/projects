@@ -196,7 +196,9 @@ module.exports = function makeSocial({ table, getOrNull, publicUrl, log = consol
     await (await table("socialacct")).upsertEntity({ partitionKey: "oauth", rowKey: nonce, co, app, by, verifier: seal(verifier), at: iso() }, "Replace");
     const id = process.env[APPS[app].id], ru = redirectUri(co, app);
     const q = o => new URLSearchParams(o).toString();
-    if (app === "meta") return `https://www.facebook.com/${GV()}/dialog/oauth?` + q({ client_id: id, redirect_uri: ru, state: nonce, response_type: "code", scope: "pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish,business_management" });
+    // Apps set up with "Facebook Login for Business" use a configuration (META_CONFIG_ID) instead of a scope list.
+    if (app === "meta") return `https://www.facebook.com/${GV()}/dialog/oauth?` + q({ client_id: id, redirect_uri: ru, state: nonce, response_type: "code",
+      ...(process.env.META_CONFIG_ID ? { config_id: process.env.META_CONFIG_ID } : { scope: "pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish,business_management" }) });
     if (app === "linkedin") return "https://www.linkedin.com/oauth/v2/authorization?" + q({ response_type: "code", client_id: id, redirect_uri: ru, state: nonce, scope: "w_organization_social rw_organization_admin" });
     if (app === "x") return "https://x.com/i/oauth2/authorize?" + q({ response_type: "code", client_id: id, redirect_uri: ru, state: nonce, scope: "tweet.read tweet.write users.read media.write offline.access", code_challenge: crypto.createHash("sha256").update(verifier).digest("base64url"), code_challenge_method: "S256" });
     return "https://accounts.google.com/o/oauth2/v2/auth?" + q({ client_id: id, redirect_uri: ru, response_type: "code", scope: "https://www.googleapis.com/auth/business.manage", access_type: "offline", prompt: "consent", state: nonce });

@@ -11,10 +11,11 @@
 const path = require("path");
 const { TableClient } = require(require.resolve("@azure/data-tables", { paths: [path.join(__dirname, "../../bifold-tools-api")] }));
 const makeEngine = require("../../bifold-tools-api/src/agent-engine.js");
+const makeRadar = require("../../bifold-tools-api/src/radar.js");
 
 const env = process.env;
 const DRY = env.DRY_RUN === "1";
-const ONLY = String(env.AGENTS_ONLY || "").split(",").map(s => s.trim().toLowerCase()).filter(s => /^a[1-4]$/.test(s));
+const ONLY = String(env.AGENTS_ONLY || "").split(",").map(s => s.trim().toLowerCase()).filter(s => /^a[1-5]$/.test(s));
 const SITE = "https://yellow-dune-0607b0710.4.azurestaticapps.net";
 const COS = {
   bifold: { color: "#1E5A8C", name: "Bifold Tools", sender: env.MAIL_SENDER, url: env.AGENTS_URL || SITE + "/agents/" },
@@ -67,6 +68,25 @@ async function main() {
     const r = await engine.runCompany(co, { dry: DRY, only: ONLY });
     console.log(`${co}: ${r.created.length} new, ${r.resolved.length} closed automatically, ${r.drafted} drafted by Claude.`);
     results.push(r);
+  }
+  // Trend Radar (A5): vendor news read once for both companies, then scored and drafted per company.
+  const radar = makeRadar({ table: tableFor, log: m => console.log(m) });
+  const radarCos = results.filter(r => r.settings.enabled.a5 && (!ONLY.length || ONLY.includes("a5")));
+  if (radarCos.length) {
+    let feed = null;
+    try {
+      const S = await Promise.all(radarCos.map(r => radar.settings(r.co)));
+      const vendors = [...new Set(S.flatMap(s => Object.keys(s.vendors).filter(k => s.vendors[k])))];
+      feed = await radar.fetchAll(vendors, { news: S.some(s => s.news) });
+      console.log(`Trend Radar: ${feed.items.length} news items from the last two weeks across ${vendors.length} vendors.`);
+    } catch (e) { console.log(`::warning::Trend Radar couldn't read the vendor news: ${e.message}`); }
+    if (feed) for (const r of radarCos) {
+      try {
+        const rr = await radar.run(r.co, { dry: DRY, items: feed.items });
+        console.log(`${r.co} Trend Radar: ${rr.fresh} new to score, ${rr.scored} scored, ${rr.drafted} campaign draft(s).`);
+        r.created.push(...rr.created);
+      } catch (e) { console.log(`::warning::Trend Radar (${r.co}) failed: ${e.message}`); }
+    }
   }
   if (DRY || env.NO_DIGEST === "1") return;
   const mailOk = ["GRAPH_TENANT_ID", "GRAPH_CLIENT_ID", "GRAPH_CLIENT_SECRET"].every(k => env[k]);

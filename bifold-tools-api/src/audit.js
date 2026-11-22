@@ -131,6 +131,11 @@ module.exports = function makeAudit(H) {
       if (b === "media") return [A, method === "DELETE" ? "Deleted image" : "Uploaded image", name, ""];
       if (b === "settings") return [A, "Changed campaign settings", "", ""];
       if (b === "ai") return [A, "Drafted with Claude", name, ""];
+      if (b === "radar") {
+        if (c === "settings") return [A, "Changed the Trend Radar settings", "", det];
+        if (e === "draft") return [A, out && out.existing ? "Opened the existing Trend Radar draft" : "Drafted a campaign from Trend Radar", name, out && out.id ? out.id : ""];
+        if (e === "dismiss") return [A, "Dismissed a Trend Radar item", name, ""];
+      }
     }
     if (a === "pcr") {
       const A = "Completion Reports";

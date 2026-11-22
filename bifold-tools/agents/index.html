@@ -34,7 +34,7 @@ header.top .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .card.closed{opacity:.78}.card.closed::before{background:var(--line)}
 .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
 .ag{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:2px 7px;background:var(--accent-soft);color:var(--accent)}
-.ag.a2{background:var(--good-soft);color:var(--good)}.ag.a3{background:var(--bad-soft);color:var(--bad)}.ag.a4{background:var(--warn-soft);color:var(--warn)}
+.ag.a2{background:var(--good-soft);color:var(--good)}.ag.a3{background:var(--bad-soft);color:var(--bad)}.ag.a4{background:var(--warn-soft);color:var(--warn)}.ag.a5{background:var(--accent-soft);color:var(--accent)}
 .sev{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
 .sev.high{color:var(--bad)}.sev.medium{color:var(--warn)}
 .card h3{margin:6px 0 4px;font-size:16px;line-height:1.35}
@@ -97,7 +97,7 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
   <header class="top">
     <div>
       <h1><span class="tag">Bifold Tools</span>Agent Inbox</h1>
-      <p class="sub">Every morning the agents check renewals, quiet deals, quotation margins and unpaid invoices, and leave drafts and alerts here. Nothing reaches a customer until you send it.</p>
+      <p class="sub">Every morning the agents check renewals, quiet deals, quotation margins, unpaid invoices and your vendors' news, and leave drafts and alerts here. Nothing reaches a customer until you send it.</p>
     </div>
     <div class="acts">
       <span class="lastrun" id="lastRun"></span>
@@ -122,6 +122,7 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
       <button type="button" data-v="a2" aria-pressed="false">Follow-ups<em id="c_a2"></em></button>
       <button type="button" data-v="a3" aria-pressed="false">Margin<em id="c_a3"></em></button>
       <button type="button" data-v="a4" aria-pressed="false">Collections<em id="c_a4"></em></button>
+      <button type="button" data-v="a5" aria-pressed="false">Trend radar<em id="c_a5"></em></button>
     </div>
     <select id="stF" aria-label="Status">
       <option value="open">Open</option>
@@ -245,7 +246,7 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
 <script>
 const $=id=>document.getElementById(id);
 const AGDESC={a1:"Awarded AMCs nearing their end date, and finished projects whose warranty is ending for customers with no AMC.",a2:"Deals left quiet in Site survey, Proposal sent or Negotiation.",a3:"Open quotations under the margin floor, or with a line priced below cost.",a4:"Unpaid invoices before and after the due date, and a Monday cash outlook."};
-const AGSHORT={a1:"Renewal & warranty",a2:"Follow-up",a3:"Margin guard",a4:"Collections"};
+const AGSHORT={a1:"Renewal & warranty",a2:"Follow-up",a3:"Margin guard",a4:"Collections",a5:"Trend radar"};
 let D=null,EDIT=null,BUSY=false;
 const F={ag:"",st:"open",own:"",q:""};
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
@@ -291,7 +292,7 @@ function kpis(){
 function counts(){
   const base=D.items.filter(i=>{const a=F.ag;F.ag="";const m=matches(i);F.ag=a;return m});
   $("c_").textContent=base.length||"";
-  ["a1","a2","a3","a4"].forEach(a=>{$("c_"+a).textContent=base.filter(i=>i.agent===a).length||""});
+  ["a1","a2","a3","a4","a5"].forEach(a=>{$("c_"+a).textContent=base.filter(i=>i.agent===a).length||""});
 }
 function render(){
   kpis();counts();
@@ -319,7 +320,7 @@ function card(i){
   const a=el("div","acts2");
   if(!closed){
     if(i.draft){const b=el("button","primary","Review & send");b.type="button";b.onclick=()=>openDraft(i);a.append(b)}
-    if(i.href){const l=el("a","btn","Open record");l.href=i.href;a.append(l)}
+    if(i.href){const l=el("a","btn",i.agent==="a5"?"Open campaign draft":"Open record");l.href=i.href;a.append(l)}
     const done=el("button",null,i.draft?"Done, handled":"Done");done.type="button";done.onclick=()=>setStatus(i,{status:"done"},"Marked done");a.append(done);
     const sn=el("select");sn.setAttribute("aria-label","Snooze");[["","Snooze…"],["1","1 day"],["3","3 days"],["7","1 week"],["14","2 weeks"],["30","30 days"]].forEach(([v,t])=>{const o=el("option",null,t);o.value=v;sn.append(o)});
     sn.onchange=()=>{if(sn.value)setStatus(i,{status:"snoozed",days:Number(sn.value)},"Snoozed")};a.append(sn);
@@ -333,7 +334,7 @@ function card(i){
     s.innerHTML="";s.append(el("b",null,{sent:"Sent",done:"Done",dismissed:"Dismissed",resolved:"Closed automatically"}[i.status]||i.status));
     s.append(document.createTextNode(` · ${i.status==="sent"?"to "+i.sentTo+" · ":""}${who?"by "+who+" · ":""}${fdate(i.decidedAt)}${i.note?" · "+i.note:""}`));
     a.append(s,el("span","sp"));
-    if(i.href){const l=el("a","btn","Open record");l.href=i.href;a.append(l)}
+    if(i.href){const l=el("a","btn",i.agent==="a5"?"Open campaign draft":"Open record");l.href=i.href;a.append(l)}
     if(i.status!=="resolved"&&i.status!=="sent"){const re=el("button",null,"Reopen");re.type="button";re.onclick=()=>setStatus(i,{status:"open"},"Reopened");a.append(re)}
   }
   c.append(a);

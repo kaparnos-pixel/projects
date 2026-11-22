@@ -181,10 +181,10 @@ module.exports = function makeMk(H) {
       return o;
     });
   }
-  function campFields(b) {
+  function campFields(b, extra) {
     const audience = b.audience && typeof b.audience === "object" ? { mode: b.audience.mode === "tags" ? "tags" : "all", tags: tagList(b.audience.tags) } : { mode: "all", tags: [] };
     return { name: clean(b.name, 150) || "Untitled campaign", subject: clean(b.subject, 200), preheader: clean(b.preheader, 250), audience: JSON.stringify(audience),
-      ...packJson({ blocks: sanitizeBlocks(b.blocks), edition: clean(b.edition, 60) }) };
+      ...packJson({ blocks: sanitizeBlocks(b.blocks), edition: clean(b.edition, 60), ...(extra || {}) }) };
   }
   const newId = p => { const t = new Date(Date.now() + 4 * 3600e3).toISOString(); return `${p}-${t.slice(0, 4)}${t.slice(5, 7)}${t.slice(8, 10)}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`; };
   async function createCamp(user, b) {
@@ -196,7 +196,11 @@ module.exports = function makeMk(H) {
   async function saveCamp(user, id, b) {
     const cur = await loadCamp(user, id); writeCo(user);
     if (!["draft", "approval", "scheduled"].includes(cur.status)) fail(409, `This campaign is ${cur.status}, so its content can't be changed. Duplicate it to make a new version.`);
-    const next = { partitionKey: cur.partitionKey, rowKey: id, ...campFields(b), updatedBy: user.email, updatedAt: now() };
+    // Keep what Trend Radar recorded (the source news and Claude's subject ideas) through edits.
+    const prev = unpackJson(cur), keep = {};
+    if (prev.trend) keep.trend = prev.trend;
+    if (prev.subjectIdeas) keep.subjectIdeas = prev.subjectIdeas;
+    const next = { partitionKey: cur.partitionKey, rowKey: id, ...campFields(b, keep), updatedBy: user.email, updatedAt: now() };
     // A team member changing an approved campaign sends it back to a manager.
     if (cur.status === "scheduled" && !user.isManager) Object.assign(next, { status: "approval", requestedBy: user.email, requestedAt: now(), approvedBy: "", approvedAt: "", lastNote: "Changed after approval, so it needs approving again." });
     for (let i = 0; i < 20; i++) if (cur["data" + i] != null && next["data" + i] == null) next["data" + i] = "";
@@ -386,87 +390,59 @@ module.exports = function makeMk(H) {
       contacts: stats, tags: Object.entries(tags).map(([name, n]) => ({ name, n })).sort((a, b) => a.name.localeCompare(b.name)) };
   }
 
-  // ---------- Claude drafting ----------
-  const PROFILES = {
-    bifold: `Bifold Technologies L.L.C: an enterprise IT solutions and managed services company in Al Garhoud, Dubai, founded in 2018.
-Practice areas: enterprise networking and security (Cisco, HPE Aruba, Fortinet including FortiGate and ZTNA), unified communications (Avaya, Mitel, Microsoft Teams Direct Routing with Ribbon SBC), data centre networking, CCTV and structured cabling, Annual Maintenance Contracts with SLA-backed support and preventive maintenance, and AI readiness services (AI Readiness Assessment, AI-ready infrastructure, private LLM deployment, agentic workflow automation).
-Readers: IT directors, IT managers and procurement managers at UAE enterprises, government entities, aviation and hospitality.
-Voice: confident, expert, concise, consultative. UAE business English.`,
-    techhub: `Tech Hub Information Technology: an IT retailer and solutions provider in Al Nakheel, Ras Al Khaimah (RAK), launched in January 2026.
-Offer: retail laptops, desktops, gaming gear, printers and accessories; and B2B services for RAK businesses: office IT setup, networking and Wi-Fi, CCTV, Microsoft 365, IT support and Annual Maintenance Contracts.
-Readers: RAK SME owners and office managers, government, hospitality, schools, retail and gaming customers.
-Voice: friendly, local, helpful, clear. UAE business English.`,
-  };
-  const BLOCK_SPEC = `Blocks (JSON objects, "t" is the type):
-{"t":"hero","kicker":short label,"title":headline (max 9 words),"text":1-2 sentences,"btn":button label,"url":link}
-{"t":"heading","kicker":optional short label,"text":heading}
-{"t":"text","text":paragraphs separated by a blank line; "- " lines make bullets; **bold**; [label](url) links}
-{"t":"split","title":..,"text":..,"btn":..,"url":..,"side":"left" or "right","alt":describe the photo that should go here}
-{"t":"features","title":optional,"items":[{"title":..,"text":one sentence}] (exactly 3)}
-{"t":"stats","items":[{"v":figure,"l":label}] (2-4) ONLY with figures given in the brief}
-{"t":"quote","text":..,"by":..} ONLY if the brief gives a real quote
-{"t":"cta","title":..,"text":..,"btn":..,"url":..}
-{"t":"button","btn":..,"url":..}
-{"t":"divider"}`;
-  const RULES = `Rules:
-- Purpose is market awareness: inform and build trust, one clear call to action, not a hard sell.
-- Never invent prices, discounts, statistics, customer names, partner tiers, certifications, awards or dates. Only use facts from the company profile or the brief.
-- Greet with the merge field {{first_name|there}} where a greeting fits (e.g. "Hi {{first_name|there}},").
-- Links: use the URL from the brief; otherwise the company website. Never invent other URLs.
-- Never use the em dash character (U+2014) or en dash as punctuation. Use a comma, colon or full stop.
-- Subject lines under 60 characters, no ALL CAPS, no spammy words (free, guarantee, act now, !!!).`;
+  // ---------- Claude drafting (profiles, layout and rules live in mk-ai.js, shared with Trend Radar) ----------
+  const AI = require("./mk-ai");
   function aiPrompt(co, b) {
-    const site = S.WEBSITES[co];
-    if (b.kind === "campaign") return `You are the email marketing writer for ${S.NAMES[co]}.
-COMPANY PROFILE:
-${PROFILES[co]}
-Website: ${site}
-
-BRIEF FROM THE MARKETING TEAM:
-${clean(b.brief, 3000)}
-${b.audience ? "Audience: " + clean(b.audience, 300) : ""}
-${b.url ? "Call-to-action link: " + clean(b.url, 300) : ""}
-Length: ${b.length === "short" ? "short (hero, one text block, CTA; about 120 words)" : "standard (5 to 7 blocks, about 220 to 320 words)"}.
-${b.tone ? "Tone: " + clean(b.tone, 100) : ""}
-
-${BLOCK_SPEC}
-
-${RULES}
-
-Reply with ONLY one JSON object: {"name": internal campaign name, "subject": best subject line, "subjects": [3 alternative subject lines], "preheader": preview text under 100 characters, "edition": short label like "November 2026" or "", "blocks": [blocks]}. Leave image fields empty: staff add images.`;
-    if (b.kind === "subjects") return `You write email subject lines for ${S.NAMES[co]}.\n${PROFILES[co]}\nEmail summary:\n${clean(b.summary, 3000)}\nCurrent subject: ${clean(b.subject, 200) || "none"}\n${RULES}\nReply with ONLY JSON: {"subjects": [5 subject lines, varied styles], "preheader": one preview text under 100 characters}.`;
-    if (b.kind === "rewrite") return `You edit marketing email copy for ${S.NAMES[co]}.\n${PROFILES[co]}\nInstruction: ${clean(b.instruction, 300) || "Make it clearer and more engaging"}\nText to rewrite (keep the same light markup: blank lines between paragraphs, "- " bullets, **bold**, [label](url)):\n${clean(b.text, 4000)}\n${RULES}\nReply with ONLY JSON: {"text": rewritten text}.`;
+    if (b.kind === "campaign") return AI.campaignPrompt(co, { brief: clean(b.brief, 3000), audience: b.audience, url: b.url, length: b.length, tone: b.tone });
+    if (b.kind === "subjects") return `You write email subject lines for ${AI.NAMES[co]}.\n${AI.PROFILES[co]}\nEmail summary:\n${clean(b.summary, 3000)}\nCurrent subject: ${clean(b.subject, 200) || "none"}\n${AI.RULES}\nReply with ONLY JSON: {"subjects": [5 subject lines, varied styles], "preheader": one preview text under 100 characters}.`;
+    if (b.kind === "rewrite") return `You edit marketing email copy for ${AI.NAMES[co]}.\n${AI.PROFILES[co]}\nInstruction: ${clean(b.instruction, 300) || "Make it clearer and more engaging"}\nText to rewrite (keep the same light markup: blank lines between paragraphs, "- " bullets, **bold**, [label](url)):\n${clean(b.text, 4000)}\n${AI.RULES}\nReply with ONLY JSON: {"text": rewritten text}.`;
     return null;
   }
-  const parseJson = text => {
-    const t = String(text || "").trim();
-    try { return JSON.parse(t); } catch {}
-    const a = t.indexOf("{"), z = t.lastIndexOf("}");
-    if (a >= 0 && z > a) { try { return JSON.parse(t.slice(a, z + 1)); } catch {} }
-    return null;
-  };
-  const noDash = v => typeof v === "string" ? v.replace(/\s*[\u2014\u2013]\s*/g, ", ") : Array.isArray(v) ? v.map(noDash) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, noDash(x)])) : v;
   async function ai(user, b) {
     const co = writeCo(user);
     if (!process.env.ANTHROPIC_API_KEY) fail(501, "Claude drafting isn't set up on the tools site yet (the ANTHROPIC_API_KEY setting is missing).");
     const prompt = aiPrompt(co, b || {});
     if (!prompt) fail(400, "Unknown drafting request.");
     if (b.kind === "campaign" && !clean(b.brief, 3000)) fail(400, "Describe what the email should be about.");
-    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 42000);
-    let r;
-    try {
-      r = await fetch((process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com") + "/v1/messages", { method: "POST", signal: ctl.signal,
-        headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-        body: JSON.stringify({ model: process.env.MK_MODEL || process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5", max_tokens: b.kind === "campaign" ? 2600 : 900, messages: [{ role: "user", content: prompt }] }) });
-    } catch { fail(504, "Claude took too long to answer. Try again, or shorten the brief."); }
-    finally { clearTimeout(timer); }
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) fail(502, "Claude couldn't draft this right now (" + ((j.error && (j.error.message || j.error.type)) || r.status) + ").");
-    const out = parseJson((j.content || []).filter(c => c.type === "text").map(c => c.text).join(""));
-    if (!out || typeof out !== "object") fail(502, "Claude's draft couldn't be read. Try again.");
+    let out;
+    try { out = await AI.claudeJson(prompt, { maxTokens: b.kind === "campaign" ? 2600 : 900 }); }
+    catch (e) { fail(e.status || 502, e.message); }
     if (out.blocks) out.blocks = sanitizeBlocks(out.blocks);
     if (user.aud) user.aud.name = b.kind === "campaign" ? clean(b.brief, 80) : b.kind;
-    return noDash(out);
+    return out;
+  }
+
+  // ---------- Trend Radar (src/radar.js): vendor news scored by Claude, campaigns drafted from it ----------
+  let radarMod;
+  const RD = () => radarMod || (radarMod = require("./radar")({ table }));
+  async function radarRoute(method, seg, user, body) {
+    const [, id, itemId, act] = seg;
+    const co = user.co === "all" ? user.homeCo : user.co;
+    if (!id && method === "GET") return { ...(await RD().list(co)), isManager: user.isManager, ai: !!process.env.ANTHROPIC_API_KEY };
+    if (id === "settings" && method === "PUT") {
+      if (!user.isManager) fail(403, "Only managers can change the Trend Radar settings.");
+      writeCo(user);
+      const owner = clean(body.owner, 150).toLowerCase();
+      if (owner && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(owner)) fail(400, "Enter a valid email address for who gets the trend drafts, or leave it empty for the managers.");
+      if (owner && !owner.endsWith("@" + (co === "techhub" ? "techhubrak.ae" : "bifoldtech.com"))) fail(400, "The person who gets the trend drafts must be in your company.");
+      const s = await RD().saveSettings(co, { ...body, owner }, user.email);
+      if (user.aud) user.aud.detail = `${Object.values(s.vendors).filter(Boolean).length} vendors, score ${s.minScore}+, ${s.maxDrafts} drafts a day`;
+      return s;
+    }
+    if (id === "items" && itemId && method === "POST") {
+      writeCo(user);
+      const row = await RD().item(co, clean(itemId, 40));
+      if (!row) fail(404, "This news item is no longer on the radar.");
+      if (user.aud) user.aud.name = row.title;
+      if (act === "dismiss") { await RD().dismiss(co, row.rowKey, user.email); return { ok: true }; }
+      if (act === "draft") {
+        if (row.campaignId) { const c = await getOrNull(await table("mkcampaigns"), co, row.campaignId); if (c) return { id: row.campaignId, existing: true }; }
+        if (!process.env.ANTHROPIC_API_KEY) fail(501, "Claude drafting isn't set up on the tools site yet (the ANTHROPIC_API_KEY setting is missing).");
+        try { return await RD().draftCampaign(co, row, user.email, { timeoutMs: 34000, articleMs: 6000 }); }
+        catch (e) { fail(e.status || 502, e.message); }
+      }
+    }
+    fail(404, "Unknown request.");
   }
 
   // ---------- routes (signed in, section "campaigns") ----------
@@ -509,6 +485,7 @@ Reply with ONLY one JSON object: {"name": internal campaign name, "subject": bes
     }
     if (a === "settings" && method === "PUT") return saveSettings(user, body);
     if (a === "ai" && method === "POST") return ai(user, body);
+    if (a === "radar") return radarRoute(method, seg, user, body);
     fail(404, "Unknown request.");
   }
 

@@ -1,0 +1,26 @@
+name: Trend Radar first scan
+
+# One-off: runs only the Trend Radar agent once after it is deployed, without digest emails.
+on:
+  push:
+    paths:
+      - .github/workflows/radar-first-scan.yml
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --omit=dev --prefix bifold-tools-api
+      - name: Trend Radar
+        env:
+          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION || secrets.BUSINESSTOOLSSTORE }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          AGENTS_ONLY: a5
+          NO_DIGEST: "1"
+        run: node .github/scripts/agents-run.cjs

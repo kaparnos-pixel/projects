@@ -78,6 +78,7 @@
     setupNote(view);
     if (view === "edit" && id) return openEditor(id);
     if (view === "report" && id) return openReport(id);
+    if (view === "radar") return showRadar();
     if (view === "contacts") return showContacts();
     if (view === "media") return showMedia();
     if (view === "settings") return showSettings();
@@ -213,7 +214,10 @@
     $("eName").value = ED.c.name; $("eSubject").value = ED.c.subject; $("ePre").value = ED.c.preheader; $("eEd").value = ED.c.edition;
     $("eSubLen").textContent = ED.c.subject.length;
     const ideas = window.__mkIdeas; window.__mkIdeas = null;
-    showIdeas(ideas ? { subjects: ideas } : null);
+    showIdeas(ideas ? { subjects: ideas } : (c.subjectIdeas || []).length ? { subjects: c.subjectIdeas } : null);
+    const tr = c.trend;
+    $("eTrend").hidden = !tr;
+    if (tr) $("eTrend").innerHTML = `<div><b>Drafted by Trend Radar</b> from ${esc(tr.vendorName)} news: <a href="${esc(tr.link)}" target="_blank" rel="noopener">${esc(tr.title)}</a>${tr.score >= 0 ? ` (relevance ${esc(tr.score)}/10)` : ""}. Check every fact against the source and add images before scheduling.</div>`;
     drawEdStatus(); drawAudience(); drawBlocks(); preview();
     $("eSaved").textContent = "Saved";
     const ro = BOOT.readOnly; ["eTpl", "eTest", "eSched"].forEach(k => { $(k).disabled = ro; });
@@ -539,6 +543,85 @@
     const del = v.querySelector("[data-delc]"); if (del) del.onclick = async () => { if (!confirm(`Delete "${c.name}"? Its report goes too.`)) return; try { await api("DELETE", "campaigns/" + id); location.hash = "#campaigns"; } catch (e) { toast(e.message, true); } };
     if (c.status === "sending") leaving = setInterval(() => { if (!document.hidden && location.hash === "#report/" + id) openReport(id); }, 30000);
   }
+
+  // ---------- Trend Radar ----------
+  let RAD = null, rShow = "top";
+  async function showRadar() {
+    $("v-radar").hidden = false;
+    $("pageSub").textContent = "Vendor news from your partners, scored by Claude for your customers every morning. The best items become campaign drafts for you to review.";
+    headActs("");
+    $("rList").innerHTML = `<div class="empty">Loading the radar…</div>`;
+    try { RAD = await api("GET", "radar"); } catch (e) { $("rList").innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    const vs = [...new Set(RAD.items.map(i => i.vendor))];
+    $("rVendor").innerHTML = `<option value="">All vendors</option>` + RAD.vendors.filter(v => vs.includes(v.key)).map(v => `<option value="${esc(v.key)}">${esc(v.name)}</option>`).join("");
+    drawRadarHead(); drawRadar();
+  }
+  function drawRadarHead() {
+    const L = RAD.lastRun, S = RAD.settings, on = RAD.vendors.filter(v => S.vendors[v.key]);
+    const when = L ? `Last scan <b>${esc(fdt(L.at))}</b>: ${num(L.fetched)} news items read, ${num(L.fresh)} new, <b>${num(L.drafted)}</b> campaign draft${L.drafted === 1 ? "" : "s"}.` : `<b>No scan yet.</b> The radar runs with the morning agents, once a day.`;
+    $("rHead").innerHTML = `<div class="rh-t">${when}<br>Watching ${on.length} vendors (${on.filter(v => v.own).length} partners, ${on.filter(v => !v.own).length} for cross-selling). Drafts from score <b>${S.minScore}</b>, up to <b>${S.maxDrafts}</b> a morning, for ${esc(S.sectors.join(", "))}.${L && L.errors && L.errors.length ? `<br><span class="neg">${esc(L.errors[0])}</span>` : ""}${RAD.ai ? "" : `<br><span class="neg">Claude isn't connected on the tools site, so "Draft campaign" is unavailable here.</span>`}</div>
+      <div class="rh-a">${RAD.isManager && !BOOT.readOnly ? `<button type="button" id="rSet">Radar settings</button>` : ""}</div>`;
+    if ($("rSet")) $("rSet").onclick = openRadarSettings;
+  }
+  function drawRadar() {
+    const q = $("rQ").value.trim().toLowerCase(), v = $("rVendor").value, min = RAD.settings.minScore;
+    const list = RAD.items.filter(i => (!v || i.vendor === v) && (!q || (i.title + " " + i.summary + " " + i.vendorName).toLowerCase().includes(q)) &&
+      (rShow === "all" ? i.status !== "dismissed" : rShow === "drafted" ? !!i.campaignId : rShow === "dismissed" ? i.status === "dismissed" : i.status !== "dismissed" && (i.score >= Math.max(5, min - 2) || i.campaignId)));
+    $("rCnt").textContent = `${num(list.length)} item${list.length === 1 ? "" : "s"}`;
+    if (!list.length) {
+      $("rList").innerHTML = `<div class="panel empty">${!RAD.items.length ? "<b>Nothing on the radar yet.</b><br>After the next morning scan, vendor news appears here with a score and a campaign idea." : rShow === "top" ? `Nothing scored ${Math.max(5, min - 2)} or more in the last 30 days. Look under <b>All news</b>.` : "Nothing to show."}</div>`;
+      return;
+    }
+    $("rList").innerHTML = list.map(i => {
+      const cls = i.score < 0 ? "" : i.score >= 8 ? "hi" : i.score >= min ? "ok" : "";
+      const vend = RAD.vendors.find(x => x.key === i.vendor) || {};
+      const acts = i.campaignId ? `<a class="btn primary" href="#edit/${esc(i.campaignId)}">Open draft</a>`
+        : i.status === "dismissed" || BOOT.readOnly ? "" : `<button type="button" class="primary" data-draft="${esc(i.id)}"${RAD.ai ? "" : " disabled"}>✦ Draft campaign</button><button type="button" data-dis="${esc(i.id)}">Not relevant</button>`;
+      return `<article class="rcard${i.status === "dismissed" ? " done" : ""}"><div class="rscore ${cls}" title="Relevance scored by Claude">${i.score < 0 ? "–" : i.score}<small>/10</small></div>
+        <div><div class="rmeta"><span class="vchip">${esc(i.vendorName)}</span><span class="ochip">${vend.own ? "Our partner" : "Cross-sell"}</span><span>${esc(fd(i.date))}</span><span>${i.official ? "Official news" : esc(i.source || "News coverage")}</span>${i.campaignId ? `<span class="stchip sent">Draft ready${i.draftedBy && i.draftedBy !== "Trend Radar" ? " · " + esc(firstName(i.draftedBy)) : ""}</span>` : ""}</div>
+        <h3><a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.title)}</a></h3>
+        ${i.why ? `<p class="rwhy">${esc(i.why)}</p>` : i.score < 0 ? `<p class="rwhy">Not scored yet. Claude scores it on the next morning scan.</p>` : ""}
+        ${i.angle ? `<p class="ridea"><b>Campaign idea:</b> ${esc(i.angle)}</p>` : ""}
+        ${i.sectors.length ? `<div>${i.sectors.map(s => `<span class="tg">${esc(s)}</span>`).join("")}</div>` : ""}</div>
+        <div class="racts">${acts}</div></article>`;
+    }).join("");
+  }
+  segBind($("rShow"), v => { rShow = v; drawRadar(); });
+  $("rVendor").onchange = () => drawRadar();
+  $("rQ").oninput = () => drawRadar();
+  $("rList").addEventListener("click", async e => {
+    const d = e.target.closest("[data-draft]"), x = e.target.closest("[data-dis]");
+    if (d) {
+      busy(d, true, "Claude is writing… about 30 seconds");
+      try { const r = await api("POST", `radar/items/${d.dataset.draft}/draft`); toast(r.existing ? "A draft already exists. Opening it." : "Campaign drafted. Review it before scheduling."); location.hash = "#edit/" + r.id; }
+      catch (er) { toast(er.message, true); busy(d, false); }
+    }
+    if (x) {
+      try { await api("POST", `radar/items/${x.dataset.dis}/dismiss`); const it = RAD.items.find(i => i.id === x.dataset.dis); if (it) it.status = "dismissed"; drawRadar(); toast("Dismissed."); }
+      catch (er) { toast(er.message, true); }
+    }
+  });
+  function openRadarSettings() {
+    const S = RAD.settings;
+    const grp = (title, own) => `<div class="vgroup ${own ? "own" : ""}"><h4>${title}</h4><div class="vl">${RAD.vendors.filter(v => v.own === own).map(v => `<label title="${esc(v.source)}"><input type="checkbox" data-v="${esc(v.key)}"${S.vendors[v.key] ? " checked" : ""}> ${esc(v.name)}${v.source === "News search" ? "<span>news search</span>" : ""}</label>`).join("")}</div></div>`;
+    $("radVendors").innerHTML = grp("Our partners", true) + grp("Sister company portfolio (cross-sell)", false);
+    $("radSectors").innerHTML = RAD.sectors.map(s => `<button type="button" data-s="${esc(s)}" aria-pressed="${S.sectors.includes(s)}">${esc(s)}</button>`).join("");
+    $("radMin").innerHTML = [5, 6, 7, 8, 9, 10].map(n => `<option value="${n}"${n === S.minScore ? " selected" : ""}>${n} out of 10${n === 7 ? " (recommended)" : ""}</option>`).join("");
+    $("radMax").innerHTML = [0, 1, 2, 3, 4, 5].map(n => `<option value="${n}"${n === S.maxDrafts ? " selected" : ""}>${n === 0 ? "None (only list the news)" : n}</option>`).join("");
+    $("radOwner").value = S.owner || ""; $("radNews").checked = !!S.news; $("radErr").textContent = "";
+    $("radDlg").showModal();
+  }
+  $("radSectors").addEventListener("click", e => { const b = e.target.closest("button[data-s]"); if (b) b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true")); });
+  $("radForm").onsubmit = async e => {
+    e.preventDefault(); $("radErr").textContent = "";
+    const vendors = {}; $("radVendors").querySelectorAll("input[data-v]").forEach(c => { vendors[c.dataset.v] = c.checked; });
+    const sectors = [...$("radSectors").querySelectorAll('button[aria-pressed="true"]')].map(b => b.dataset.s);
+    if (!Object.values(vendors).some(Boolean)) { $("radErr").textContent = "Keep at least one vendor switched on."; return; }
+    if (!sectors.length) { $("radErr").textContent = "Choose at least one sector."; return; }
+    busy($("radGo"), true, "Saving…");
+    try { RAD.settings = await api("PUT", "radar/settings", { vendors, sectors, minScore: Number($("radMin").value), maxDrafts: Number($("radMax").value), owner: $("radOwner").value.trim(), news: $("radNews").checked }); $("radDlg").close(); drawRadarHead(); drawRadar(); toast("Settings saved. They apply from the next morning scan."); }
+    catch (er) { $("radErr").textContent = er.message; } finally { busy($("radGo"), false); }
+  };
 
   // ---------- contacts ----------
   let kPage = 0, kTag = "", sel = new Set();

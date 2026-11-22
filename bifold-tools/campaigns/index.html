@@ -27,6 +27,7 @@
 
   <nav class="tabs" role="tablist" aria-label="Sections" id="tabs">
     <a href="#campaigns" data-tab="campaigns">Campaigns</a>
+    <a href="#radar" data-tab="radar">Trend Radar</a>
     <a href="#contacts" data-tab="contacts">Contacts &amp; lists</a>
     <a href="#media" data-tab="media">Image library</a>
     <a href="#settings" data-tab="settings">Settings</a>
@@ -68,6 +69,7 @@
       </div>
     </div>
     <div class="enote" id="eNote" hidden></div>
+    <div id="eTrend" class="note-banner trendnote" hidden></div>
     <div class="egrid">
       <div class="ecol">
         <div class="panel">
@@ -113,6 +115,23 @@
 
   <!-- Sent / sending report -->
   <section id="v-report" class="view" hidden></section>
+
+  <!-- Trend Radar -->
+  <section id="v-radar" class="view" hidden>
+    <div class="rhead" id="rHead"></div>
+    <div class="tools">
+      <div class="seg" role="group" aria-label="Show" id="rShow">
+        <button type="button" data-v="top" aria-pressed="true">Worth a campaign</button>
+        <button type="button" data-v="all" aria-pressed="false">All news</button>
+        <button type="button" data-v="drafted" aria-pressed="false">Drafted</button>
+        <button type="button" data-v="dismissed" aria-pressed="false">Dismissed</button>
+      </div>
+      <select id="rVendor" aria-label="Vendor"></select>
+      <input id="rQ" type="search" placeholder="Search news" aria-label="Search news">
+      <span class="cnt" id="rCnt"></span>
+    </div>
+    <div id="rList" class="rlist"><div class="empty">Loading the radar…</div></div>
+  </section>
 
   <!-- Contacts -->
   <section id="v-contacts" class="view" hidden>
@@ -270,6 +289,23 @@
     </div>
     <div id="impStep3" hidden></div>
   </div>
+</dialog>
+
+<!-- Trend Radar settings -->
+<dialog id="radDlg" class="wide">
+  <form id="radForm" class="dwrap" novalidate>
+    <div class="dhead"><div><h3>Trend Radar settings</h3><p class="hint" style="margin:2px 0 0">The radar reads vendor news every morning, has Claude score it for your customers, and drafts a campaign around the best items. Nothing is sent without a manager's approval.</p></div><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <div class="vgroups" id="radVendors"></div>
+    <div><label class="lbl">Priority sectors</label><div class="tagpick" id="radSectors"></div></div>
+    <div class="fields">
+      <div><label class="lbl" for="radMin">Draft a campaign when the score is at least</label><select id="radMin"></select></div>
+      <div><label class="lbl" for="radMax">Campaign drafts per morning, at most</label><select id="radMax"></select></div>
+      <div class="full"><label class="lbl" for="radOwner">Who reviews the drafts (empty: the managers)</label><input id="radOwner" type="email" placeholder="e.g. marketing@bifoldtech.com"></div>
+    </div>
+    <label class="consent"><input type="checkbox" id="radNews"> Use news search for vendors that don't publish their own feed (HP, SonicWall, H3C, Mimosa, Sangfor, APC)</label>
+    <div class="err" id="radErr"></div>
+    <div class="foot"><span class="hint" id="radMeta"></span><div class="r2"><button type="button" data-close>Cancel</button><button type="submit" class="primary" id="radGo">Save settings</button></div></div>
+  </form>
 </dialog>
 
 <!-- Prompt (list name, template name) -->

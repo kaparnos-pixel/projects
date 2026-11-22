@@ -15,7 +15,7 @@
 // Used by .github/scripts/agents-run.cjs (daily job) and by src/agents.js (the inbox API, for settings).
 
 const CO_NAMES = { bifold: "Bifold Technologies LLC", techhub: "Tech Hub Information Technology" };
-const AGENTS = { a1: "AMC Renewal and Warranty", a2: "Pipeline Follow-up", a3: "Margin Guard", a4: "Collections and Cash" };
+const AGENTS = { a1: "AMC Renewal and Warranty", a2: "Pipeline Follow-up", a3: "Margin Guard", a4: "Collections and Cash", a5: "Trend Radar" };
 const DEFAULTS = { enabled: { a1: true, a2: true, a3: true, a4: true }, renewalDays: 90, warrantyDays: 90, followupDays: 7, surveyDays: 5,
   marginFloor: 15, financeEmail: "", monthlyDrafts: 300, digest: true, sig: {} };
 // Default email signatures, one per company; managers change them in Agent settings. Each person adds their own name,

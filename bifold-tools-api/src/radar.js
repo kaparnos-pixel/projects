@@ -146,7 +146,7 @@ module.exports = function makeRadar({ table, log = console.log, now = () => new 
   }
 
   /* ---------------- scoring ---------------- */
-  function triagePrompt(co, S, items) {
+  function triagePrompt(co, S, items, recent) {
     const own = new Set(OWN[co]);
     return `You help the marketing team of ${AI.NAMES[co]} spot vendor news that is worth an awareness email campaign to the company's customers.
 COMPANY PROFILE:
@@ -157,11 +157,12 @@ Score every news item from 0 to 10 for how good a basis it is for a campaign ema
 Score high (8 to 10): a new product, feature or solution customers can buy from us; a security threat or advisory that creates a clear, urgent need; an end-of-life or licensing change that drives an upgrade; a major technology shift (AI infrastructure, Wi-Fi 7, zero trust, ransomware recovery, hybrid work) with a clear angle for our customers and sectors.
 Score low (0 to 4): financial results, investor news, executive appointments, awards, sponsorships, events in other countries, careers and culture stories, consumer-only products, items that are not really about the vendor, anything our customers can't act on.
 Prefer vendors that are the company's own partners; the sister company's portfolio is fine for cross-selling when the story is strong.
-
+Several sources often report the same story. Set "dup": true on an item when it covers the same story as an earlier item in this list${recent.length ? " or as one of the stories we already made campaigns for" : ""}; give the duplicate the same score.
+${recent.length ? `STORIES WE ALREADY MADE CAMPAIGNS FOR RECENTLY:\n${recent.map(t => "- " + cut(t, 200)).join("\n")}\n` : ""}
 NEWS ITEMS:
 ${items.map((it, i) => `[${i}] ${VENDORS[it.vendor].name} (${own.has(it.vendor) ? "our partner" : "sister company portfolio"}${it.official ? "" : ", news coverage"}) | ${it.date ? it.date.slice(0, 10) : "date unknown"} | ${cut(it.title, 200)} | ${cut(it.summary, 280)}`).join("\n")}
 
-Reply with ONLY a JSON array covering every item: [{"i": number, "score": 0-10, "why": one short sentence on why it matters (or not) to our customers, "angle": one sentence campaign idea for our customers (empty if score under 5), "sectors": [best-fit sectors from: ${SECTOR_LIST.join(", ")}]}]. Never use the em dash.`;
+Reply with ONLY a JSON array covering every item: [{"i": number, "score": 0-10, "dup": true or false, "why": one short sentence on why it matters (or not) to our customers, "angle": one sentence campaign idea for our customers (empty if score under 5), "sectors": [best-fit sectors from: ${SECTOR_LIST.join(", ")}]}]. Never use the em dash.`;
   }
 
   // Reads the article page (official sources only) so the campaign has real detail to work from.
@@ -221,7 +222,10 @@ You may add one text link to the source: [${row.official ? `Read ${vn}'s announc
     for await (const e of t.listEntities({ queryOptions: { filter: `PartitionKey eq '${co}' and status eq 'new' and foundAt ge '${cutoff}'` } }))
       if (!fresh.some(f => f.id === e.rowKey)) fresh.push({ id: e.rowKey, vendor: e.vendor, official: !!e.official, title: e.title, link: e.link, date: e.date || null, summary: e.summary || "", source: e.source || "", foundAt: e.foundAt });
     fresh.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-    const batch = fresh.slice(0, 80);
+    const batch = fresh.slice(0, 120);
+    // Stories already turned into campaigns in the last two weeks, so the same story isn't drafted twice.
+    const recent = [];
+    for await (const e of t.listEntities({ queryOptions: { filter: `PartitionKey eq '${co}' and status eq 'drafted' and draftedAt ge '${cutoff}'`, select: ["title"] } })) recent.push(e.title);
     res.fresh = batch.length;
     if (!batch.length) { await report(co, res, dry); return res; }
 
@@ -230,7 +234,7 @@ You may add one text link to the source: [${row.official ? `Read ${vn}'s announc
       for (let i = 0; i < batch.length; i += 40) {
         const part = batch.slice(i, i + 40);
         try {
-          const out = await AI.claudeJson(triagePrompt(co, S, part), { maxTokens: 6000, timeoutMs: 150000 });
+          const out = await AI.claudeJson(triagePrompt(co, S, part, recent.concat(batch.slice(0, i).map(b => b.title))), { maxTokens: 6000, timeoutMs: 150000 });
           (Array.isArray(out) ? out : out.items || []).forEach(x => { if (part[x.i]) scores[i + x.i] = x; });
         } catch (e) { res.errors.push("Scoring: " + e.message); log(`::warning::Trend Radar (${co}) scoring failed: ${e.message}`); }
       }
@@ -241,15 +245,20 @@ You may add one text link to the source: [${row.official ? `Read ${vn}'s announc
       const score = s && Number.isFinite(Number(s.score)) ? Math.max(0, Math.min(10, Math.round(Number(s.score)))) : null;
       return { partitionKey: co, rowKey: it.id, vendor: it.vendor, official: !!it.official, title: cut(it.title, 400), link: cut(it.link, 1500), date: it.date || "", summary: cut(it.summary, 1200), source: cut(it.source, 120),
         score: score == null ? -1 : score, why: cut(tidy(s && s.why), 400), angle: cut(tidy(s && s.angle), 400), sectors: JSON.stringify((s && Array.isArray(s.sectors) ? s.sectors : []).filter(x => SECTOR_LIST.includes(x))),
-        status: score == null ? "new" : "scored", foundAt: it.foundAt || iso() };
+        dup: !!(s && s.dup === true), status: score == null ? "new" : "scored", foundAt: it.foundAt || iso() };
     });
     res.scored = rows.filter(r => r.score >= 0).length;
     if (dry) { rows.filter(r => r.score >= S.minScore).forEach(r => log(`[dry run] ${co} ${r.score}/10 ${VENDORS[r.vendor].name}: ${r.title}`)); return res; }
     for (const r of rows) await t.upsertEntity(r, "Replace");
 
-    // Draft the strongest few. Own partners win ties.
+    // Draft the strongest few: one per vendor per morning, never a repeat of a story already drafted. Own partners win ties.
     const own = new Set(OWN[co]);
-    const top = rows.filter(r => r.score >= S.minScore).sort((a, b) => b.score - a.score || (own.has(b.vendor) - own.has(a.vendor)) || String(b.date).localeCompare(String(a.date))).slice(0, S.maxDrafts);
+    const top = [], usedVendors = new Set();
+    for (const r of rows.filter(r => r.score >= S.minScore && !r.dup).sort((a, b) => b.score - a.score || (own.has(b.vendor) - own.has(a.vendor)) || String(b.date).localeCompare(String(a.date)))) {
+      if (top.length >= S.maxDrafts) break;
+      if (usedVendors.has(r.vendor)) continue;
+      usedVendors.add(r.vendor); top.push(r);
+    }
     const inbox = await table("agentinbox");
     for (const r of top) {
       try {
@@ -275,7 +284,7 @@ You may add one text link to the source: [${row.official ? `Read ${vn}'s announc
 
   /* ---------------- for the Campaigns page ---------------- */
   const itemOut = e => ({ id: e.rowKey, vendor: e.vendor, vendorName: VENDORS[e.vendor] ? VENDORS[e.vendor].name : e.vendor, official: !!e.official, title: e.title, link: e.link, date: e.date || e.foundAt,
-    summary: e.summary || "", source: e.source || "", score: e.score == null ? -1 : Number(e.score), why: e.why || "", angle: e.angle || "", sectors: json(e.sectors, []), status: e.status || "new",
+    summary: e.summary || "", source: e.source || "", dup: !!e.dup, score: e.score == null ? -1 : Number(e.score), why: e.why || "", angle: e.angle || "", sectors: json(e.sectors, []), status: e.status || "new",
     campaignId: e.campaignId || "", foundAt: e.foundAt || "", draftedBy: e.draftedBy || "" });
   async function list(co) {
     const cutoff = new Date(Date.now() - 30 * 864e5).toISOString();

@@ -85,14 +85,35 @@ ${RULES}
 ${RETURN_SHAPE}`;
 }
 
+// Claude sometimes puts real line breaks or tabs inside long JSON strings, or leaves a trailing comma.
+// Escape control characters inside strings and drop trailing commas, then try again.
+function repairJson(t) {
+  let out = "", inStr = false, esc = false;
+  for (const ch of t) {
+    if (inStr) {
+      if (esc) { out += ch; esc = false; continue; }
+      if (ch === "\\") { out += ch; esc = true; continue; }
+      if (ch === '"') { inStr = false; out += ch; continue; }
+      if (ch === "\n") { out += "\\n"; continue; }
+      if (ch === "\r") continue;
+      if (ch === "\t") { out += "\\t"; continue; }
+      out += ch;
+    } else { if (ch === '"') inStr = true; out += ch; }
+  }
+  return out.replace(/,\s*([}\]])/g, "$1");
+}
 const parseJson = text => {
-  const t = String(text || "").trim();
-  try { return JSON.parse(t); } catch {}
-  const a = t.indexOf("{"), z = t.lastIndexOf("}");
-  if (a >= 0 && z > a) { try { return JSON.parse(t.slice(a, z + 1)); } catch {} }
-  const a2 = t.indexOf("["), z2 = t.lastIndexOf("]");
-  if (a2 >= 0 && z2 > a2) { try { return JSON.parse(t.slice(a2, z2 + 1)); } catch {} }
-  return null;
+  const raw = String(text || "").trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+  const tryAll = t => {
+    try { return JSON.parse(t); } catch {}
+    const a = t.indexOf("{"), z = t.lastIndexOf("}");
+    if (a >= 0 && z > a) { try { return JSON.parse(t.slice(a, z + 1)); } catch {} }
+    const a2 = t.indexOf("["), z2 = t.lastIndexOf("]");
+    if (a2 >= 0 && z2 > a2) { try { return JSON.parse(t.slice(a2, z2 + 1)); } catch {} }
+    return null;
+  };
+  const r = tryAll(raw); if (r != null) return r;
+  return tryAll(repairJson(raw));
 };
 const noDash = v => typeof v === "string" ? v.replace(/\s*[—–]\s*/g, ", ") : Array.isArray(v) ? v.map(noDash) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, noDash(x)])) : v;
 
@@ -110,6 +131,22 @@ function sanitizeBlocks(list) {
   });
 }
 
+// One Claude call returning the raw text and why it stopped ("end_turn", "max_tokens").
+async function claudeText(prompt, { maxTokens = 2600, timeoutMs = 42000, model } = {}) {
+  if (!process.env.ANTHROPIC_API_KEY) { const e = new Error("Claude isn't connected (the ANTHROPIC_API_KEY setting is missing)."); e.status = 501; throw e; }
+  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  let r;
+  try {
+    r = await fetch((process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com") + "/v1/messages", { method: "POST", signal: ctl.signal,
+      headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({ model: model || process.env.MK_MODEL || process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }) });
+  } catch { const e = new Error("Claude took too long to answer. Try again."); e.status = 504; throw e; }
+  finally { clearTimeout(timer); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error("Claude couldn't answer right now (" + ((j.error && (j.error.message || j.error.type)) || r.status) + ")."); e.status = 502; throw e; }
+  return { text: (j.content || []).filter(c => c.type === "text").map(c => c.text).join(""), stop: j.stop_reason || "" };
+}
+
 // One Claude call. Resolves the parsed JSON, or throws an Error with .status and a readable message.
 async function claudeJson(prompt, { maxTokens = 2600, timeoutMs = 42000, model } = {}) {
   if (!process.env.ANTHROPIC_API_KEY) { const e = new Error("Claude isn't connected (the ANTHROPIC_API_KEY setting is missing)."); e.status = 501; throw e; }
@@ -124,8 +161,8 @@ async function claudeJson(prompt, { maxTokens = 2600, timeoutMs = 42000, model }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { const e = new Error("Claude couldn't answer right now (" + ((j.error && (j.error.message || j.error.type)) || r.status) + ")."); e.status = 502; throw e; }
   const out = parseJson((j.content || []).filter(c => c.type === "text").map(c => c.text).join(""));
-  if (out == null || typeof out !== "object") { const e = new Error("Claude's answer couldn't be read. Try again."); e.status = 502; throw e; }
+  if (out == null || typeof out !== "object") { const e = new Error(j.stop_reason === "max_tokens" ? "Claude's answer was too long and got cut off. Try again, or ask for a shorter version." : "Claude's answer couldn't be read. Try again."); e.status = 502; console.log("Claude answer not JSON (" + j.stop_reason + "): " + String((j.content || []).map(c => c.text || "").join("")).slice(0, 600)); throw e; }
   return noDash(out);
 }
 
-module.exports = { LAYOUTS, NAMES, WEBSITES, PARTNERS, SECTORS, PROFILES, BLOCK_SPEC, RULES, RETURN_SHAPE, BLOCKS, campaignPrompt, parseJson, noDash, sanitizeBlocks, claudeJson };
+module.exports = { LAYOUTS, NAMES, WEBSITES, PARTNERS, SECTORS, PROFILES, BLOCK_SPEC, RULES, RETURN_SHAPE, BLOCKS, campaignPrompt, parseJson, repairJson, noDash, sanitizeBlocks, claudeJson, claudeText };

@@ -549,12 +549,38 @@ House style per network (follow it):
 - google: 400 to 900 characters for a Google Business Profile update. No hashtags, no phone numbers, no links in the text (a "Learn more" button carries the link).
 - card: text for the square image: "kicker" up to 24 characters (topic or vendor), "headline" up to 65 characters (strong, specific), "sub" up to 100 characters (what to do or why it matters).
 
-Reply with ONLY one JSON object: {"title": short internal name, "card": {"kicker": "", "headline": "", "sub": ""}, "linkedin": "", "facebook": "", "instagram": "", "x": "", "google": ""}`;
-    const o = await AI.claudeJson(prompt, { maxTokens: 3000, timeoutMs: 34000 });
+Reply in exactly this format and nothing else: each section starts with its marker line, and the text follows on the next lines as plain text (no JSON, no quotes around it, no markdown).
+=== TITLE ===
+(short internal name)
+=== KICKER ===
+=== HEADLINE ===
+=== SUB ===
+=== LINKEDIN ===
+=== FACEBOOK ===
+=== INSTAGRAM ===
+=== X ===
+=== GOOGLE ===`;
+    const r = await AI.claudeText(prompt, { maxTokens: 4000, timeoutMs: 36000 });
+    const o = sections(r.text);
+    if (!o.linkedin && !o.facebook && !o.instagram && !o.x) {
+      log(`Social draft unreadable (${r.stop}): ${String(r.text).slice(0, 500)}`);
+      bad(502, r.stop === "max_tokens" ? "Claude's answer was too long and got cut off. Try again." : "Claude's answer couldn't be read. Try again.");
+    }
+    o.card = { kicker: o.kicker, headline: o.headline, sub: o.sub };
     const texts = cleanTexts({ linkedin: o.linkedin, facebook: o.facebook, instagram: o.instagram, x: o.x, google: String(o.google || "").split(/(?<=[.!?])\s+/).filter(x => !/\+?\d[\d\s-]{7,}\d/.test(x)).join(" ").replace(/\s*#\w+/g, "").trim() });
     if (texts.x && texts.x.length > 280) texts.x = texts.x.slice(0, 277).replace(/\s+\S*$/, "") + "…";
     const card = o.card || {};
     return { title: cut(noDash(o.title), 150), texts, card: { kicker: cut(noDash(card.kicker), 30), headline: cut(noDash(card.headline), 90), sub: cut(noDash(card.sub), 140) } };
+  }
+  // "=== NAME ===" sections → {name: text}. Also accepts a JSON answer, in case the model replies that way.
+  function sections(text) {
+    const t = String(text || "");
+    const o = {}; const re = /^\s*={2,}\s*([A-Z ]+?)\s*={2,}\s*$/gm; let m, last = null, from = 0;
+    while ((m = re.exec(t))) { if (last) o[last] = t.slice(from, m.index).trim(); last = m[1].trim().toLowerCase(); from = re.lastIndex; }
+    if (last) o[last] = t.slice(from).trim();
+    if (!Object.keys(o).length) { const j = AI.parseJson(t); if (j && typeof j === "object") { Object.assign(o, j); if (j.card) Object.assign(o, j.card); } }
+    for (const k of Object.keys(o)) if (typeof o[k] === "string") o[k] = o[k].replace(/^\(.*?\)$/s, "").replace(/^["']|["']$/g, "").trim();
+    return o;
   }
   async function draftNew(co, b, by) {
     if (!process.env.ANTHROPIC_API_KEY) bad(501, "Claude drafting isn't set up on the tools site yet.");

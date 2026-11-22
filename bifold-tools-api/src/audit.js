@@ -135,6 +135,18 @@ module.exports = function makeAudit(H) {
         if (c === "settings") return [A, "Changed the Trend Radar settings", "", det];
         if (e === "draft") return [A, out && out.existing ? "Opened the existing Trend Radar draft" : "Drafted a campaign from Trend Radar", name, out && out.id ? out.id : ""];
         if (e === "dismiss") return [A, "Dismissed a Trend Radar item", name, ""];
+        if (e === "social") return [A, out && out.existing ? "Opened the existing social post" : "Drafted a social post from Trend Radar", name, out && out.id ? out.id : ""];
+      }
+      if (b === "social") {
+        const S = "Social posts", acts = { submit: "Sent a social post for approval", schedule: "Scheduled a social post", approve: "Approved a social post", reject: "Returned a social post to draft", unschedule: "Moved a social post back to draft", postnow: "Posted a social post now", retry: "Retried a social post", cancel: "Cancelled a social post", card: "Made a new image card", duplicate: "Duplicated a social post" };
+        if (c === "callback") return [S, "Connected a social account", name, det];
+        if (c === "connect") return [S, "Started connecting " + (d || "a network"), "", ""];
+        if (c === "accounts") return [S, e === "pick" ? "Chose the page to post to" : "Disconnected a social account", name || d, out && out.name ? out.name : ""];
+        if (c === "settings") return [S, "Changed the social settings", "", ""];
+        if (c === "new") return [S, body.kind === "ai" ? "Drafted a social post with Claude" : "Created a social post", name, out && out.id ? out.id : ""];
+        if (d && acts[d]) return [S, acts[d], name, out && out.status ? out.status : ""];
+        if (method === "PUT") return [S, "Edited a social post", name, ""];
+        if (method === "DELETE") return [S, "Deleted a social post", c, ""];
       }
     }
     if (a === "pcr") {

@@ -28,6 +28,7 @@
   <nav class="tabs" role="tablist" aria-label="Sections" id="tabs">
     <a href="#campaigns" data-tab="campaigns">Campaigns</a>
     <a href="#radar" data-tab="radar">Trend Radar</a>
+    <a href="#social" data-tab="social">Social posts</a>
     <a href="#contacts" data-tab="contacts">Contacts &amp; lists</a>
     <a href="#media" data-tab="media">Image library</a>
     <a href="#settings" data-tab="settings">Settings</a>
@@ -136,6 +137,77 @@
       <span class="cnt" id="rCnt"></span>
     </div>
     <div id="rList" class="rlist"><div class="empty">Loading the radar…</div></div>
+  </section>
+
+  <!-- Social posts -->
+  <section id="v-social" class="view" hidden>
+    <div class="rhead" id="sHead"></div>
+    <div class="tools">
+      <div class="seg" role="group" aria-label="Show" id="sShow">
+        <button type="button" data-v="todo" aria-pressed="true">To review</button>
+        <button type="button" data-v="scheduled" aria-pressed="false">Scheduled</button>
+        <button type="button" data-v="posted" aria-pressed="false">Posted</button>
+        <button type="button" data-v="all" aria-pressed="false">All</button>
+      </div>
+      <input id="sQ" type="search" placeholder="Search posts" aria-label="Search posts">
+      <span class="cnt" id="sCnt"></span>
+    </div>
+    <div id="sList" class="slist"><div class="empty">Loading posts…</div></div>
+  </section>
+
+  <!-- Social post editor -->
+  <section id="v-post" class="view" hidden>
+    <div class="ebar">
+      <a href="#social" class="back" aria-label="Back to social posts">←</a>
+      <input id="pTitle" class="ename" aria-label="Post name" maxlength="150">
+      <span class="stchip" id="pStatus"></span>
+      <span class="saved" id="pSaved"></span>
+      <div class="eacts">
+        <button type="button" id="pDup">Duplicate</button>
+        <button type="button" id="pDel">Delete</button>
+        <button type="button" id="pReject" hidden>Return to draft</button>
+        <button type="button" id="pNow" hidden>Post now</button>
+        <button type="button" class="primary" id="pApprove" hidden>Approve</button>
+        <button type="button" class="primary" id="pSched">Schedule</button>
+      </div>
+    </div>
+    <div class="enote" id="pNote" hidden></div>
+    <div id="pTrend" class="note-banner trendnote" hidden></div>
+    <div class="egrid">
+      <div class="ecol">
+        <div class="panel">
+          <h3 class="ph">Post to</h3>
+          <div class="netpick" id="pNets"></div>
+          <label class="lbl" for="pLink" style="margin-top:12px">Link (Facebook, Google button, LinkedIn without an image)</label>
+          <input id="pLink" placeholder="https://" maxlength="500">
+        </div>
+        <div class="panel">
+          <h3 class="ph">Text <span class="hint" id="pCount"></span></h3>
+          <div class="nettabs" role="tablist" id="pTabs"></div>
+          <textarea id="pText" rows="12" aria-label="Post text"></textarea>
+          <p class="hint" id="pTip"></p>
+        </div>
+        <div class="panel">
+          <h3 class="ph">Image <span class="phacts"><button type="button" class="linkbtn" id="pPick">Choose image</button><button type="button" class="linkbtn" id="pNoImg">Remove</button></span></h3>
+          <div class="pimg" id="pImg"></div>
+          <div class="cardf">
+            <div><label class="lbl" for="cKick">Card label</label><input id="cKick" maxlength="30" placeholder="e.g. SonicWall advisory"></div>
+            <div class="full"><label class="lbl" for="cHead">Card headline</label><input id="cHead" maxlength="90"></div>
+            <div class="full"><label class="lbl" for="cSub">Card line</label><input id="cSub" maxlength="140"></div>
+          </div>
+          <div class="cardacts"><div class="seg" role="group" aria-label="Card layout" id="cLayout"></div><button type="button" id="cMake">Make card</button></div>
+          <p class="hint">The card is drawn in your company's colours with the logo. Instagram needs an image; the same image goes to every network.</p>
+        </div>
+      </div>
+      <div class="ecol pvcol">
+        <div class="panel">
+          <h3 class="ph">Preview <span class="hint">how it will look</span></h3>
+          <div class="nettabs" role="tablist" id="pvTabs"></div>
+          <div id="pPrev" class="spv"></div>
+        </div>
+        <div class="panel" id="pRes" hidden></div>
+      </div>
+    </div>
   </section>
 
   <!-- Contacts -->
@@ -310,6 +382,56 @@
     <label class="consent"><input type="checkbox" id="radNews"> Use news search for vendors that don't publish their own feed (HP, SonicWall, H3C, Mimosa, Sangfor, APC)</label>
     <div class="err" id="radErr"></div>
     <div class="foot"><span class="hint" id="radMeta"></span><div class="r2"><button type="button" data-close>Cancel</button><button type="submit" class="primary" id="radGo">Save settings</button></div></div>
+  </form>
+</dialog>
+
+<!-- New social post -->
+<dialog id="spNew" class="wide">
+  <form id="spNewForm" class="dwrap" novalidate>
+    <div class="dhead"><h3>New social post</h3><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <div class="kindseg" role="tablist" id="spMode">
+      <button type="button" data-v="ai" aria-pressed="true">✦ Write it with Claude</button>
+      <button type="button" data-v="blank" aria-pressed="false">Start blank</button>
+    </div>
+    <div id="spAi">
+      <label class="lbl" for="spBrief">What is the post about?</label>
+      <textarea id="spBrief" rows="5" placeholder="e.g. We now install Fortinet secure SD-WAN for multi-site hotels. Offer a free network review."></textarea>
+      <label class="lbl" for="spLink" style="margin-top:10px">Link (optional, otherwise your usual call-to-action link)</label>
+      <input id="spLink" placeholder="https://">
+      <p class="hint">Claude writes a version for each network in your house style, plus a branded image card. Check every fact before it goes out.</p>
+    </div>
+    <div class="err" id="spErr"></div>
+    <div class="foot"><span></span><div class="r2"><button type="button" data-close>Cancel</button><button type="submit" class="primary" id="spGo">✦ Write post</button></div></div>
+  </form>
+</dialog>
+
+<!-- Schedule a social post -->
+<dialog id="pSchedDlg">
+  <form id="pSchedForm" novalidate>
+    <div class="dhead"><h3 id="pSchedT">Schedule this post</h3><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <div class="fields"><div><label class="lbl" for="pDate">Date</label><input type="date" id="pDate"></div><div><label class="lbl" for="pTime">Time (UAE)</label><input type="time" id="pTime" step="900"></div></div>
+    <p class="hint" id="pSlotHint"></p>
+    <div class="summary" id="pSchedSum"></div>
+    <div class="err" id="pSchedErr"></div>
+    <div class="foot"><span></span><div class="r2"><button type="button" data-close>Cancel</button><button type="submit" class="primary" id="pSchedGo">Schedule</button></div></div>
+  </form>
+</dialog>
+
+<!-- Social settings and accounts -->
+<dialog id="socDlg" class="wide">
+  <form id="socForm" class="dwrap" novalidate>
+    <div class="dhead"><div><h3>Social accounts and settings</h3><p class="hint" style="margin:2px 0 0">Posts go straight to each network from here. Nothing is posted without a manager's approval.</p></div><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <div id="socAccts" class="accts"></div>
+    <div><label class="lbl">Posting times (UAE)</label><div id="socSlots" class="slots"></div><button type="button" class="linkbtn" id="socAddSlot">+ Add a time</button></div>
+    <div><label class="lbl">Post to these networks by default</label><div class="tagpick" id="socNets"></div></div>
+    <div class="fields">
+      <div class="full"><label class="lbl" for="socCta">Call-to-action link</label><input id="socCta" placeholder="https://"></div>
+      <div><label class="lbl" for="socWa">WhatsApp number (Instagram captions)</label><input id="socWa" placeholder="+971 …"></div>
+      <div><label class="lbl" for="socTags">Brand hashtags (always added)</label><input id="socTags" placeholder="#YourBrand #UAE"></div>
+      <div><label class="lbl" for="socPer">Trend Radar social posts per morning</label><select id="socPer"><option value="0">None</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>
+    </div>
+    <div class="err" id="socErr"></div>
+    <div class="foot"><span></span><div class="r2"><button type="button" data-close>Cancel</button><button type="submit" class="primary" id="socGo">Save settings</button></div></div>
   </form>
 </dialog>
 

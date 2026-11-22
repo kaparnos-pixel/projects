@@ -69,16 +69,19 @@
     const h = location.hash.replace(/^#/, "") || "campaigns";
     const [view, id] = h.split("/");
     if (ED && !(view === "edit" && id === ED.id)) { await flushSave(); ED = null; }
+    if (PO && !(view === "post" && id === PO.p.id)) { await flushPost(); PO = null; }
     clearInterval(leaving); leaving = null;
     document.querySelectorAll(".view").forEach(v => { v.hidden = true; });
-    const tab = { edit: "campaigns", report: "campaigns" }[view] || view;
+    const tab = { edit: "campaigns", report: "campaigns", post: "social" }[view] || view;
     document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === tab));
-    $("tabs").hidden = view === "edit";
-    $("pageHead").hidden = view === "edit";
+    $("tabs").hidden = view === "edit" || view === "post";
+    $("pageHead").hidden = view === "edit" || view === "post";
     setupNote(view);
     if (view === "edit" && id) return openEditor(id);
     if (view === "report" && id) return openReport(id);
     if (view === "radar") return showRadar();
+    if (view === "social") return showSocial(id, h.split("/")[2]);
+    if (view === "post" && id) return openPost(id);
     if (view === "contacts") return showContacts();
     if (view === "media") return showMedia();
     if (view === "settings") return showSettings();
@@ -584,7 +587,7 @@
   }
   function drawRadarHead() {
     const L = RAD.lastRun, S = RAD.settings, on = RAD.vendors.filter(v => S.vendors[v.key]);
-    const when = L ? `Last scan <b>${esc(fdt(L.at))}</b>: ${num(L.fetched)} news items read, ${num(L.fresh)} new, <b>${num(L.drafted)}</b> campaign draft${L.drafted === 1 ? "" : "s"}.` : `<b>No scan yet.</b> The radar runs with the morning agents, once a day.`;
+    const when = L ? `Last scan <b>${esc(fdt(L.at))}</b>: ${num(L.fetched)} news items read, ${num(L.fresh)} new, <b>${num(L.drafted)}</b> campaign draft${L.drafted === 1 ? "" : "s"}${L.social ? `, <b>${num(L.social)}</b> social post${L.social === 1 ? "" : "s"}` : ""}.` : `<b>No scan yet.</b> The radar runs with the morning agents, once a day.`;
     $("rHead").innerHTML = `<div class="rh-t">${when}<br>Watching ${on.length} vendors (${on.filter(v => v.own).length} partners, ${on.filter(v => !v.own).length} for cross-selling). Drafts from score <b>${S.minScore}</b>, up to <b>${S.maxDrafts}</b> a morning, for ${esc(S.sectors.join(", "))}.${L && L.errors && L.errors.length ? `<br><span class="neg">${esc(L.errors[0])}</span>` : ""}${RAD.ai ? "" : `<br><span class="neg">Claude isn't connected on the tools site, so "Draft campaign" is unavailable here.</span>`}</div>
       <div class="rh-a">${RAD.isManager && !BOOT.readOnly ? `<button type="button" id="rSet">Radar settings</button>` : ""}</div>`;
     if ($("rSet")) $("rSet").onclick = openRadarSettings;
@@ -601,8 +604,9 @@
     $("rList").innerHTML = list.map(i => {
       const cls = i.score < 0 ? "" : i.score >= 8 ? "hi" : i.score >= min ? "ok" : "";
       const vend = RAD.vendors.find(x => x.key === i.vendor) || {};
-      const acts = i.campaignId ? `<a class="btn primary" href="#edit/${esc(i.campaignId)}">Open draft</a>`
-        : i.status === "dismissed" || BOOT.readOnly ? "" : `<button type="button" class="primary" data-draft="${esc(i.id)}"${RAD.ai ? "" : " disabled"}>✦ Draft campaign</button><button type="button" data-dis="${esc(i.id)}">Not relevant</button>`;
+      const soc = i.socialId ? `<a class="btn" href="#post/${esc(i.socialId)}">Open social post</a>` : i.status === "dismissed" || BOOT.readOnly ? "" : `<button type="button" data-soc="${esc(i.id)}"${RAD.ai ? "" : " disabled"}>✦ Social post</button>`;
+      const acts = (i.campaignId ? `<a class="btn primary" href="#edit/${esc(i.campaignId)}">Open draft</a>`
+        : i.status === "dismissed" || BOOT.readOnly ? "" : `<button type="button" class="primary" data-draft="${esc(i.id)}"${RAD.ai ? "" : " disabled"}>✦ Draft campaign</button>`) + soc + (!i.campaignId && i.status !== "dismissed" && !BOOT.readOnly ? `<button type="button" data-dis="${esc(i.id)}">Not relevant</button>` : "");
       return `<article class="rcard${i.status === "dismissed" ? " done" : ""}"><div class="rscore ${cls}" title="Relevance scored by Claude">${i.score < 0 ? "–" : i.score}<small>/10</small></div>
         <div><div class="rmeta"><span class="vchip">${esc(i.vendorName)}</span><span class="ochip">${vend.own ? "Our partner" : "Cross-sell"}</span><span>${esc(fd(i.date))}</span><span>${i.official ? "Official news" : esc(i.source || "News coverage")}</span>${i.dup ? `<span class="ochip">Same story as another item</span>` : ""}${i.campaignId ? `<span class="stchip sent">Draft ready${i.draftedBy && i.draftedBy !== "Trend Radar" ? " · " + esc(firstName(i.draftedBy)) : ""}</span>` : ""}</div>
         <h3><a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.title)}</a></h3>
@@ -616,7 +620,12 @@
   $("rVendor").onchange = () => drawRadar();
   $("rQ").oninput = () => drawRadar();
   $("rList").addEventListener("click", async e => {
-    const d = e.target.closest("[data-draft]"), x = e.target.closest("[data-dis]");
+    const d = e.target.closest("[data-draft]"), x = e.target.closest("[data-dis]"), so = e.target.closest("[data-soc]");
+    if (so) {
+      busy(so, true, "Claude is writing… about 30 seconds");
+      try { const r = await api("POST", `radar/items/${so.dataset.soc}/social`); toast(r.existing ? "A social post already exists. Opening it." : "Social post drafted. Review it before approving."); location.hash = "#post/" + r.id; }
+      catch (er) { toast(er.message, true); busy(so, false); }
+    }
     if (d) {
       busy(d, true, "Claude is writing… about 30 seconds");
       try { const r = await api("POST", `radar/items/${d.dataset.draft}/draft`); toast(r.existing ? "A draft already exists. Opening it." : "Campaign drafted. Review it before scheduling."); location.hash = "#edit/" + r.id; }
@@ -648,6 +657,251 @@
     try { RAD.settings = await api("PUT", "radar/settings", { vendors, sectors, minScore: Number($("radMin").value), maxDrafts: Number($("radMax").value), owner: $("radOwner").value.trim(), news: $("radNews").checked }); $("radDlg").close(); drawRadarHead(); drawRadar(); toast("Settings saved. They apply from the next morning scan."); }
     catch (er) { $("radErr").textContent = er.message; } finally { busy($("radGo"), false); }
   };
+
+  // ---------- Social posts (src/social.js): drafted per network, approved by a manager, published from here ----------
+  let SOC = null, sShow = "todo", PO = null, pNet = "linkedin", pvNet = "linkedin";
+  const NETL = { linkedin: "LinkedIn", facebook: "Facebook", instagram: "Instagram", x: "X", google: "Google Business" };
+  const NETS = ["linkedin", "facebook", "instagram", "x", "google"];
+  const NETMAX = { linkedin: 3000, facebook: 5000, instagram: 2200, x: 280, google: 1500 };
+  const NETTIP = {
+    linkedin: "LinkedIn: hook, short paragraphs, • bullets, call to action, 5 to 7 hashtags. Only the first 2 to 3 lines show before \"see more\".",
+    facebook: "Facebook: short, with the link written out. 4 to 6 hashtags.",
+    instagram: "Instagram: links don't work in captions, so say \"link in bio\". 6 to 8 hashtags. The first line shows before \"more\".",
+    x: "X: 280 characters at most. Links cost extra on X's API, so leave them out.",
+    google: "Google Business: no hashtags or phone numbers (Google rejects them). The link becomes a Learn more button.",
+  };
+  const SST = { draft: "Draft", approval: "Awaiting approval", scheduled: "Scheduled", posting: "Posting", posted: "Posted", partial: "Partly posted", failed: "Failed", cancelled: "Cancelled" };
+  const schip = s => `<span class="stchip ${esc(s === "posted" ? "sent" : s === "posting" ? "sending" : s === "partial" ? "approval" : s)}">${esc(SST[s] || s)}</span>`;
+  const netIcon = n => `<span class="nicon n-${n}" title="${esc(NETL[n])}">${{ linkedin: "in", facebook: "f", instagram: "◎", x: "𝕏", google: "G" }[n]}</span>`;
+
+  async function loadSoc() { SOC = await api("GET", "social"); return SOC; }
+  async function showSocial(sub, arg) {
+    $("v-social").hidden = false;
+    $("pageSub").textContent = "Updates for LinkedIn, Facebook, Instagram, X and Google, drafted by Claude from Trend Radar or your brief, approved by a manager and posted from here.";
+    headActs(BOOT.readOnly ? "" : `<button class="primary" type="button" id="spNewBtn">+ New post</button>`);
+    if ($("spNewBtn")) $("spNewBtn").onclick = openSpNew;
+    $("sList").innerHTML = `<div class="empty">Loading posts…</div>`;
+    try { await loadSoc(); } catch (e) { $("sList").innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    drawSocHead(); drawSocList();
+    if (sub === "connected") { toast(`Connected: ${decodeURIComponent(arg || "")}.`); history.replaceState(null, "", "#social"); openSocSettings(); }
+    if (sub === "error") { toast(decodeURIComponent(arg || "The connection didn't work."), true); history.replaceState(null, "", "#social"); openSocSettings(); }
+    if (sub === "pick") { history.replaceState(null, "", "#social"); openSocSettings(); }
+    if (sub === "settings") { history.replaceState(null, "", "#social"); openSocSettings(); }
+  }
+  function drawSocHead() {
+    const C = SOC.connected;
+    const chips = NETS.map(n => `<span class="acchip ${C[n] ? (C[n].status === "error" ? "err" : "on") : ""}">${netIcon(n)}${C[n] ? esc(C[n].name || NETL[n]) : esc(NETL[n]) + " · not connected"}</span>`).join("");
+    const none = !Object.keys(C).length;
+    $("sHead").innerHTML = `<div class="rh-t"><div class="acchips">${chips}</div>
+      <div style="margin-top:8px">${none ? `<b>No accounts connected yet.</b> Drafts are ready to review now; they can be posted once a manager connects the accounts.` : `Next free posting slot: <b>${esc(fdt(SOC.next))}</b> (UAE time).`}
+      Trend Radar drafts <b>${SOC.settings.perDay}</b> social post${SOC.settings.perDay === 1 ? "" : "s"} a morning.</div></div>
+      <div class="rh-a">${SOC.isManager && !BOOT.readOnly ? `<button type="button" id="socSet">Accounts and settings</button>` : ""}</div>`;
+    if ($("socSet")) $("socSet").onclick = openSocSettings;
+  }
+  function drawSocList() {
+    const q = $("sQ").value.trim().toLowerCase();
+    const list = SOC.posts.filter(p => (sShow === "all" || (sShow === "todo" ? ["draft", "approval", "failed", "partial"].includes(p.status) : sShow === "scheduled" ? ["scheduled", "posting"].includes(p.status) : p.status === "posted")) &&
+      (!q || (p.title + " " + Object.values(p.texts).join(" ")).toLowerCase().includes(q)));
+    $("sCnt").textContent = `${num(list.length)} post${list.length === 1 ? "" : "s"}`;
+    if (!list.length) { $("sList").innerHTML = `<div class="panel empty">${SOC.posts.length ? "Nothing here." : "<b>No social posts yet.</b><br>Trend Radar drafts them every morning, or start one with <b>+ New post</b>."}</div>`; return; }
+    $("sList").innerHTML = list.map(p => {
+      const first = String(p.texts.linkedin || p.texts.facebook || Object.values(p.texts)[0] || "").split("\n").find(Boolean) || "";
+      const res = p.nets.map(n => { const r = p.results[n]; const st = r ? r.status : ""; return `<span class="nres ${esc(st)}" title="${esc(NETL[n] + (r && r.error ? ": " + r.error : st ? ": " + st : ""))}">${netIcon(n)}</span>`; }).join("");
+      const when = p.status === "posted" || p.status === "partial" ? "Posted " + fdt(p.postedAt) : p.scheduledAt ? (p.status === "draft" ? "Planned " : "") + fdt(p.scheduledAt) : "Not scheduled";
+      return `<button type="button" class="scard" data-id="${esc(p.id)}"><span class="sthumb"${p.image ? ` style="background-image:url('${esc(p.image)}')"` : ""}>${p.image ? "" : "No image"}</span>
+        <span class="sbody"><span class="st">${esc(p.title)} ${schip(p.status)}${p.source === "radar" ? `<span class="ochip">Trend Radar</span>` : ""}</span>
+        <span class="sx">${esc(first)}</span>
+        <span class="sm"><span class="nrow">${res}</span><span>${esc(when)}</span>${p.requestedBy && p.status === "approval" ? `<span>from ${esc(firstName(p.requestedBy))}</span>` : ""}</span></span></button>`;
+    }).join("");
+  }
+  segBind($("sShow"), v => { sShow = v; drawSocList(); });
+  $("sQ").oninput = () => drawSocList();
+  $("sList").addEventListener("click", e => { const c = e.target.closest(".scard"); if (c) location.hash = "#post/" + c.dataset.id; });
+
+  // new post
+  function openSpNew() { seg($("spMode"), "ai"); $("spAi").hidden = false; $("spErr").textContent = ""; $("spGo").innerHTML = "✦ Write post"; $("spNew").showModal(); $("spBrief").focus(); }
+  segBind($("spMode"), v => { $("spAi").hidden = v !== "ai"; $("spGo").innerHTML = v === "ai" ? "✦ Write post" : "Create post"; });
+  $("spNewForm").onsubmit = async e => {
+    e.preventDefault(); $("spErr").textContent = "";
+    const ai = segVal($("spMode")) === "ai";
+    if (ai && !$("spBrief").value.trim()) { $("spErr").textContent = "Describe what the post should be about."; return; }
+    busy($("spGo"), true, ai ? "Claude is writing… about 30 seconds" : "Creating…");
+    try { const p = await api("POST", "social/new", ai ? { kind: "ai", brief: $("spBrief").value, link: $("spLink").value.trim() } : { kind: "blank" }); $("spNew").close(); $("spBrief").value = ""; location.hash = "#post/" + p.id; }
+    catch (er) { $("spErr").textContent = er.message; } finally { busy($("spGo"), false); }
+  };
+
+  // settings and accounts
+  function openSocSettings() {
+    if (!SOC || !SOC.isManager) return;
+    const S = SOC.settings, C = SOC.connected;
+    $("socAccts").innerHTML = Object.entries(SOC.apps).map(([k, a]) => {
+      const conn = a.nets.filter(n => C[n]);
+      const pk = SOC.picks[k];
+      return `<div class="acct"><div class="an">${a.nets.map(netIcon).join("")}<div><b>${esc(a.label)}</b>
+        <div class="hint">${conn.length ? conn.map(n => `${esc(NETL[n])}: ${esc(C[n].name)}${C[n].status === "error" ? ` <span class="neg">needs reconnecting (${esc(C[n].error)})</span>` : ""}`).join("<br>") : a.ready ? "Not connected" : `Not set up: the ${esc(a.label)} app keys aren't in the site settings yet.`}${k === "meta" && C.facebook && !C.instagram ? `<br><span class="neg">No Instagram business account is linked to this Facebook Page.</span>` : ""}</div>
+        <div class="hint redir">Return address to register: <code>${esc(a.redirect)}</code></div>${pk ? `<div class="pick"><span class="hint">Choose the page for this company:</span>${pk.map(x => `<button type="button" data-pick="${esc(k)}" data-id="${esc(x.id)}">${esc(x.name)}${x.extra ? ` <span class="hint">${esc(x.extra)}</span>` : ""}</button>`).join("")}</div>` : ""}</div></div>
+        <div class="aa">${a.ready ? `<button type="button" data-conn="${esc(k)}">${conn.length ? "Reconnect" : "Connect"}</button>` : ""}${conn.length ? `<button type="button" data-disc="${esc(conn.join(","))}">Disconnect</button>` : ""}</div></div>`;
+    }).join("");
+    drawSlots(S.slots.map(x => ({ ...x })));
+    $("socNets").innerHTML = NETS.map(n => `<button type="button" data-n="${n}" aria-pressed="${S.nets.includes(n)}">${esc(NETL[n])}</button>`).join("");
+    $("socCta").value = S.cta || ""; $("socWa").value = S.whatsapp || ""; $("socTags").value = S.hashtags || ""; $("socPer").value = String(S.autoDraft ? S.perDay : 0); $("socErr").textContent = "";
+    if (!$("socDlg").open) $("socDlg").showModal();
+  }
+  let SLOTS = [];
+  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function drawSlots(list) {
+    if (list) SLOTS = list;
+    $("socSlots").innerHTML = SLOTS.map((s, i) => `<span class="slot"><select data-sd="${i}" aria-label="Day">${DAYS.map(d => `<option${d === s.d ? " selected" : ""}>${d}</option>`).join("")}</select><input type="time" step="900" data-st="${i}" value="${esc(s.t)}" aria-label="Time"><button type="button" class="x" data-sx="${i}" aria-label="Remove">×</button></span>`).join("");
+  }
+  $("socSlots").addEventListener("change", e => { const d = e.target.dataset.sd, t = e.target.dataset.st; if (d != null) SLOTS[d].d = e.target.value; if (t != null) SLOTS[t].t = e.target.value; });
+  $("socSlots").addEventListener("click", e => { const x = e.target.closest("[data-sx]"); if (x) { SLOTS.splice(Number(x.dataset.sx), 1); drawSlots(); } });
+  $("socAddSlot").onclick = () => { SLOTS.push({ d: "Tue", t: "09:30" }); drawSlots(); };
+  $("socNets").addEventListener("click", e => { const b = e.target.closest("button[data-n]"); if (b) b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true")); });
+  $("socAccts").addEventListener("click", async e => {
+    const c = e.target.closest("[data-conn]"), d = e.target.closest("[data-disc]"), p = e.target.closest("[data-pick]");
+    if (c) { busy(c, true, "Opening…"); try { const r = await api("POST", "social/connect/" + c.dataset.conn); location.href = r.url; } catch (er) { toast(er.message, true); busy(c, false); } }
+    if (d) { if (!confirm("Disconnect? Scheduled posts for this network will fail until it's connected again.")) return; try { for (const n of d.dataset.disc.split(",")) await api("DELETE", "social/accounts/" + n); await loadSoc(); drawSocHead(); openSocSettings(); toast("Disconnected."); } catch (er) { toast(er.message, true); } }
+    if (p) { try { const r = await api("POST", `social/accounts/${p.dataset.pick}/pick`, { id: p.dataset.id }); await loadSoc(); drawSocHead(); openSocSettings(); toast(`Connected: ${r.name}.`); } catch (er) { toast(er.message, true); } }
+  });
+  $("socForm").onsubmit = async e => {
+    e.preventDefault(); $("socErr").textContent = "";
+    const nets = [...$("socNets").querySelectorAll('button[aria-pressed="true"]')].map(b => b.dataset.n);
+    if (!SLOTS.length) { $("socErr").textContent = "Add at least one posting time."; return; }
+    busy($("socGo"), true, "Saving…");
+    try { const per = Number($("socPer").value); SOC.settings = await api("PUT", "social/settings", { slots: SLOTS, nets, cta: $("socCta").value.trim(), whatsapp: $("socWa").value.trim(), hashtags: $("socTags").value.trim(), perDay: per, autoDraft: per > 0 }); $("socDlg").close(); await loadSoc(); drawSocHead(); drawSocList(); toast("Social settings saved."); }
+    catch (er) { $("socErr").textContent = er.message; } finally { busy($("socGo"), false); }
+  };
+
+  // ---------- post editor ----------
+  async function openPost(id) {
+    $("v-post").hidden = false;
+    let p;
+    try { [p] = await Promise.all([api("GET", "social/" + id), SOC ? null : loadSoc()]); } catch (e) { toast(e.message, true); location.hash = "#social"; return; }
+    PO = { p, dirty: false, timer: null, saving: null };
+    pNet = p.nets[0] || "linkedin"; pvNet = pNet;
+    $("pTitle").value = p.title; $("pLink").value = p.link;
+    $("cKick").value = p.card.kicker || ""; $("cHead").value = p.card.headline || ""; $("cSub").value = p.card.sub || "";
+    $("cLayout").innerHTML = ["navy", "light", "split", "bold"].map(l => `<button type="button" data-v="${l}" aria-pressed="${l === (p.card.layout || "navy")}">${{ navy: "Classic", light: "Light", split: "Split", bold: "Bold" }[l]}</button>`).join("");
+    const tr = p.trend; $("pTrend").hidden = !tr;
+    if (tr) $("pTrend").innerHTML = `<div><b>Drafted by Trend Radar</b> from ${esc(tr.vendorName)} news: <a href="${esc(tr.link)}" target="_blank" rel="noopener">${esc(tr.title)}</a>. Check every fact against the source before approving.</div>`;
+    drawPost(); $("pSaved").textContent = "Saved";
+  }
+  const editable = () => PO && ["draft", "approval", "scheduled"].includes(PO.p.status) && !BOOT.readOnly;
+  function drawPost() {
+    const p = PO.p, st = p.status, mgr = BOOT.isManager, ed = editable();
+    $("pStatus").outerHTML = `<span id="pStatus">${schip(st)}</span>`;
+    $("pNets").innerHTML = NETS.map(n => { const c = SOC.connected[n]; return `<label class="netck${c ? "" : " off"}"><input type="checkbox" data-net="${n}"${p.nets.includes(n) ? " checked" : ""}${ed ? "" : " disabled"}> ${netIcon(n)} ${esc(NETL[n])}<span class="hint">${c ? esc(c.name) : "not connected"}</span></label>`; }).join("");
+    $("pImg").innerHTML = p.image ? `<img src="${esc(p.image)}" alt="Post image">` : `<div class="empty">No image yet. Make a card or choose an image.</div>`;
+    [$("pTitle"), $("pLink"), $("pText"), $("cKick"), $("cHead"), $("cSub")].forEach(x => { x.disabled = !ed; });
+    ["pPick", "pNoImg", "cMake"].forEach(k => { $(k).disabled = !ed; });
+    $("pNoImg").hidden = !p.image;
+    drawTabs(); drawPreview();
+    $("pSched").hidden = !ed || (mgr && st === "approval");
+    $("pSched").textContent = mgr ? (st === "scheduled" ? "Reschedule" : "Schedule") : st === "draft" ? "Send for approval" : "Change requested time";
+    $("pApprove").hidden = !(mgr && st === "approval" && !BOOT.readOnly);
+    $("pReject").hidden = !(mgr && st === "approval" && !BOOT.readOnly);
+    $("pNow").hidden = !(mgr && !BOOT.readOnly && ["draft", "approval", "scheduled", "failed", "partial"].includes(st));
+    $("pNow").textContent = ["failed", "partial"].includes(st) ? "Retry now" : "Post now";
+    $("pDel").hidden = BOOT.readOnly || st === "posting"; $("pDup").hidden = BOOT.readOnly;
+    const note = st === "approval" ? (mgr ? `${esc(firstName(p.requestedBy || p.createdBy))} asked to post this on ${esc(fdt(p.scheduledAt))}. Check it, then approve or return it to draft. Nothing is posted until you approve.` : "Waiting for a manager's approval. Nothing is posted until a manager approves it.")
+      : st === "scheduled" ? `Approved${p.approvedBy ? " by " + esc(firstName(p.approvedBy)) : ""}. Posts on <b>${esc(fdt(p.scheduledAt))}</b> (UAE time).${mgr ? "" : " If you change it, it goes back to a manager."}`
+      : st === "draft" && /^Returned/.test(p.lastNote) ? esc(p.lastNote) : st === "draft" && p.scheduledAt ? `Planned for ${esc(fdt(p.scheduledAt))}. Schedule it or send it for approval when it's ready.` : "";
+    $("pNote").hidden = !note; $("pNote").innerHTML = note;
+    const r = p.results, keys = Object.keys(r);
+    $("pRes").hidden = !keys.length;
+    $("pRes").innerHTML = keys.length ? `<h3 class="ph">Posting results</h3>` + keys.map(n => `<div class="resrow">${netIcon(n)}<b>${esc(NETL[n])}</b> ${r[n].status === "posted" ? `<span class="pos">Posted</span>${r[n].url ? ` · <a href="${esc(r[n].url)}" target="_blank" rel="noopener">View post</a>` : ""}${r[n].note ? `<div class="hint">${esc(r[n].note)}</div>` : ""}` : r[n].status === "pending" ? `<span class="hint">Instagram is still processing the image; it finishes on the next check.</span>` : `<span class="neg">Failed: ${esc(r[n].error || "")}</span>`}<span class="hint"> ${esc(fdt(r[n].at))}</span></div>`).join("") : "";
+  }
+  function drawTabs() {
+    const p = PO.p;
+    const tab = (n, cur) => `<button type="button" role="tab" data-n="${n}" aria-selected="${n === cur}" class="${p.nets.includes(n) ? "" : "dim"}">${netIcon(n)} ${esc(NETL[n])}</button>`;
+    $("pTabs").innerHTML = NETS.map(n => tab(n, pNet)).join("");
+    $("pvTabs").innerHTML = NETS.filter(n => p.nets.includes(n)).map(n => tab(n, pvNet)).join("") || `<span class="hint">Choose a network.</span>`;
+    $("pText").value = p.texts[pNet] || ""; $("pTip").textContent = NETTIP[pNet];
+    count();
+  }
+  function count() {
+    const t = $("pText").value, max = NETMAX[pNet];
+    const len = pNet === "x" ? t.replace(/https?:\/\/\S+/g, "x".repeat(23)).length : t.length;
+    $("pCount").innerHTML = `<span class="${len > max ? "neg" : ""}">${num(len)} / ${num(max)}</span>`;
+  }
+  $("pTabs").addEventListener("click", e => { const b = e.target.closest("button[data-n]"); if (!b) return; pNet = b.dataset.n; if (PO.p.nets.includes(pNet)) pvNet = pNet; drawTabs(); drawPreview(); });
+  $("pvTabs").addEventListener("click", e => { const b = e.target.closest("button[data-n]"); if (!b) return; pvNet = b.dataset.n; drawTabs(); drawPreview(); });
+  function pChanged() { PO.dirty = true; $("pSaved").textContent = "Unsaved changes"; clearTimeout(PO.timer); PO.timer = setTimeout(savePost, 1500); drawPreview(); }
+  $("pText").oninput = () => { PO.p.texts[pNet] = $("pText").value; count(); pChanged(); };
+  $("pTitle").oninput = () => { PO.p.title = $("pTitle").value; pChanged(); };
+  $("pLink").oninput = () => { PO.p.link = $("pLink").value.trim(); pChanged(); };
+  ["cKick", "cHead", "cSub"].forEach(k => { $(k).oninput = () => { PO.p.card = { ...PO.p.card, kicker: $("cKick").value, headline: $("cHead").value, sub: $("cSub").value }; pChanged(); }; });
+  $("pNets").addEventListener("change", e => { const n = e.target.dataset.net; if (!n) return; const s = new Set(PO.p.nets); e.target.checked ? s.add(n) : s.delete(n); PO.p.nets = NETS.filter(x => s.has(x)); if (!PO.p.nets.includes(pvNet)) pvNet = PO.p.nets[0] || pNet; drawTabs(); pChanged(); });
+  segBind($("cLayout"), v => { PO.p.card = { ...PO.p.card, layout: v }; });
+  async function savePost() {
+    if (!PO || !PO.dirty || !editable()) return;
+    if (PO.saving) { await PO.saving.catch(() => {}); if (!PO || !PO.dirty) return; }
+    const po = PO; po.dirty = false; $("pSaved").textContent = "Saving…";
+    const p = po.p;
+    po.saving = api("PUT", "social/" + p.id, { title: p.title, nets: p.nets, texts: p.texts, link: p.link, image: p.image, card: { ...p.card, layout: segVal($("cLayout")) || p.card.layout }, etag: p.etag })
+      .then(r => { po.p.etag = r.etag; if (r.status !== po.p.status) { po.p.status = r.status; if (PO === po) drawPost(); } if (PO === po) $("pSaved").textContent = po.dirty ? "Unsaved changes" : "Saved " + new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }); })
+      .catch(e => { po.dirty = true; if (PO === po) $("pSaved").textContent = "Not saved"; toast(e.message, true); throw e; })
+      .finally(() => { po.saving = null; });
+    return po.saving;
+  }
+  async function flushPost() { if (!PO) return; clearTimeout(PO.timer); try { if (PO.saving) await PO.saving; if (PO.dirty) await savePost(); } catch {} }
+  const takePost = r => { const keepNet = pNet; PO.p = r; pNet = keepNet; drawPost(); };
+  $("cMake").onclick = async () => {
+    await flushPost(); busy($("cMake"), true, "Drawing…");
+    try { takePost(await api("POST", `social/${PO.p.id}/card`, { kicker: $("cKick").value, headline: $("cHead").value, sub: $("cSub").value, layout: segVal($("cLayout")) })); toast("New card ready."); }
+    catch (e) { toast(e.message, true); } finally { busy($("cMake"), false); }
+  };
+  $("pPick").onclick = () => pickImage(u => { PO.p.image = u; drawPost(); pChanged(); });
+  $("pNoImg").onclick = () => { PO.p.image = ""; drawPost(); pChanged(); };
+  const pAct = async (act, body, msg) => { await flushPost(); try { const r = await api("POST", `social/${PO.p.id}/${act}`, body || {}); takePost(r); if (msg) toast(typeof msg === "function" ? msg(r) : msg); return r; } catch (e) { toast(e.message, true); } };
+  $("pApprove").onclick = () => { if (confirm(`Approve "${PO.p.title}"? It posts on ${fdt(Date.parse(PO.p.scheduledAt) > Date.now() ? PO.p.scheduledAt : SOC.next)} (UAE time).`)) pAct("approve", {}, r => `Approved. It posts on ${fdt(r.scheduledAt)}.`); };
+  $("pReject").onclick = () => { const reason = prompt("Why is it going back? (shown to the person who prepared it)", ""); if (reason !== null) pAct("reject", { reason }, "Returned to draft. Nothing was posted."); };
+  $("pNow").onclick = async () => {
+    const retry = ["failed", "partial"].includes(PO.p.status);
+    if (!confirm(retry ? "Try the networks that failed again now?" : `Post "${PO.p.title}" to ${PO.p.nets.map(n => NETL[n]).join(", ")} now?`)) return;
+    busy($("pNow"), true, "Posting…");
+    try { await pAct(retry ? "retry" : "postnow", {}, r => r.status === "posted" ? "Posted everywhere." : r.status === "partial" ? "Posted, but some networks failed. See the results." : r.status === "posting" ? "Posting. Some networks finish in a few minutes." : "Posting failed. See the results."); }
+    finally { busy($("pNow"), false); }
+  };
+  $("pDup").onclick = async () => { await flushPost(); try { const r = await api("POST", `social/${PO.p.id}/duplicate`); location.hash = "#post/" + r.id; } catch (e) { toast(e.message, true); } };
+  $("pDel").onclick = async () => { if (!confirm(`Delete "${PO.p.title}"?${["posted", "partial"].includes(PO.p.status) ? " It stays on the networks; this only removes it from the tools." : ""}`)) return; try { await api("DELETE", "social/" + PO.p.id); PO = null; location.hash = "#social"; } catch (e) { toast(e.message, true); } };
+  $("pSched").onclick = async () => {
+    await flushPost();
+    const p = PO.p, has = ["scheduled", "approval"].includes(p.status) || p.scheduledAt;
+    const at = new Date(has && Date.parse(p.scheduledAt) > Date.now() ? p.scheduledAt : SOC.next);
+    const d = dubaiParts(at); $("pDate").value = d.date; $("pTime").value = d.time; $("pDate").min = dubaiParts(new Date()).date;
+    $("pSlotHint").textContent = `Your posting times: ${SOC.settings.slots.map(s => s.d + " " + s.t).join(", ")}. The next free one is filled in.`;
+    $("pSchedSum").innerHTML = `<div>To: ${esc(p.nets.map(n => NETL[n]).join(", ") || "no network chosen")}</div>${p.nets.filter(n => !SOC.connected[n]).length ? `<div class="neg">Not connected yet: ${esc(p.nets.filter(n => !SOC.connected[n]).map(n => NETL[n]).join(", "))}. Those will fail unless a manager connects them first.</div>` : ""}${BOOT.isManager ? "" : `<div><b>A manager must approve this post before it goes out.</b></div>`}`;
+    $("pSchedT").textContent = BOOT.isManager ? "Schedule this post" : "Send for approval"; $("pSchedGo").textContent = BOOT.isManager ? "Schedule" : "Send for approval"; $("pSchedErr").textContent = "";
+    $("pSchedDlg").showModal();
+  };
+  $("pSchedForm").onsubmit = async e => {
+    e.preventDefault(); $("pSchedErr").textContent = "";
+    if (!$("pDate").value || !$("pTime").value) { $("pSchedErr").textContent = "Pick a date and time."; return; }
+    const at = new Date(`${$("pDate").value}T${$("pTime").value}:00+04:00`).toISOString();
+    busy($("pSchedGo"), true, "Saving…");
+    try { await flushPost(); const r = await api("POST", `social/${PO.p.id}/schedule`, { at }); takePost(r); $("pSchedDlg").close(); toast(r.status === "approval" ? "Sent to a manager for approval." : `Scheduled for ${fdt(r.scheduledAt)} (UAE time).`); }
+    catch (er) { $("pSchedErr").textContent = er.message; } finally { busy($("pSchedGo"), false); }
+  };
+
+  // previews: close to how each network shows a post
+  function drawPreview() {
+    if (!PO) return;
+    const p = PO.p, n = pvNet;
+    if (!p.nets.includes(n)) { $("pPrev").innerHTML = `<div class="empty">Choose at least one network.</div>`; return; }
+    const acc = SOC.connected[n], name = (acc && acc.name) || BOOT.brand.name, logo = `/email/${BOOT.co}.png`;
+    const raw = String(p.texts[n] || ""), cut = { linkedin: 210, instagram: 125, facebook: 480 }[n];
+    const fmt = s => esc(s).replace(/(#\w+)/g, '<span class="hl">$1</span>').replace(/(https?:\/\/[^\s<]+)/g, '<span class="hl">$1</span>').replace(/\n/g, "<br>");
+    const body = cut && raw.length > cut ? `${fmt(raw.slice(0, cut))}<span class="more">… see more</span><details><summary>Show full text</summary>${fmt(raw.slice(cut))}</details>` : fmt(raw);
+    const img = p.image ? `<img class="pi" src="${esc(p.image)}" alt="">` : n === "instagram" ? `<div class="pi empty">Instagram needs an image</div>` : "";
+    const head = sub => `<div class="ph2"><img src="${esc(logo)}" alt=""><div><b>${esc(name)}</b><span>${sub}</span></div></div>`;
+    let h;
+    if (n === "instagram") h = `<div class="mock ig">${head("")}${img}<div class="ig-acts">♡ 💬 ↗</div><div class="pt"><b>${esc((acc && acc.name || "").replace(/^@/, "") || "yourbrand")}</b> ${body}</div></div>`;
+    else if (n === "x") h = `<div class="mock x"><div class="xr"><img src="${esc(logo)}" alt=""><div><div><b>${esc(BOOT.brand.name)}</b> <span class="hint">${esc((acc && acc.name) || "@handle")} · now</span></div><div class="pt">${fmt(raw)}</div>${img}</div></div></div>`;
+    else if (n === "google") h = `<div class="mock gb">${img}<div class="pt">${fmt(raw)}</div>${p.link ? `<div class="gbtn">Learn more</div>` : ""}<div class="hint">${esc(name)} · Google Business Profile update</div></div>`;
+    else h = `<div class="mock ${n}">${head(n === "linkedin" ? "Company page · now" : "Just now · 🌐")}<div class="pt">${body}</div>${img}<div class="li-acts">${n === "linkedin" ? "Like · Comment · Repost · Send" : "Like · Comment · Share"}</div></div>`;
+    $("pPrev").innerHTML = h;
+  }
 
   // ---------- contacts ----------
   let kPage = 0, kTag = "", sel = new Set();

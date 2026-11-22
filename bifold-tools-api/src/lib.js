@@ -922,6 +922,7 @@ function shouldRecord(method, seg, status, user, body) {
   if (a === "inv" && method === "GET") return status === 403;
   if (a === "pc" && method === "GET") return status === 403 || (b === "entries" && seg[3] === "files" && seg[4] === "download" && status < 400);
   if (a === "mk" && (b === "audience" || b === "render.js")) return false;
+  if (a === "mk" && b === "social" && c === "callback") return true; // connecting a social account is a change made by a page load
   if (a === "me") return !!(user && user.aud && user.aud.signin);
   const fileGet = method === "GET" && ((a === "pnl" && c === "files" && seg[3]) || (a === "deals" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c) || (a === "books" && b === "docs" && seg[3] === "files" && seg[4]));
   // Photos and signatures shown in the report editor are not logged one by one; downloads are.
@@ -951,6 +952,7 @@ async function dispatch(method, path, getHeader, readBody, log = console) {
   try {
     user = getUser(getHeader);
     user.aud = {};
+    Object.defineProperty(user, "query", { value: new URLSearchParams(String(getHeader("x-bt-query") || "")), enumerable: false });
     user.sections = await access().sectionsFor(user);
     if (method === "POST" || method === "PUT") { try { body = (await readBody()) || {}; } catch { fail(400, "The request could not be read."); } }
     out = await route(method, seg, user, body);

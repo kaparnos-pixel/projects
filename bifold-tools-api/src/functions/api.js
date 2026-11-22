@@ -13,7 +13,7 @@ app.http("api", {
   authLevel: "anonymous", // Static Web Apps already requires sign-in; lib.js checks the user on every call.
   route: "{*path}",
   handler: async (req, ctx) => {
-    const r = await dispatch(req.method, req.params.path, n => req.headers.get(n), readJson(req), ctx);
+    const r = await dispatch(req.method, req.params.path, n => (n === "x-bt-query" ? req.query.toString() : req.headers.get(n)), readJson(req), ctx);
     if (r.raw) return { status: r.status, body: r.raw, headers: r.headers };
     return r.body === undefined
       ? { status: r.status, headers: { "Cache-Control": "no-store" } }

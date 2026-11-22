@@ -297,31 +297,59 @@ You may add one text link to the source: [${row.official ? `Read ${vn}'s announc
         log(`Trend Radar (${co}): drafted "${c.subject}" from ${vn} (${r.score}/10).`);
       } catch (err) { res.errors.push(`Draft for "${r.title}": ${err.message}`); log(`::warning::Trend Radar (${co}) couldn't draft "${r.title}": ${err.message}`); }
     }
+    // Social posts for the strongest items (Campaigns > Social settings): drafted for every network, waiting for a manager.
+    if (top.length && process.env.ANTHROPIC_API_KEY) {
+      try {
+        const SOC = require("./social")({ table, log });
+        const SS = await SOC.settings(co);
+        if (SS.autoDraft && SS.perDay > 0) for (const r of top.slice(0, SS.perDay)) {
+          try {
+            const vn = VENDORS[r.vendor].name;
+            const p = await SOC.fromRadar(co, { ...r, vendorName: vn, own: own.has(r.vendor) }, "Trend Radar");
+            res.social = (res.social || 0) + 1;
+            const e = { partitionKey: co, rowKey: "a5s-" + r.rowKey, agent: "a5", kind: "social", refId: p.id, title: cut(tidy(`Social post: ${vn}: ${r.title}`), 250),
+              summary: cut(tidy(`A social post for ${p.nets.length} network(s) is waiting for approval, planned for ${p.scheduledAt ? new Date(Date.parse(p.scheduledAt) + 4 * 3600e3).toISOString().slice(0, 16).replace("T", " ") + " UAE time" : "the next posting slot"}.`), 1500),
+              facts: JSON.stringify([["Vendor", vn], ["Relevance", `${r.score}/10`], ["Networks", p.nets.join(", ")], ["Headline", (p.card && p.card.headline) || p.title]].map(([k, v]) => [k, cut(tidy(v), 800)])),
+              severity: "low", owner: S.owner, href: `/campaigns/#post/${p.id}`, due: "", status: "open", draft: "", createdAt: iso(), updatedAt: iso() };
+            await inbox.createEntity(e).catch(err => { if (err.statusCode !== 409) throw err; });
+            res.created.push(e);
+            log(`Trend Radar (${co}): social post drafted from ${vn}.`);
+          } catch (err) { res.errors.push(`Social post for "${r.title}": ${err.message}`); log(`::warning::Trend Radar (${co}) couldn't draft a social post: ${err.message}`); }
+        }
+      } catch (err) { res.errors.push("Social: " + err.message); }
+    }
     await report(co, res, dry);
     return res;
   }
   async function report(co, res, dry) {
     if (dry) return;
-    await (await table("mksettings")).upsertEntity({ partitionKey: "radar-run", rowKey: co, at: iso(), fetched: res.fetched, fresh: res.fresh, scored: res.scored, drafted: res.drafted, errors: JSON.stringify(res.errors.slice(0, 10)) }, "Replace");
+    await (await table("mksettings")).upsertEntity({ partitionKey: "radar-run", rowKey: co, at: iso(), fetched: res.fetched, fresh: res.fresh, scored: res.scored, drafted: res.drafted, social: res.social || 0, errors: JSON.stringify(res.errors.slice(0, 10)) }, "Replace");
   }
 
   /* ---------------- for the Campaigns page ---------------- */
   const itemOut = e => ({ id: e.rowKey, vendor: e.vendor, vendorName: VENDORS[e.vendor] ? VENDORS[e.vendor].name : e.vendor, official: !!e.official, title: e.title, link: e.link, date: e.date || e.foundAt,
     summary: e.summary || "", source: e.source || "", dup: !!e.dup, score: e.score == null ? -1 : Number(e.score), why: e.why || "", angle: e.angle || "", sectors: json(e.sectors, []), status: e.status || "new",
-    campaignId: e.campaignId || "", foundAt: e.foundAt || "", draftedBy: e.draftedBy || "" });
+    campaignId: e.campaignId || "", socialId: e.socialId || "", foundAt: e.foundAt || "", draftedBy: e.draftedBy || "" });
   async function list(co) {
     const cutoff = new Date(Date.now() - 30 * 864e5).toISOString();
     const out = [];
     for await (const e of (await table("radaritems")).listEntities({ queryOptions: { filter: `PartitionKey eq '${co}' and foundAt ge '${cutoff}'` } })) out.push(itemOut(e));
     out.sort((a, b) => b.score - a.score || String(b.date).localeCompare(String(a.date)));
     const last = await getOrNull(await table("mksettings"), "radar-run", co);
-    return { items: out, settings: await settings(co), lastRun: last ? { at: last.at, fetched: last.fetched, fresh: last.fresh, scored: last.scored, drafted: last.drafted, errors: json(last.errors, []) } : null,
+    return { items: out, settings: await settings(co), lastRun: last ? { at: last.at, fetched: last.fetched, fresh: last.fresh, scored: last.scored, drafted: last.drafted, social: last.social || 0, errors: json(last.errors, []) } : null,
       vendors: Object.entries(VENDORS).map(([k, v]) => ({ key: k, name: v.name, own: OWN[co].includes(k), source: v.feeds ? "Official feed" : "News search" })), sectors: SECTOR_LIST };
   }
   async function item(co, id) { const e = await getOrNull(await table("radaritems"), co, id); return e; }
   async function dismiss(co, id, by) { await (await table("radaritems")).updateEntity({ partitionKey: co, rowKey: id, status: "dismissed", draftedBy: by, draftedAt: iso() }, "Merge"); }
 
-  return { VENDORS, OWN, SECTOR_LIST, settings, saveSettings, fetchAll, run, draftCampaign, list, item, dismiss, itemOut };
+  // A social post for one radar item, on request from the Trend Radar list.
+  async function draftSocial(co, row, by) {
+    if (!row.excerpt && row.official) row.excerpt = await article(row.link, 5000);
+    const SOC = require("./social")({ table, log });
+    return SOC.fromRadar(co, { ...row, vendorName: VENDORS[row.vendor] ? VENDORS[row.vendor].name : row.vendor, own: OWN[co].includes(row.vendor) }, by, { status: "draft" });
+  }
+
+  return { VENDORS, OWN, SECTOR_LIST, settings, saveSettings, fetchAll, run, draftCampaign, draftSocial, list, item, dismiss, itemOut };
 };
 module.exports.VENDORS = VENDORS;
 module.exports.OWN = OWN;

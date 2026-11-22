@@ -161,6 +161,8 @@ module.exports = function makeMk(H) {
       out.push({ tool: "campaigns", severity: "high", when: (c.scheduledAt || c.requestedAt || "").slice(0, 10), href: `/campaigns/#edit/${c.id}`,
         title: `Campaign waiting for your approval: ${c.name}`, text: `From ${c.requestedBy || c.createdBy}${c.total ? `, ${c.total} recipients` : ""}` });
     }
+    for (const co of cos(user)) for (const p of await SO().approvals(co).catch(() => [])) out.push({ tool: "campaigns", severity: "high", when: (p.scheduledAt || p.createdAt || "").slice(0, 10), href: `/campaigns/#post/${p.id}`,
+      title: `Social post waiting for your approval: ${p.title}`, text: `${p.nets.length} network(s), from ${p.requestedBy || p.createdBy}` });
     return out;
   }
   async function loadCamp(user, id) {
@@ -414,6 +416,47 @@ module.exports = function makeMk(H) {
     return out;
   }
 
+  // ---------- Social posts (src/social.js) ----------
+  let socialMod;
+  const SO = () => socialMod || (socialMod = require("./social")({ table, getOrNull, publicUrl: co => S.publicUrl(co) }));
+  async function socialRoute(method, seg, user, body) {
+    const [, id, sub, x] = seg;
+    const co = user.co === "all" ? user.homeCo : user.co;
+    // Errors from social.js keep their status; a network's own error (its 401 or 400) becomes 502 so the page doesn't treat it as our sign-in.
+    const wrap = async f => { try { return await f(); } catch (e) { if (e && e.constructor && e.constructor.name === "HttpError") throw e; if (e instanceof SO().SocialError) fail(e.status, e.message); if (e.status && !e.statusCode) fail(502, e.message); throw e; } };
+    return wrap(async () => {
+      if (!id && method === "GET") return { posts: await SO().list(co), ...(await SO().accounts(co)), settings: await SO().settings(co), nets: SO().NETS, isManager: user.isManager, ai: !!process.env.ANTHROPIC_API_KEY, next: await SO().nextSlot(co) };
+      // Network sign-in comes back here as a page load, so answer with a small page that returns to the tool.
+      if (id === "callback" && sub && method === "GET") {
+        let to;
+        try { const r = await SO().callback(sub, user.query, user.email); to = r.pick ? `#social/pick/${sub}` : `#social/connected/${encodeURIComponent(r.name || sub)}`; if (user.aud) { user.aud.name = "Connected " + sub; user.aud.detail = r.name || "choose a page"; } }
+        catch (e) { to = `#social/error/${encodeURIComponent(String(e.message).slice(0, 300))}`; }
+        const dest = ("/campaigns/" + to).replace(/[<>"']/g, "");
+        const html = `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${dest}"><title>Connecting…</title><p style="font:15px Arial,sans-serif">Returning to the tools… <a href="${dest}">continue</a></p>`;
+        return { __binary: Buffer.from(html), headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } };
+      }
+      writeCo(user);
+      if (id === "connect" && sub && method === "POST") { if (!user.isManager) fail(403, "Only managers can connect social accounts."); return { url: await SO().connectUrl(co, sub, user.email) }; }
+      if (id === "accounts" && sub) {
+        if (!user.isManager) fail(403, "Only managers can change social accounts.");
+        if (x === "pick" && method === "POST") return SO().pick(co, sub, clean(body.id, 300), user.email);
+        if (method === "DELETE") { if (user.aud) user.aud.name = "Disconnected " + sub; return SO().disconnect(co, sub); }
+      }
+      if (id === "settings" && method === "PUT") { if (!user.isManager) fail(403, "Only managers can change the social settings."); return SO().saveSettings(co, body, user.email); }
+      if (id === "new" && method === "POST") {
+        const p = body.kind === "ai" ? await SO().draftNew(co, body, user.email) : await SO().create(co, { title: clean(body.title, 150) || "New post", texts: {}, link: clean(body.link, 500) || undefined }, user.email);
+        if (user.aud) user.aud.name = p.title; return p;
+      }
+      if (id && !sub && method === "GET") return SO().get(co, clean(id, 40));
+      if (id && !sub && method === "PUT") { const p = await SO().save(co, clean(id, 40), body, user); if (user.aud) user.aud.name = p.title; return p; }
+      if (id && !sub && method === "DELETE") return SO().remove(co, clean(id, 40), user);
+      if (id && sub === "card" && method === "POST") return SO().makeCard(co, clean(id, 40), body, user.email);
+      if (id && sub === "duplicate" && method === "POST") { const p = await SO().get(co, clean(id, 40)); return SO().create(co, { title: p.title.replace(/( \(copy\))?$/, " (copy)"), texts: p.texts, nets: p.nets, link: p.link, image: p.image, card: p.card, source: "manual" }, user.email); }
+      if (id && sub && method === "POST") { const p = await SO().act(co, clean(id, 40), sub, body, user); if (user.aud) { user.aud.name = p.title; user.aud.detail = sub; } return p; }
+      fail(404, "Unknown request.");
+    });
+  }
+
   // ---------- Trend Radar (src/radar.js): vendor news scored by Claude, campaigns drafted from it ----------
   let radarMod;
   const RD = () => radarMod || (radarMod = require("./radar")({ table }));
@@ -437,6 +480,12 @@ module.exports = function makeMk(H) {
       if (!row) fail(404, "This news item is no longer on the radar.");
       if (user.aud) user.aud.name = row.title;
       if (act === "dismiss") { await RD().dismiss(co, row.rowKey, user.email); return { ok: true }; }
+      if (act === "social") {
+        if (row.socialId) { try { await SO().get(co, row.socialId); return { id: row.socialId, existing: true }; } catch {} }
+        if (!process.env.ANTHROPIC_API_KEY) fail(501, "Claude drafting isn't set up on the tools site yet.");
+        try { return await RD().draftSocial(co, row, user.email); }
+        catch (e) { if (e && e.constructor && e.constructor.name === "HttpError") throw e; fail(e.status && e.status < 600 ? (e.status === 401 ? 502 : e.status) : 502, e.message); }
+      }
       if (act === "draft") {
         if (row.campaignId) { const c = await getOrNull(await table("mkcampaigns"), co, row.campaignId); if (c) return { id: row.campaignId, existing: true }; }
         if (!process.env.ANTHROPIC_API_KEY) fail(501, "Claude drafting isn't set up on the tools site yet (the ANTHROPIC_API_KEY setting is missing).");
@@ -488,6 +537,7 @@ module.exports = function makeMk(H) {
     if (a === "settings" && method === "PUT") return saveSettings(user, body);
     if (a === "ai" && method === "POST") return ai(user, body);
     if (a === "radar") return radarRoute(method, seg, user, body);
+    if (a === "social") return socialRoute(method, seg, user, body);
     fail(404, "Unknown request.");
   }
 
@@ -500,8 +550,9 @@ module.exports = function makeMk(H) {
       const want = String(process.env.MK_CRON_KEY || ""), got = String(seg[1] || "");
       if (want.length < 16) fail(404, "Not found.");
       if (got.length !== want.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want))) fail(403, "Not allowed.");
-      const r = await S.pump({ source: "tick", deadline: Date.now() + 30000 });
-      return { ok: true, ...r, at: now() };
+      const r = await S.pump({ source: "tick", deadline: Date.now() + 22000 });
+      let social = {}; try { social = await SO().pump({ deadline: Date.now() + 18000 }); } catch (e) { social = { error: e.message }; }
+      return { ok: true, ...r, social, at: now() };
     }
     if (a === "m" && method === "GET") {
       const [, co, file] = seg;

@@ -1,0 +1,20 @@
+name: Trend Radar feed check
+
+on:
+  push:
+    paths:
+      - .github/scripts/radar-feedcheck.cjs
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node .github/scripts/radar-feedcheck.cjs

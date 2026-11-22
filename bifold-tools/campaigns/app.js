@@ -152,7 +152,7 @@
       btn.onclick = async e => {
         const del = e.target.closest("[data-del]");
         if (del) { e.stopPropagation(); if (!confirm(`Delete the saved design "${t.name}"?`)) return; try { await api("DELETE", "templates/" + t.id); SAVED = SAVED.filter(x => x.id !== t.id); btn.remove(); } catch (er) { toast(er.message, true); } return; }
-        createFrom(t.kind === "blank" ? { name: "Untitled campaign", subject: "", preheader: "", blocks: [{ t: "hero", title: "Your headline here", text: "One or two sentences that say what this email is about.", btn: "Learn more", url: BOOT.settings.website }, { t: "text", text: "Hi {{first_name|there}},\n\nWrite your message here." }] } : { name: t.name, subject: t.subject, preheader: t.preheader, edition: t.edition, blocks: t.blocks }, btn);
+        createFrom(t.kind === "blank" ? { name: "Untitled campaign", subject: "", preheader: "", blocks: [{ t: "hero", title: "Your headline here", text: "One or two sentences that say what this email is about.", btn: "Learn more", url: BOOT.settings.website }, { t: "text", text: "Hi {{first_name|there}},\n\nWrite your message here." }] } : { name: t.name, subject: t.subject, preheader: t.preheader, edition: t.edition, style: t.style, blocks: t.blocks }, btn);
       };
     });
   }
@@ -210,7 +210,7 @@
     let c;
     try { c = await api("GET", "campaigns/" + id); } catch (e) { toast(e.message, true); location.hash = "#campaigns"; return; }
     if (!["draft", "approval", "scheduled"].includes(c.status)) { location.replace("#report/" + id); return; }
-    ED = { id, etag: c.etag, status: c.status, scheduledAt: c.scheduledAt, lastNote: c.lastNote || "", requestedBy: c.requestedBy || "", approvedBy: c.approvedBy || "", open: null, dirty: false, saving: null, c: { name: c.name, subject: c.subject, preheader: c.preheader, edition: c.edition || "", audience: c.audience || { mode: "all", tags: [] }, blocks: (c.blocks || []).map(b => ({ ...b, id: b.id || uid() })) } };
+    ED = { id, etag: c.etag, status: c.status, scheduledAt: c.scheduledAt, lastNote: c.lastNote || "", requestedBy: c.requestedBy || "", approvedBy: c.approvedBy || "", open: null, dirty: false, saving: null, c: { name: c.name, subject: c.subject, preheader: c.preheader, edition: c.edition || "", style: c.style || "signature", audience: c.audience || { mode: "all", tags: [] }, blocks: (c.blocks || []).map(b => ({ ...b, id: b.id || uid() })) } };
     $("eName").value = ED.c.name; $("eSubject").value = ED.c.subject; $("ePre").value = ED.c.preheader; $("eEd").value = ED.c.edition;
     $("eSubLen").textContent = ED.c.subject.length;
     const ideas = window.__mkIdeas; window.__mkIdeas = null;
@@ -218,7 +218,7 @@
     const tr = c.trend;
     $("eTrend").hidden = !tr;
     if (tr) $("eTrend").innerHTML = `<div><b>Drafted by Trend Radar</b> from ${esc(tr.vendorName)} news: <a href="${esc(tr.link)}" target="_blank" rel="noopener">${esc(tr.title)}</a>${tr.score >= 0 ? ` (relevance ${esc(tr.score)}/10)` : ""}. Check every fact against the source and add images before scheduling.</div>`;
-    drawEdStatus(); drawAudience(); drawBlocks(); preview();
+    drawEdStatus(); drawAudience(); drawStyles(); drawBlocks(); preview();
     $("eSaved").textContent = "Saved";
     const ro = BOOT.readOnly; ["eTpl", "eTest", "eSched"].forEach(k => { $(k).disabled = ro; });
   }
@@ -270,6 +270,32 @@
   $("eSubject").oninput = () => { ED.c.subject = $("eSubject").value; $("eSubLen").textContent = ED.c.subject.length; changed(); };
   $("ePre").oninput = () => { ED.c.preheader = $("ePre").value; changed(); };
   $("eEd").oninput = () => { ED.c.edition = $("eEd").value; changed(); };
+
+  // Design styles: same content, different look. Small sketches in the company's own colours.
+  function sketch(k) {
+    const T = R.THEMES[BOOT.co] || R.THEMES.bifold, w = "#fff";
+    const L = (c, h, extra) => `<i style="background:${c};height:${h}px;${extra || ""}"></i>`;
+    const page = { minimal: w, spotlight: T.soft, editorial: "#F6F7F9" }[k] || T.page;
+    const parts = {
+      signature: L(w, 6, `border-bottom:2px solid ${T.accent}`) + L(T.navy, 14) + `<i class="cols">${L(T.soft, 7)}${L(T.soft, 7)}${L(T.soft, 7)}</i>` + L(T.navy, 5),
+      editorial: L(w, 7, "border-bottom:1px solid " + T.line) + L(w, 15, `background:linear-gradient(${T.accent},${T.accent}) 4px 2px/8px 2px no-repeat, linear-gradient(${T.navy},${T.navy}) 4px 6px/78% 3px no-repeat, linear-gradient(${T.navy},${T.navy}) 4px 11px/52% 3px no-repeat, ${w}`) + L(w, 9, `background:repeating-linear-gradient(${w} 0 3px, ${T.line} 3px 4px)`) + L(T.soft, 5),
+      impact: L(w, 5) + L(T.bold, 17) + `<i class="cols c">${L(T.accent, 7, "border-radius:50%;width:7px;flex:none")}${L(T.navy, 7, "border-radius:50%;width:7px;flex:none")}${L(T.accent, 7, "border-radius:50%;width:7px;flex:none")}</i>` + L(T.navy, 5),
+      advisory: L(w, 5) + L(T.bold, 3) + L(w, 12, `border-left:3px solid ${T.accent}`) + L(T.soft, 4, `border-left:2px solid ${T.accent};margin-bottom:1px`) + L(T.soft, 4, `border-left:2px solid ${T.accent}`) + L(T.navy, 5),
+      minimal: L(w, 5, "border-bottom:1px solid " + T.line) + L(w, 9, `background:linear-gradient(${w} 2px, ${T.navy} 2px 5px, ${w} 5px)`) + L(w, 12, `background:repeating-linear-gradient(${w} 0 3px, ${T.line} 3px 4px)`) + L(w, 4, "border-top:1px solid " + T.line),
+      spotlight: L(w, 5) + L(T.navy, 14, `background:linear-gradient(90deg, ${T.navy} 4px, ${T.accent} 4px 14px, ${T.navy} 14px) top/100% 3px no-repeat, ${T.navy}`) + `<i class="cols">${L(T.navy, 8)}${L(T.navy2, 8)}${L(T.navy, 8)}</i>` + L(T.bold, 5),
+      briefing: L(w, 5) + L(T.navy2, 3) + L(T.soft, 12) + L(w, 4, `border-left:2px solid ${T.accent};box-shadow:inset 0 0 0 1px ${T.line}`) + L(w, 4, `border-left:2px solid ${T.accent2};box-shadow:inset 0 0 0 1px ${T.line}`) + L(T.navy, 5),
+    };
+    return `<span class="sk" style="background:${page}">${parts[k] || ""}</span>`;
+  }
+  function drawStyles() {
+    const cur = ED.c.style || "signature";
+    $("eStyle").innerHTML = R.STYLES.map(s => `<button type="button" role="radio" aria-checked="${s.key === cur}" data-k="${s.key}" title="${esc(s.desc)}">${sketch(s.key)}<b>${esc(s.label)}</b></button>`).join("");
+    $("eStyleDesc").textContent = (R.STYLES.find(s => s.key === cur) || {}).desc || "";
+    $("eStyle").querySelectorAll("button").forEach(b => { b.disabled = BOOT.readOnly; b.onclick = () => setStyle(b.dataset.k); });
+    $("eStyleNext").disabled = BOOT.readOnly;
+  }
+  function setStyle(k) { if (!ED || ED.c.style === k) return; ED.c.style = k; drawStyles(); changed(); }
+  $("eStyleNext").onclick = () => { const ks = R.STYLE_KEYS, i = ks.indexOf(ED.c.style || "signature"); setStyle(ks[(i + 1) % ks.length]); };
 
   // preview
   let pTimer;
@@ -386,7 +412,7 @@
   $("eTpl").onclick = async () => {
     const name = await ask("Save as a design", "Name for this design (the team can start new campaigns from it)", ED.c.name);
     if (!name) return;
-    try { await api("POST", "templates", { name, subject: ED.c.subject, preheader: ED.c.preheader, edition: ED.c.edition, blocks: ED.c.blocks }); SAVED = null; toast("Design saved. It's now in New campaign."); } catch (e) { toast(e.message, true); }
+    try { await api("POST", "templates", { name, subject: ED.c.subject, preheader: ED.c.preheader, edition: ED.c.edition, style: ED.c.style, blocks: ED.c.blocks }); SAVED = null; toast("Design saved. It's now in New campaign."); } catch (e) { toast(e.message, true); }
   };
 
   // test send

@@ -52,7 +52,18 @@ const RETURN_SHAPE = `Reply with ONLY one JSON object: {"name": internal campaig
 
 const cut = (v, n) => String(v == null ? "" : v).trim().slice(0, n);
 
-// o: {brief, audience, url, length: "short"|"standard", tone}
+// How each design style wants the content shaped, so a Trend Radar email differs in structure as well as looks.
+const LAYOUTS = {
+  signature: "Classic update: hero (kicker, title, one line, button); a text block that opens with the greeting; a heading; features with 3 items; a cta.",
+  editorial: "Short magazine article: hero with the topic as kicker, an informative headline and NO button; two text blocks that tell the story in plain prose; a heading such as \"What to know\"; features with 3 numbered points; a quote block ONLY if the source contains a real quote with a named speaker (never invent one); a cta.",
+  impact: "Launch announcement: hero with a punchy 4 to 8 word title and a button; a short text block; a stats block with 3 short figures taken ONLY from the news (if the news has no real figures, skip stats); a heading; features with 3 benefits with 1 to 3 word titles; a cta.",
+  advisory: "Customer notice: hero kicker like \"Security advisory\", \"End of support notice\" or \"Important update\" and a plain factual title; a text block explaining what happened; a heading \"Who is affected\" with a text block of bullet points; a heading \"What to do now\"; features with 3 action steps whose titles start with a verb; a cta offering a check or review.",
+  minimal: "Personal note from the account team: hero with a short title and no button; 2 or 3 text paragraphs written as \"we\" with one bullet list of 3 points; a cta with one sentence and a button. No features, stats or quote. 150 to 200 words.",
+  spotlight: "Product spotlight: hero kicker is the vendor or product name; a text block; a heading \"What it does\"; features with 3 capabilities; a heading \"Where it fits\" with a text block naming the sectors; a cta.",
+  briefing: "News briefing: hero; a text block \"The news in brief\" of 2 or 3 sentences; a heading \"Why it matters\"; a text block with one bullet per relevant sector; features with 3 recommendations; a divider; a cta.",
+};
+
+// o: {brief, audience, url, length: "short"|"standard", tone, layout}
 function campaignPrompt(co, o) {
   return `You are the email marketing writer for ${NAMES[co]}.
 COMPANY PROFILE:
@@ -65,6 +76,7 @@ ${o.audience ? "Audience: " + cut(o.audience, 300) : ""}
 ${o.url ? "Call-to-action link: " + cut(o.url, 300) : ""}
 Length: ${o.length === "short" ? "short (hero, one text block, CTA; about 120 words)" : "standard (5 to 7 blocks, about 220 to 320 words)"}.
 ${o.tone ? "Tone: " + cut(o.tone, 100) : ""}
+${o.layout ? "STRUCTURE FOR THIS EMAIL (follow it):\n" + cut(o.layout, 800) : ""}
 
 ${BLOCK_SPEC}
 
@@ -116,4 +128,4 @@ async function claudeJson(prompt, { maxTokens = 2600, timeoutMs = 42000, model }
   return noDash(out);
 }
 
-module.exports = { NAMES, WEBSITES, PARTNERS, SECTORS, PROFILES, BLOCK_SPEC, RULES, RETURN_SHAPE, BLOCKS, campaignPrompt, parseJson, noDash, sanitizeBlocks, claudeJson };
+module.exports = { LAYOUTS, NAMES, WEBSITES, PARTNERS, SECTORS, PROFILES, BLOCK_SPEC, RULES, RETURN_SHAPE, BLOCKS, campaignPrompt, parseJson, noDash, sanitizeBlocks, claudeJson };

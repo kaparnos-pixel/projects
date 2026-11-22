@@ -16,6 +16,7 @@
 
 const crypto = require("crypto");
 const AI = require("./mk-ai");
+const Render = require("./mk-render");
 
 const GN = q => "https://news.google.com/rss/search?hl=en-AE&gl=AE&ceid=AE:en&q=" + encodeURIComponent(q + " when:14d");
 const VENDORS = {
@@ -189,11 +190,32 @@ Best-fit sectors: ${json(row.sectors, []).join(", ") || "general"}
 You may add one text link to the source: [${row.official ? `Read ${vn}'s announcement` : "Read the full story"}](${row.link}). The main call to action goes to ${AI.WEBSITES[co]}.`;
   }
 
+  // Design rotation: each draft gets the style used longest ago for that company, so with three or more
+  // updates a month no two in a row look alike. Security and end of life news gets the Advisory look
+  // unless it was used in the last two drafts. Kept in mksettings PK "radar-style" RowKey <co>.
+  const ALERT = /vulnerab|\bcve-|exploit|zero.day|ransomware|breach|end of (life|support|sale)|\beol\b|end.of.support|security (advisory|update|patch)|patch now|critical (flaw|bug|update)/i;
+  async function pickStyle(co, row) {
+    const keys = Render.STYLE_KEYS;
+    const st = await getOrNull(await table("mksettings"), "radar-style", co);
+    const recent = json(st && st.recent, []).filter(k => keys.includes(k)); // newest first
+    if (ALERT.test(`${row.title} ${row.summary || ""}`) && !recent.slice(0, 2).includes("advisory")) return "advisory";
+    const never = keys.filter(k => !recent.includes(k) && k !== "advisory");
+    if (never.length) return never[Math.floor(Math.random() * never.length)];
+    return recent.filter(k => k !== "advisory").slice(-1)[0] || "signature";
+  }
+  async function rememberStyle(co, style) {
+    const t = await table("mksettings");
+    const st = await getOrNull(t, "radar-style", co);
+    const recent = [style, ...json(st && st.recent, []).filter(k => k !== style)].slice(0, 12);
+    await t.upsertEntity({ partitionKey: "radar-style", rowKey: co, recent: JSON.stringify(recent), at: iso() }, "Replace");
+  }
+
   // Builds the campaign draft for one radar item. by: who asked ("Trend Radar" for the daily run, or a person).
   async function draftCampaign(co, row, by, { timeoutMs = 60000, articleMs = 10000 } = {}) {
     if (!row.excerpt && row.official) row.excerpt = await article(row.link, articleMs);
     const sectors = json(row.sectors, []);
-    const out = await AI.claudeJson(AI.campaignPrompt(co, { brief: briefFor(co, row), audience: sectors.length ? sectors.join(", ") + " decision makers" : "", url: AI.WEBSITES[co] }), { maxTokens: 2600, timeoutMs });
+    const style = await pickStyle(co, row);
+    const out = await AI.claudeJson(AI.campaignPrompt(co, { brief: briefFor(co, row), audience: sectors.length ? sectors.join(", ") + " decision makers" : "", url: AI.WEBSITES[co], layout: AI.LAYOUTS[style] }), { maxTokens: 2600, timeoutMs });
     const blocks = AI.sanitizeBlocks(out.blocks);
     if (!blocks.length || !out.subject) throw Object.assign(new Error("Claude's campaign draft was empty."), { status: 502 });
     const t = new Date(Date.now() + 4 * 3600e3).toISOString();
@@ -201,11 +223,12 @@ You may add one text link to the source: [${row.official ? `Read ${vn}'s announc
     const vn = VENDORS[row.vendor] ? VENDORS[row.vendor].name : row.vendor;
     const trend = { id: row.rowKey, vendor: row.vendor, vendorName: vn, title: row.title, link: row.link, score: row.score };
     const e = { partitionKey: co, rowKey: id, name: cut(tidy(out.name || `${vn}: ${row.title}`), 140) || "Trend campaign", subject: cut(tidy(out.subject), 200), preheader: cut(tidy(out.preheader), 250),
-      audience: JSON.stringify({ mode: "all", tags: [] }), ...packJson({ blocks, edition: cut(out.edition, 60), trend, subjectIdeas: (out.subjects || []).slice(0, 3).map(x => cut(tidy(x), 200)) }),
+      audience: JSON.stringify({ mode: "all", tags: [] }), ...packJson({ blocks, edition: cut(out.edition, 60), style, trend, subjectIdeas: (out.subjects || []).slice(0, 3).map(x => cut(tidy(x), 200)) }),
       status: "draft", source: "radar", trendId: row.rowKey, createdBy: by, createdAt: iso(), updatedBy: by, updatedAt: iso() };
     await (await table("mkcampaigns")).createEntity(e);
+    await rememberStyle(co, style).catch(() => {});
     await (await table("radaritems")).updateEntity({ partitionKey: co, rowKey: row.rowKey, status: "drafted", campaignId: id, draftedBy: by, draftedAt: iso() }, "Merge");
-    return { id, name: e.name, subject: e.subject };
+    return { id, name: e.name, subject: e.subject, style };
   }
 
   /* ---------------- the daily run for one company ---------------- */

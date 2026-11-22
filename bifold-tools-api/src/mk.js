@@ -184,8 +184,10 @@ module.exports = function makeMk(H) {
   function campFields(b, extra) {
     const audience = b.audience && typeof b.audience === "object" ? { mode: b.audience.mode === "tags" ? "tags" : "all", tags: tagList(b.audience.tags) } : { mode: "all", tags: [] };
     return { name: clean(b.name, 150) || "Untitled campaign", subject: clean(b.subject, 200), preheader: clean(b.preheader, 250), audience: JSON.stringify(audience),
-      ...packJson({ blocks: sanitizeBlocks(b.blocks), edition: clean(b.edition, 60), ...(extra || {}) }) };
+      ...packJson({ blocks: sanitizeBlocks(b.blocks), edition: clean(b.edition, 60), style: styleOf(b.style), ...(extra || {}) }) };
   }
+  // Design style (see mk-render STYLES); unknown values fall back to the house look.
+  function styleOf(v) { return require("./mk-render").STYLE_KEYS.includes(v) ? v : "signature"; }
   const newId = p => { const t = new Date(Date.now() + 4 * 3600e3).toISOString(); return `${p}-${t.slice(0, 4)}${t.slice(5, 7)}${t.slice(8, 10)}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`; };
   async function createCamp(user, b) {
     const co = writeCo(user);
@@ -273,7 +275,7 @@ module.exports = function makeMk(H) {
     const cur = await loadCamp(user, id); const co = writeCo(user);
     const c = { ...campFull(cur), co, id };
     // Test what's on screen: the page sends its unsaved content along.
-    if (b && b.draft) Object.assign(c, { subject: clean(b.draft.subject, 200), preheader: clean(b.draft.preheader, 250), blocks: sanitizeBlocks(b.draft.blocks), edition: clean(b.draft.edition, 60) });
+    if (b && b.draft) Object.assign(c, { subject: clean(b.draft.subject, 200), preheader: clean(b.draft.preheader, 250), blocks: sanitizeBlocks(b.draft.blocks), edition: clean(b.draft.edition, 60), style: styleOf(b.draft.style) });
     const to = [...new Set((Array.isArray(b.to) ? b.to : String(b.to || "").split(/[,;\s]+/)).map(x => clean(x, 200).toLowerCase()).filter(Boolean))];
     if (!to.length) fail(400, "Enter an email address to send the test to.");
     if (to.length > 5) fail(400, "Send a test to at most 5 addresses.");
@@ -310,7 +312,7 @@ module.exports = function makeMk(H) {
   }
   async function saveTemplate(user, b) {
     const co = writeCo(user);
-    const e = { partitionKey: co, rowKey: newId("TPL"), name: clean(b.name, 120) || "Saved design", ...packJson({ subject: clean(b.subject, 200), preheader: clean(b.preheader, 250), edition: clean(b.edition, 60), blocks: sanitizeBlocks(b.blocks) }), createdBy: user.email, createdAt: now() };
+    const e = { partitionKey: co, rowKey: newId("TPL"), name: clean(b.name, 120) || "Saved design", ...packJson({ subject: clean(b.subject, 200), preheader: clean(b.preheader, 250), edition: clean(b.edition, 60), style: styleOf(b.style), blocks: sanitizeBlocks(b.blocks) }), createdBy: user.email, createdAt: now() };
     await (await table("mktemplates")).createEntity(e);
     if (user.aud) user.aud.name = e.name;
     return { id: e.rowKey, name: e.name };

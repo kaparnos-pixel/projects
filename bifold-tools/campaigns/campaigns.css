@@ -245,3 +245,17 @@ dialog .foot .r2{display:flex;gap:8px;margin-left:auto}
 #impPrev{margin:4px 0 8px}
 .trendnote{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,transparent);margin:0 0 14px}
 .trendnote b{color:var(--accent)}
+/* design style picker */
+.stylepick{display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:8px}
+.stylepick button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 6px 7px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:inherit;font:inherit;cursor:pointer}
+.stylepick button b{font-size:12px;font-weight:700}
+.stylepick button:hover{border-color:var(--muted)}
+.stylepick button[aria-checked="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.stylepick .sk{display:flex;flex-direction:column;gap:2px;width:56px;height:52px;padding:4px;border-radius:5px;box-sizing:border-box;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);overflow:hidden}
+.stylepick .sk i{display:block;flex:none;border-radius:1px}
+.stylepick .sk i.cols{display:flex;gap:2px;background:none}
+.stylepick .sk i.cols i{flex:1}
+.stylepick .sk i.cols.c{justify-content:space-around}
+.linkbtn{border:0;background:none;padding:0;font:inherit;font-size:12.5px;font-weight:700;color:var(--accent);cursor:pointer}
+.linkbtn:hover{text-decoration:underline}
+.linkbtn:disabled{color:var(--muted);cursor:default;text-decoration:none}

@@ -3,7 +3,7 @@
 window.MK_TEMPLATES = {
   bifold: [
     {
-      id: "bf-newsletter", name: "Monthly insights newsletter", note: "Awareness newsletter: three topics and an AMC spotlight",
+      id: "bf-newsletter", style: "editorial", name: "Monthly insights newsletter", note: "Awareness newsletter: three topics and an AMC spotlight",
       subject: "What IT leaders in the UAE are planning next", preheader: "Zero trust access, Teams calling and AI-ready infrastructure, in five minutes.", edition: "[Month 2026]",
       blocks: [
         { t: "hero", kicker: "Bifold Insights", title: "Building an IT estate that is ready for what comes next", text: "A short read for IT and procurement leaders across the UAE: what we are seeing in the field this month, and where it is heading.", btn: "Talk to our team", url: "https://www.bifoldtech.com" },
@@ -18,7 +18,7 @@ window.MK_TEMPLATES = {
       ],
     },
     {
-      id: "bf-spotlight", name: "Solution spotlight", note: "One solution, explained simply, with a clear next step",
+      id: "bf-spotlight", style: "spotlight", name: "Solution spotlight", note: "One solution, explained simply, with a clear next step",
       subject: "Secure remote access without the VPN headaches", preheader: "How UAE organisations are moving to zero trust network access.", edition: "",
       blocks: [
         { t: "hero", kicker: "Solution spotlight", title: "Secure access for every user, on any network", text: "Give staff and contractors access to exactly the applications they need, and nothing more.", btn: "See how it works", url: "https://www.bifoldtech.com" },
@@ -34,7 +34,7 @@ window.MK_TEMPLATES = {
       ],
     },
     {
-      id: "bf-event", name: "Event or webinar invitation", note: "Invite with date, venue and a registration button",
+      id: "bf-event", style: "impact", name: "Event or webinar invitation", note: "Invite with date, venue and a registration button",
       subject: "You're invited: [event name]", preheader: "[Date] at [venue]. Seats are limited, register today.", edition: "Invitation",
       blocks: [
         { t: "hero", kicker: "You're invited", title: "[Event name]", text: "Join Bifold Technologies and [partner] for [a short description of the session].", btn: "Reserve your seat", url: "https://www.bifoldtech.com" },
@@ -45,7 +45,7 @@ window.MK_TEMPLATES = {
       ],
     },
     {
-      id: "bf-letter", name: "Simple announcement", note: "Letter-style email for news or a short update",
+      id: "bf-letter", style: "minimal", name: "Simple announcement", note: "Letter-style email for news or a short update",
       subject: "[A short, clear subject]", preheader: "[One line that makes people want to open it]", edition: "",
       blocks: [
         { t: "heading", kicker: "News from Bifold", text: "[Headline for your announcement]" },
@@ -56,7 +56,7 @@ window.MK_TEMPLATES = {
   ],
   techhub: [
     {
-      id: "th-newsletter", name: "Tech Hub update", note: "Friendly monthly update for RAK customers and businesses",
+      id: "th-newsletter", style: "briefing", name: "Tech Hub update", note: "Friendly monthly update for RAK customers and businesses",
       subject: "What's new at Tech Hub this month", preheader: "New arrivals, business IT tips and what we're up to in RAK.", edition: "[Month 2026]",
       blocks: [
         { t: "hero", kicker: "Tech Hub RAK", title: "Your local technology partner in Ras Al Khaimah", text: "From the latest laptops and gaming gear to complete office IT, it's all under one roof in Al Nakheel.", btn: "Visit us", url: "https://www.techhubrak.ae" },
@@ -72,7 +72,7 @@ window.MK_TEMPLATES = {
       ],
     },
     {
-      id: "th-offer", name: "In-store spotlight", note: "Feature a product range or offer (add your own details)",
+      id: "th-offer", style: "impact", name: "In-store spotlight", note: "Feature a product range or offer (add your own details)",
       subject: "[Product range] now at Tech Hub RAK", preheader: "[One line about the range or offer]", edition: "",
       blocks: [
         { t: "image", img: "", alt: "[Product photo]", w: "full" },
@@ -82,7 +82,7 @@ window.MK_TEMPLATES = {
       ],
     },
     {
-      id: "th-business", name: "Business IT services", note: "For SMEs, schools and hospitality in RAK",
+      id: "th-business", style: "spotlight", name: "Business IT services", note: "For SMEs, schools and hospitality in RAK",
       subject: "Office IT, sorted, by your local RAK team", preheader: "Set-up, networking, CCTV and support contracts from Tech Hub.", edition: "For business",
       blocks: [
         { t: "hero", kicker: "Tech Hub for Business", title: "IT that just works, so your team can too", text: "Tech Hub helps RAK businesses, schools and hotels plan, set up and look after their technology.", btn: "Book a free visit", url: "https://www.techhubrak.ae" },
@@ -96,7 +96,7 @@ window.MK_TEMPLATES = {
       ],
     },
     {
-      id: "th-letter", name: "Simple message", note: "A short, personal note from the team",
+      id: "th-letter", style: "minimal", name: "Simple message", note: "A short, personal note from the team",
       subject: "[A short, clear subject]", preheader: "[One line that makes people want to open it]", edition: "",
       blocks: [
         { t: "heading", kicker: "From the Tech Hub team", text: "[Headline]" },

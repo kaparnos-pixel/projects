@@ -8,8 +8,8 @@
   "use strict";
 
   const THEMES = {
-    bifold: { navy: "#1B2A4A", navy2: "#23365C", accent: "#C0392B", accent2: "#2E6DA4", soft: "#EEF3F9", page: "#EDF0F5", ink: "#1D2733", muted: "#5E6B7A", line: "#DCE3EC", onNavy: "#C9D6E6" },
-    techhub: { navy: "#003C50", navy2: "#0B4E63", accent: "#28A08C", accent2: "#00566E", soft: "#E6F4F2", page: "#ECF2F3", ink: "#14262D", muted: "#57707A", line: "#D6E3E5", onNavy: "#BFDCE0" },
+    bifold: { navy: "#1E5A8C", navy2: "#174A75", accent: "#D81F2A", accent2: "#1E5A8C", soft: "#E2ECF5", page: "#ECF1F6", ink: "#15222E", muted: "#5B6A78", line: "#D7E1EB", onNavy: "#D6E4F1", kicker: "#FFC9CC" },
+    techhub: { kicker: "#8FE0D0", navy: "#003C50", navy2: "#0B4E63", accent: "#28A08C", accent2: "#00566E", soft: "#E6F4F2", page: "#ECF2F3", ink: "#14262D", muted: "#57707A", line: "#D6E3E5", onNavy: "#BFDCE0" },
   };
   const FONT = "Arial,'Helvetica Neue',Helvetica,sans-serif";
   const SOCIAL_NAMES = { linkedin: "LinkedIn", instagram: "Instagram", facebook: "Facebook", x: "X", tiktok: "TikTok", youtube: "YouTube", whatsapp: "WhatsApp" };
@@ -72,7 +72,7 @@
   const BLOCKS = {
     hero(b, T, base) {
       const pic = b.img ? `<tr><td bgcolor="${T.navy}" style="background:${T.navy};padding:0">${linked(img(b.img, b.alt || b.title, base, "", T), b.url, base)}</td></tr>` : "";
-      const kicker = b.kicker ? `<p style="margin:0 0 12px;font-family:${FONT};font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:${T.accent === "#C0392B" ? "#F2A39A" : "#8FE0D0"}">${esc(b.kicker)}</p>` : "";
+      const kicker = b.kicker ? `<p style="margin:0 0 12px;font-family:${FONT};font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:${T.kicker || "#ffffff"}">${esc(b.kicker)}</p>` : "";
       const al = b.align === "left" ? "left" : "center";
       return pic + row(`${kicker}<h1 class="h1" style="margin:0 0 14px;font-family:${FONT};font-size:32px;line-height:1.2;font-weight:bold;color:#ffffff">${esc(b.title)}</h1>
 ${b.text ? rich(b.text, T, base, T.onNavy, 16) : ""}${b.btn ? `<div style="padding-top:8px">${button(b, T, base, true, al)}</div>` : ""}`, T.navy, `40px 44px ${b.btn ? "40px" : "26px"};text-align:${al}`);

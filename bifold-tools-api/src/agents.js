@@ -16,7 +16,7 @@
 const ENGINE = require("./agent-engine");
 const { AGENTS, settingsIn, TABLES, tidy, DEFAULT_SIGS, SIG_KEYS, SIG_LAYOUT, SIG_V, sigFor, noEm } = ENGINE;
 const ICONS = require("./sig-icons");
-const ACCENT = { bifold: "#2E6DA4", techhub: "#28A08C" };
+const ACCENT = { bifold: "#1E5A8C", techhub: "#28A08C" };
 const SOCIAL = [["linkedin", "LinkedIn"], ["x", "X"], ["facebook", "Facebook"], ["instagram", "Instagram"], ["whatsapp", "WhatsApp"], ["tiktok", "TikTok"]];
 const graphReady = () => ["GRAPH_TENANT_ID", "GRAPH_CLIENT_ID", "GRAPH_CLIENT_SECRET"].every(k => process.env[k]);
 const nameOf = e => String(e || "").split("@")[0].split(/[._-]+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(" ");

@@ -1,10 +1,10 @@
 /* ===== Bifold document generators: AMC proposal, visit report, contract service report (Word + PDF) ===== */
 const GEN = (function () {
-  let NAVY = "34648C", RED = "AE3343", GREY = "EFF3F7", BLUE = "26506F", ALT = "F2F6FA", DARK = "1F2733", MUTE = "6B7280";
+  let NAVY = "1E5A8C", RED = "D81F2A", GREY = "E2ECF5", BLUE = "174A75", ALT = "F2F6FA", DARK = "1F2733", MUTE = "6B7280";
   const CW = 10080;
-  // House styles. Bifold: logo-derived steel blue and crimson. Tech Hub: navy 003C50 and teal 28A08C.
+  // House styles. Bifold: logo-matched steel blue 1E5A8C and red D81F2A (same as proposals, emails and the site). Tech Hub: navy 003C50 and teal 28A08C.
   const BRANDS = {
-    bifold: { colors: ["34648C", "AE3343", "EFF3F7", "26506F", "F2F6FA"], company: {
+    bifold: { colors: ["1E5A8C", "D81F2A", "E2ECF5", "174A75", "F2F6FA"], company: {
       company: "Bifold Technologies LLC", preparerName: "Ranjan Mazumder", preparerTitle: "Director",
       email: "ranjan@bifoldtech.com", phone: "+971 056 4243777", tagline: "Enterprise ICT Solutions & Managed Services",
       addressLine: "Office A306, Saraya Avenue, Al Garhoud, Dubai, UAE  |  PO Box 554567",

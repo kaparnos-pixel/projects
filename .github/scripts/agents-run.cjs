@@ -17,8 +17,8 @@ const DRY = env.DRY_RUN === "1";
 const ONLY = String(env.AGENTS_ONLY || "").split(",").map(s => s.trim().toLowerCase()).filter(s => /^a[1-4]$/.test(s));
 const SITE = "https://yellow-dune-0607b0710.4.azurestaticapps.net";
 const COS = {
-  bifold: { name: "Bifold Tools", sender: env.MAIL_SENDER, url: env.AGENTS_URL || SITE + "/agents/" },
-  techhub: { name: "Tech Hub Tools", sender: env.TECHHUB_MAIL_SENDER, url: env.TECHHUB_AGENTS_URL || env.AGENTS_URL || SITE + "/agents/" },
+  bifold: { color: "#1E5A8C", name: "Bifold Tools", sender: env.MAIL_SENDER, url: env.AGENTS_URL || SITE + "/agents/" },
+  techhub: { color: "#003C50", name: "Tech Hub Tools", sender: env.TECHHUB_MAIL_SENDER, url: env.TECHHUB_AGENTS_URL || env.AGENTS_URL || SITE + "/agents/" },
 };
 const MANAGERS = { bifold: (env.BIFOLD_MANAGERS || "ranjan@bifoldtech.com"), techhub: (env.TECHHUB_MANAGERS || "ranjan@techhubrak.ae") };
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -48,13 +48,13 @@ function digest(items, C) {
   const rank = { high: 0, medium: 1, low: 2 };
   items.sort((a, b) => rank[a.severity] - rank[b.severity]);
   const td = 'style="padding:7px 10px;border-bottom:1px solid #e3e8ee;vertical-align:top"';
-  const dot = s => `<span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:${s === "high" ? "#C0392B" : s === "medium" ? "#D68910" : "#2E6DA4"}"></span>`;
+  const dot = s => `<span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:${s === "high" ? "#D81F2A" : s === "medium" ? "#D68910" : C.color}"></span>`;
   const rows = items.map(i => `<tr><td ${td}>${dot(i.severity)}</td><td ${td}><b>${esc(i.title)}</b><br><span style="color:#5b6a78">${esc(i.summary)}</span></td></tr>`).join("");
   const drafts = items.filter(i => i.draft).length;
   return { subject: `Agent Inbox: ${items.length} new item${items.length === 1 ? "" : "s"} for you${items.some(i => i.severity === "high") ? " (high priority)" : ""}`,
     html: `<div style="font-family:Arial,sans-serif;font-size:13px;color:#15222e"><p>Good morning. The agents found ${items.length} thing${items.length === 1 ? "" : "s"} for you today${drafts ? `, with ${drafts} email draft${drafts === 1 ? "" : "s"} ready to review` : ""}. Nothing has been sent to any customer.</p>
 <table style="border-collapse:collapse;width:100%;max-width:720px">${rows}</table>
-<p><a href="${C.url}" style="display:inline-block;background:#1B2A4A;color:#fff;padding:9px 16px;border-radius:6px;text-decoration:none;font-weight:bold">Open the Agent Inbox</a></p>
+<p><a href="${C.url}" style="display:inline-block;background:${C.color};color:#fff;padding:9px 16px;border-radius:6px;text-decoration:none;font-weight:bold">Open the Agent Inbox</a></p>
 <p style="color:#5b6a78;font-size:12px">Daily digest from ${esc(C.name)}. Managers can switch agents or this digest off in the Agent Inbox settings.</p></div>` };
 }
 

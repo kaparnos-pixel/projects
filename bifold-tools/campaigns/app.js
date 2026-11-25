@@ -820,6 +820,8 @@
     $("pTabs").innerHTML = NETS.map(n => tab(n, pNet)).join("");
     $("pvTabs").innerHTML = NETS.filter(n => p.nets.includes(n)).map(n => tab(n, pvNet)).join("") || `<span class="hint">Choose a network.</span>`;
     $("pText").value = p.texts[pNet] || ""; $("pTip").textContent = NETTIP[pNet];
+    const src = !String(p.texts[pNet] || "").trim() && editable() ? NETS.find(n => n !== pNet && String(p.texts[n] || "").trim()) : null;
+    $("pCopy").hidden = !src; if (src) { $("pCopy").textContent = `Copy the ${NETL[src]} text here`; $("pCopy").dataset.src = src; }
     count();
   }
   function count() {
@@ -830,6 +832,13 @@
   $("pTabs").addEventListener("click", e => { const b = e.target.closest("button[data-n]"); if (!b) return; pNet = b.dataset.n; if (PO.p.nets.includes(pNet)) pvNet = pNet; drawTabs(); drawPreview(); });
   $("pvTabs").addEventListener("click", e => { const b = e.target.closest("button[data-n]"); if (!b) return; pvNet = b.dataset.n; drawTabs(); drawPreview(); });
   function pChanged() { PO.dirty = true; $("pSaved").textContent = "Unsaved changes"; clearTimeout(PO.timer); PO.timer = setTimeout(savePost, 1500); drawPreview(); }
+  $("pCopy").onclick = () => {
+    const src = $("pCopy").dataset.src; let t = String(PO.p.texts[src] || "");
+    if (pNet === "instagram") t = t.replace(/\s*https?:\/\/\S+/g, "").trim() + (/link in bio/i.test(t) ? "" : "\n\nLink in bio" + (SOC.settings.whatsapp ? " / WhatsApp " + SOC.settings.whatsapp : ""));
+    if (pNet === "google") t = t.replace(/\s*https?:\/\/\S+/g, "").replace(/\s*#\w+/g, "").trim();
+    if (pNet === "x") t = t.replace(/\s*https?:\/\/\S+/g, "").slice(0, 270);
+    PO.p.texts[pNet] = t; drawTabs(); pChanged(); $("pText").focus();
+  };
   $("pText").oninput = () => { PO.p.texts[pNet] = $("pText").value; count(); pChanged(); };
   $("pTitle").oninput = () => { PO.p.title = $("pTitle").value; pChanged(); };
   $("pLink").oninput = () => { PO.p.link = $("pLink").value.trim(); pChanged(); };

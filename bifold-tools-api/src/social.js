@@ -573,6 +573,16 @@ Reply in exactly this format and nothing else: each section starts with its mark
       bad(502, r.stop === "max_tokens" ? "Claude's answer was too long and got cut off. Try again." : "Claude's answer couldn't be read. Try again.");
     }
     o.card = { kicker: o.kicker, headline: o.headline, sub: o.sub };
+    // Any network Claude left out is adapted from the others, so a post never goes for approval with an empty caption.
+    const base = o.facebook || o.linkedin || o.instagram || o.google || "";
+    const noLinks = s => String(s).replace(/\s*https?:\/\/\S+/g, "").trim();
+    const tags = s => (String(s).match(/#\w+/g) || []).slice(0, 8).join(" ");
+    const body = s => noLinks(String(s).replace(/(\s*#\w+)+\s*$/g, ""));
+    if (!o.facebook) o.facebook = o.linkedin || base;
+    if (!o.linkedin) o.linkedin = base;
+    if (!o.instagram && base) o.instagram = `${body(base).split(/\n\s*\n/).slice(0, 2).join("\n\n")}\n\nLink in bio${S.whatsapp ? " / WhatsApp " + S.whatsapp : ""}\n\n${tags(base + " " + S.hashtags)}`.trim();
+    if (!o.x && base) { const first = body(base).split(/(?<=[.!?])\s+/)[0] || ""; o.x = (first.slice(0, 220) + " " + tags(S.hashtags).split(" ").slice(0, 2).join(" ")).trim(); }
+    if (!o.google && base) o.google = body(base);
     const texts = cleanTexts({ linkedin: o.linkedin, facebook: o.facebook, instagram: o.instagram, x: o.x, google: String(o.google || "").split(/(?<=[.!?])\s+/).filter(x => !/\+?\d[\d\s-]{7,}\d/.test(x)).join(" ").replace(/\s*#\w+/g, "").trim() });
     if (texts.x && texts.x.length > 280) texts.x = texts.x.slice(0, 277).replace(/\s+\S*$/, "") + "…";
     const card = o.card || {};
@@ -581,8 +591,11 @@ Reply in exactly this format and nothing else: each section starts with its mark
   // "=== NAME ===" sections → {name: text}. Also accepts a JSON answer, in case the model replies that way.
   function sections(text) {
     const t = String(text || "");
-    const o = {}; const re = /^\s*={2,}\s*([A-Z ]+?)\s*={2,}\s*$/gm; let m, last = null, from = 0;
-    while ((m = re.exec(t))) { if (last) o[last] = t.slice(from, m.index).trim(); last = m[1].trim().toLowerCase(); from = re.lastIndex; }
+    // Markers in any case, with or without markdown (**, #) or extra words ("Instagram caption", "X / Twitter").
+    const KEYS = [["title", /title|name/], ["kicker", /kicker|label/], ["headline", /headline/], ["sub", /^sub|line/], ["linkedin", /linked\s*in/], ["facebook", /facebook/], ["instagram", /insta/], ["google", /google|business/], ["x", /^x\b|twitter|^x\s*\/|\(x\)/]];
+    const keyOf = h => { h = h.toLowerCase().replace(/[*#_`]/g, "").trim(); const k = KEYS.find(([, re]) => re.test(h)); return k ? k[0] : h; };
+    const o = {}; const re = /^[\s*#_`]*={2,}\s*([^=\n]+?)\s*={2,}[\s*#_`]*$/gm; let m, last = null, from = 0;
+    while ((m = re.exec(t))) { if (last) o[last] = o[last] || t.slice(from, m.index).trim(); last = keyOf(m[1]); from = re.lastIndex; }
     if (last) o[last] = t.slice(from).trim();
     if (!Object.keys(o).length) { const j = AI.parseJson(t); if (j && typeof j === "object") { Object.assign(o, j); if (j.card) Object.assign(o, j.card); } }
     for (const k of Object.keys(o)) if (typeof o[k] === "string") o[k] = o[k].replace(/^\(.*?\)$/s, "").replace(/^["']|["']$/g, "").trim();

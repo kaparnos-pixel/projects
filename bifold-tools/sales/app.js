@@ -15,7 +15,8 @@ const addMonths = (ym, n) => new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7) 
 const pctOf = (a, t) => t > 0 ? Math.round(a / t * 1000) / 10 : null;
 const cls = p => p == null ? "" : p >= 100 ? "good" : p >= 70 ? "" : p >= 50 ? "warn" : "bad";
 const SRC = { deal: "From deal", account: "Account manager", manual: "Assigned", house: "House account", none: "Needs a salesperson" };
-const COST = { items: "Item prices", manual: "Entered", missing: "Cost needed" };
+const COST = { items: "Item prices", manual: "Entered", missing: "Cost needed", docs: "Supplier documents" };
+const DOCT = { po: "Purchase order", bill: "Bill", expense: "Expense" };
 
 let B = null, PERF = null, PEOPLE = null;
 const st = { year: null, period: "q", m: null, q: null, credFilter: "attention", credQ: "" };
@@ -315,14 +316,33 @@ function creditDlg(i, ppl) {
     <label class="check"><input type="checkbox" name="house"${i.src === "house" ? " checked" : ""}> House account (no salesperson, no commission)</label>
     <div id="splits" class="bandrows"></div>
     <div><button type="button" id="addS">+ Share with another person</button></div>
-    <label><span class="lbl">Cost of sale (AED, before VAT)</span><input name="cost" inputmode="decimal" value="${i.costSrc === "manual" ? i.cost : ""}" placeholder="Automatic: AED ${aed(i.itemCost, 2)} from item prices">
-      <span class="hint">${i.unknown.length ? `These lines have no purchase price in Books, so the automatic cost leaves them out:` : "Leave empty to use the item purchase prices from Books. Enter the real cost if you know it (supplier bills, subcontractors)."}</span>
-      ${i.unknown.length ? `<ul class="unk">${i.unknown.map(u => `<li>${esc(u.name)} (sold for AED ${aed(u.net, 2)})</li>`).join("")}</ul>` : ""}</label>
+    <div class="costbox"><div class="cbh"><span class="lbl">Cost of sale (AED, before VAT)</span><button type="button" id="pickC">Pull from supplier PO, bill or expense…</button></div>
+      <div id="cdocs"></div>
+      <label><span class="lbl" id="ocl">Cost</span><input name="cost" inputmode="decimal" value="${i.otherCost != null ? i.otherCost : ""}"></label>
+      <span class="hint" id="chint"></span>
+      ${i.unknown.length ? `<ul class="unk" id="unk">${i.unknown.map(u => `<li>${esc(u.name)} (sold for AED ${aed(u.net, 2)})</li>`).join("")}</ul>` : ""}
+      ${i.costDocsMissing ? `<div class="note warn">${i.costDocsMissing} supplier document${i.costDocsMissing > 1 ? "s" : ""} picked earlier ${i.costDocsMissing > 1 ? "were" : "was"} voided or deleted, so ${i.costDocsMissing > 1 ? "they no longer count" : "it no longer counts"}. Pick the cost again.</div>` : ""}
+      <div class="ctot" id="ctot"></div></div>
     <label><span class="lbl">Note (optional)</span><input name="note" maxlength="300" value="${esc(i.note)}" placeholder="e.g. Maya did the survey and design"></label>
     <label class="check" id="remW"><input type="checkbox" name="remember"${i.account ? "" : " checked"}> Make this person the account manager for ${esc(i.customer)} (future invoices are credited to them)</label>
     <div class="err" id="ce"></div>
     <div class="foot">${i.src === "manual" || i.src === "house" ? `<button type="button" id="rst" style="margin-right:auto">Reset to automatic</button>` : ""}<button type="button" data-x>Cancel</button><button class="primary">Save</button></div></form>`, { onOpen: (d, done) => {
     const f = d.querySelector("form"); let rows = splits.map(s => ({ ...s }));
+    // Cost: supplier lines picked from POs, bills and expenses, plus any other cost; or one amount; or automatic.
+    let cdocs = (i.costDocs || []).map(x => ({ ...x, lines: x.lines.map(l => ({ ...l })) }));
+    const drawC = () => {
+      const docsTot = r2(cdocs.reduce((a, x) => a + x.total, 0)), other = f.cost.value.trim() === "" ? null : num(f.cost.value);
+      d.querySelector("#cdocs").innerHTML = cdocs.map((x, k) => `<div class="cdoc"><span><b>${esc(x.number)}</b> <span class="chipx items">${esc(DOCT[x.type] || x.type)}</span> ${esc(x.supplier)}<span class="s">${x.lines.map(l => `${esc(l.name)}${l.qty !== 1 ? ` × ${l.qty}` : ""}`).join(" · ")}</span></span><span class="mono">${aed(x.total, 2)}</span><button type="button" data-cx="${k}" aria-label="Remove ${esc(x.number)}">✕</button></div>`).join("");
+      d.querySelectorAll("[data-cx]").forEach(b => b.onclick = () => { cdocs.splice(+b.dataset.cx, 1); drawC(); });
+      d.querySelector("#ocl").textContent = cdocs.length ? "Other cost on top (own labour, freight, anything not on those documents)" : "Cost";
+      f.cost.placeholder = cdocs.length ? "0" : `Automatic: AED ${aed(i.itemCost, 2)} from item prices`;
+      d.querySelector("#chint").textContent = cdocs.length ? "" : i.unknown.length ? "Pull the supplier documents, or enter the cost. Automatic leaves out these lines because they have no purchase price in Books:" : "Pull the supplier PO, bill or expense, enter an amount, or leave empty to use item purchase prices from Books.";
+      if (d.querySelector("#unk")) d.querySelector("#unk").hidden = !!cdocs.length;
+      const cost = cdocs.length ? r2(docsTot + (other || 0)) : other != null ? other : i.unknown.length ? null : i.itemCost;
+      d.querySelector("#ctot").innerHTML = cost == null ? `Cost unknown: GP commission waits until you add it.` : `Cost <b>AED ${aed(cost, 2)}</b> · GP <b>AED ${aed(i.sales - cost, 2)}</b> (${i.sales ? Math.round((i.sales - cost) / i.sales * 1000) / 10 : 0}%)`;
+    };
+    f.cost.oninput = drawC; drawC();
+    d.querySelector("#pickC").onclick = async () => { const r = await pickCost(i, cdocs); if (r) { cdocs = r; drawC(); } };
     const drawS = () => {
       const h = f.house.checked;
       d.querySelector("#splits").innerHTML = h ? "" : rows.map((s, k) => `<div class="split"><select data-k="${k}" aria-label="Salesperson ${k + 1}">${opt(s.email)}</select><input data-p="${k}" inputmode="decimal" value="${s.pct}" aria-label="Share %" ${rows.length === 1 ? "disabled" : ""}><span>%${rows.length > 1 ? ` <button type="button" data-r="${k}" aria-label="Remove">✕</button>` : ""}</span></div>`).join("");
@@ -338,11 +358,70 @@ function creditDlg(i, ppl) {
     if (d.querySelector("#rst")) d.querySelector("#rst").onclick = async () => { const r = await act(d.querySelector("#rst"), () => api("DELETE", "sales/credits/" + i.id), "Back to automatic credit"); if (r !== undefined) { done(true); PERF = null; route(); } };
     f.onsubmit = async e => {
       e.preventDefault(); d.querySelector("#ce").textContent = "";
-      const body = { house: f.house.checked, splits: f.house.checked ? [] : rows, cost: f.cost.value.trim() === "" ? "" : num(f.cost.value), note: f.note.value, remember: !f.house.checked && rows.length === 1 && f.remember.checked };
+      const body = { house: f.house.checked, splits: f.house.checked ? [] : rows, cost: f.cost.value.trim() === "" ? "" : num(f.cost.value), costDocs: cdocs.map(x => ({ id: x.id, lines: x.lines.map(l => ({ i: l.i, qty: l.qty })) })), note: f.note.value, remember: !f.house.checked && rows.length === 1 && f.remember.checked };
       if (!body.house && rows.some(r => !r.email)) { d.querySelector("#ce").textContent = "Choose the salesperson for each share."; return; }
       try { busy(f.querySelector(".primary"), true); await api("PUT", "sales/credits/" + i.id, body); toast("Invoice credit saved"); done(true); PERF = null; route(); }
       catch (err) { d.querySelector("#ce").textContent = err.message; } finally { busy(f.querySelector(".primary"), false); }
     };
+  } });
+}
+
+// Picker: supplier purchase orders, bills and expenses that could be this invoice's cost, suggestions first.
+async function pickCost(inv, current) {
+  let data;
+  try { data = await api("GET", "sales/costsources/" + inv.id); } catch (e) { toast(e.message, true); return null; }
+  const sel = new Map(); // docId → Map(lineIdx → qty)
+  current.forEach(x => sel.set(x.id, new Map(x.lines.map(l => [l.i, l.qty]))));
+  if (!current.length) data.docs.filter(x => x.score >= 60).forEach(x => { const m = new Map(); x.lines.forEach(l => { if (l.suggestQty > 0) m.set(l.i, l.suggestQty); }); if (m.size) sel.set(x.id, m); });
+  let filter = data.docs.some(x => x.score > 0) ? "sug" : "all", q = "";
+  const F = { sug: x => x.score > 0 || sel.has(x.id), po: x => x.type === "po", bill: x => x.type === "bill", expense: x => x.type === "expense", all: () => true };
+  const lineAmt = (x, l) => r2((sel.get(x.id) && sel.get(x.id).get(l.i) || 0) * l.unit);
+  const total = () => r2(data.docs.reduce((a, x) => a + (sel.has(x.id) ? x.lines.reduce((b, l) => b + lineAmt(x, l), 0) : 0), 0));
+  return dialog(`<form class="picker"><h3>Cost of ${esc(data.invoice.number)} · ${esc(data.invoice.customer)}</h3>
+    <p class="muted" style="margin:0;font-size:13px">Sold for AED ${aed(data.invoice.sales, 2)} before VAT. Tick the supplier lines that were bought for this sale; change the quantity when a line was only partly for it. Cost is before VAT, plus any VAT that couldn't be recovered.</p>
+    <div class="tools"><div class="seg" role="group" aria-label="Show" id="pf">${[["sug", "Suggested"], ["po", "Purchase orders"], ["bill", "Bills"], ["expense", "Expenses"], ["all", "All"]].map(([v, l]) => `<button type="button" data-v="${v}" aria-pressed="${filter === v}">${l}</button>`).join("")}</div>
+      <input type="search" id="pq" placeholder="Search number, supplier or item" aria-label="Search supplier documents"></div>
+    <div class="plist" id="plist"></div>
+    <div class="foot"><span id="ptot" class="ptot"></span><button type="button" data-x>Cancel</button><button class="primary" id="puse">Use</button></div></form>`, { wide: true, onOpen: (d, done) => {
+    const draw = () => {
+      const qq = q.trim().toLowerCase();
+      const list = data.docs.filter(F[filter]).filter(x => !qq || [x.number, x.supplier, x.ref, x.title, x.deliverTo, ...x.lines.map(l => l.name)].join(" ").toLowerCase().includes(qq));
+      d.querySelector("#plist").innerHTML = list.map(x => { const m = sel.get(x.id); return `<section class="pdoc${m ? " on" : ""}" data-d="${esc(x.id)}">
+        <header><label class="check"><input type="checkbox" data-all="${esc(x.id)}"${m ? " checked" : ""} aria-label="Use ${esc(x.number)}"><span><b>${esc(x.number)}</b> <span class="chipx items">${esc(DOCT[x.type])}</span> ${esc(x.supplier)} · ${fd(x.date)}${x.ref ? ` · ref ${esc(x.ref)}` : ""}</span></label><span class="mono">AED ${aed(x.cost, 2)}</span></header>
+        ${x.title || x.deliverTo ? `<div class="s">${esc([x.title, x.deliverTo && "Deliver to: " + x.deliverTo].filter(Boolean).join(" · "))}</div>` : ""}
+        ${x.why.length ? `<div class="why">${x.why.map(w => `<span class="chipx deal">${esc(w)}</span>`).join("")}</div>` : ""}
+        ${x.type === "po" && x.billedAs.length ? `<div class="note warn">Billed as ${x.billedAs.map(b => esc(b.number)).join(", ")}: use the bill, not both, or the cost counts twice.</div>` : ""}
+        ${x.fromPo && !x.why.some(w => w.includes(x.fromPo)) ? `<div class="s">From ${esc(x.fromPo)}</div>` : ""}
+        <table class="list compact nohover"><tbody>${x.lines.map(l => { const qv = m && m.get(l.i); return `<tr><td style="width:28px"><input type="checkbox" data-l="${esc(x.id)}|${l.i}"${qv ? " checked" : ""} aria-label="Use ${esc(l.name)}"></td><td>${esc(l.name)}${l.used.length ? `<div class="s">Already used: ${l.used.map(u => `${esc(u.invoice)} × ${u.qty}`).join(", ")}${l.left > 0 ? ` · ${l.left} left` : " · none left"}</div>` : ""}</td>
+          <td class="r" style="width:110px"><input class="qty" data-q="${esc(x.id)}|${l.i}" inputmode="decimal" value="${qv || ""}" placeholder="${l.left}" aria-label="Quantity of ${esc(l.name)}"> <span class="s">of ${l.qty}</span></td><td class="r mono" style="width:90px">${aed(l.unit, 2)}</td><td class="r mono" style="width:100px">${qv ? aed(qv * l.unit, 2) : ""}</td></tr>`; }).join("")}</tbody></table></section>`; }).join("") || `<div class="empty">${filter === "sug" ? "No supplier documents look related. Try All, or search by supplier or item." : "No supplier documents match."}</div>`;
+      const both = data.docs.filter(x => x.type === "po" && sel.has(x.id) && x.billedAs.some(b => sel.has(b.id)));
+      d.querySelector("#ptot").innerHTML = `Cost <b>AED ${aed(total(), 2)}</b> · GP AED ${aed(data.invoice.sales - total(), 2)}${both.length ? ` <span style="color:var(--bad)">· ${both.map(x => esc(x.number)).join(", ")} and ${both.length > 1 ? "their bills" : "its bill"} both picked</span>` : ""}`;
+      d.querySelector("#puse").textContent = sel.size ? `Use ${sel.size} document${sel.size > 1 ? "s" : ""}` : "Use none";
+      const doc = id => data.docs.find(x => x.id === id);
+      d.querySelectorAll("[data-all]").forEach(cb => cb.onchange = () => {
+        const x = doc(cb.dataset.all);
+        if (cb.checked) { const m = new Map(); x.lines.forEach(l => { const v = l.suggestQty > 0 ? l.suggestQty : l.left; if (v > 0) m.set(l.i, v); }); if (!m.size) x.lines.forEach(l => m.set(l.i, l.qty)); sel.set(x.id, m); } else sel.delete(x.id);
+        draw();
+      });
+      d.querySelectorAll("[data-l]").forEach(cb => cb.onchange = () => {
+        const [id, i] = cb.dataset.l.split("|"), x = doc(id), l = x.lines.find(y => y.i === +i);
+        const m = sel.get(id) || new Map(); if (cb.checked) m.set(l.i, l.left > 0 ? l.left : l.qty); else m.delete(l.i);
+        if (m.size) sel.set(id, m); else sel.delete(id); draw();
+      });
+      d.querySelectorAll("[data-q]").forEach(inp => inp.onchange = () => {
+        const [id, i] = inp.dataset.q.split("|"), x = doc(id), l = x.lines.find(y => y.i === +i);
+        const v = Math.min(l.qty, Math.max(0, num(inp.value)));
+        const m = sel.get(id) || new Map(); if (v > 0) m.set(l.i, v); else m.delete(l.i);
+        if (m.size) sel.set(id, m); else sel.delete(id); draw();
+      });
+    };
+    d.querySelectorAll("#pf button").forEach(b => b.onclick = () => { filter = b.dataset.v; d.querySelectorAll("#pf button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); draw(); });
+    d.querySelector("#pq").oninput = e => { q = e.target.value; draw(); };
+    d.querySelector("form").onsubmit = e => {
+      e.preventDefault();
+      done(data.docs.filter(x => sel.has(x.id)).map(x => { const m = sel.get(x.id); const lines = x.lines.filter(l => m.has(l.i)).map(l => ({ i: l.i, name: l.name, qty: m.get(l.i), unit: l.unit, amt: r2(m.get(l.i) * l.unit) })); return { id: x.id, type: x.type, number: x.number, date: x.date, supplier: x.supplier, lines, total: r2(lines.reduce((a, l) => a + l.amt, 0)) }; }));
+    };
+    draw();
   } });
 }
 

@@ -101,3 +101,24 @@ dialog form>*{min-width:0}
 dialog.wide form{overflow-x:hidden}
 dialog .fields{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
 .split select{min-width:0}
+/* cost of sale: picked supplier documents */
+.costbox{display:grid;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.cbh{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.cbh button{font-size:13px;padding:6px 10px}
+.cdoc{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:6px 8px;background:var(--sunk);border-radius:8px;font-size:13px}
+.cdoc .s{display:block;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:420px}
+.cdoc button{padding:3px 8px}
+.ctot{font-size:13px;background:var(--accent-soft);border-radius:8px;padding:8px 10px}
+.ctot b{font-family:var(--f-num)}
+form.picker{display:grid;gap:10px}
+.plist{display:grid;gap:10px;max-height:min(58vh,620px);overflow:auto;padding-right:4px}
+.pdoc{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:6px}
+.pdoc.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.pdoc header{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
+.pdoc .s{font-size:12px;color:var(--muted)}
+.pdoc .why{display:flex;gap:4px;flex-wrap:wrap}
+.pdoc table td{padding:5px 6px;font-size:13px}
+.pdoc input.qty{width:64px;padding:4px 6px;text-align:right}
+.pdoc .note{margin:0}
+.ptot{margin-right:auto;font-size:13px}
+.ptot b{font-family:var(--f-num)}

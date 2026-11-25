@@ -20,7 +20,8 @@
 //
 // Storage (Table Storage "sales"):
 //   plan-<co>    RowKey "<year>|<email>"  name, basis, bands JSON, targets JSON {sales[12], gp[12]}
-//   credit-<co>  RowKey <invoice id>      splits JSON [{email, pct}] ([] = house account), cost ("" = automatic), note
+//   credit-<co>  RowKey <invoice id>      splits JSON [{email, pct}] ([] = house account), cost ("" = automatic; with costDocs: other
+//                                          cost added on top), costDocs JSON [{id, lines: [{i, qty}]}] (supplier PO, bill or expense lines), note
 //   acct-<co>    RowKey <customer id>     email (account manager), customer
 //   stmt-<co>    RowKey "<email>|<ym>"    lines JSON, total, pay ("payroll" | "separate"), payrollMonth, status, approvedBy...
 
@@ -82,15 +83,30 @@ module.exports = function makeSales(H) {
     const [plans, credits, accts, stmts] = await Promise.all(["plan", "credit", "acct", "stmt"].map(k => all(t, pk(k, co))));
     return {
       plans: new Map(plans.map(e => { const p = planOut(e); return [`${p.year}|${p.email}`, p]; })),
-      credits: new Map(credits.map(e => [e.rowKey, { splits: j(e.splits, []), cost: e.cost === "" || e.cost == null ? null : num(e.cost), note: e.note || "", by: e.updatedBy || "", at: e.updatedAt || "" }])),
+      credits: new Map(credits.map(e => [e.rowKey, { splits: j(e.splits, []), cost: e.cost === "" || e.cost == null ? null : num(e.cost), costDocs: j(e.costDocs, []), note: e.note || "", by: e.updatedBy || "", at: e.updatedAt || "" }])),
       accts: new Map(accts.map(e => [e.rowKey, { email: e.email, customer: e.customer || "" }])),
       stmts: stmts.map(stmtOut),
     };
   }
 
   // ---------- the model: every invoice credited, costed and commissioned ----------
+  // Cost of the supplier lines picked for an invoice, from the documents as they are now.
+  function docCost(costDocs, pmap) {
+    let total = 0; const out = []; let missing = 0;
+    (costDocs || []).forEach(cd => {
+      const d = pmap.get(cd.id);
+      if (!d) { missing++; return; }
+      const lines = (cd.lines || []).map(x => { const l = d.lines.find(y => y.i === x.i); if (!l) return null; const qty = Math.min(num(x.qty), l.qty); return { i: l.i, name: l.name, qty, unit: l.unit, amt: r2(qty * l.unit) }; }).filter(Boolean);
+      const t = r2(lines.reduce((a, l) => a + l.amt, 0)); total += t;
+      out.push({ id: d.id, type: d.type, number: d.number, date: d.date, supplier: d.supplier, lines, total: t });
+    });
+    return { total: r2(total), docs: out, missing };
+  }
   async function model(co) {
-    const [bk, st, deals] = await Promise.all([books().salesData(co), load(co), dealsFor(co)]);
+    const st0 = await load(co);
+    const needDocs = [...st0.credits.values()].some(c => c.costDocs && c.costDocs.length);
+    const [bk, deals, pdocs] = await Promise.all([books().salesData(co), dealsFor(co), needDocs ? books().purchaseDocs(co) : []]);
+    const st = st0, pmap = new Map(pdocs.map(d => [d.id, d]));
     const dealMap = new Map(deals.map(d => [d.id, d]));
     const invs = bk.map(inv => {
       const c = st.credits.get(inv.id), d = inv.dealId ? dealMap.get(inv.dealId) : null, a = st.accts.get(inv.customerId);
@@ -99,11 +115,13 @@ module.exports = function makeSales(H) {
       else if (d && d.owner) { src = "deal"; splits = [{ email: d.owner, pct: 100 }]; }
       else if (a && a.email) { src = "account"; splits = [{ email: a.email, pct: 100 }]; }
       else { src = "none"; splits = []; }
-      const manualCost = c && c.cost != null;
-      const cost = manualCost ? c.cost : inv.itemCost;
-      const costSrc = manualCost ? "manual" : inv.unknown.length ? "missing" : "items";
+      const fromDocs = c && c.costDocs && c.costDocs.length ? docCost(c.costDocs, pmap) : null;
+      const manualCost = !!fromDocs || (c && c.cost != null);
+      const cost = fromDocs ? r2(fromDocs.total + (c.cost || 0)) : manualCost ? c.cost : inv.itemCost;
+      const costSrc = fromDocs ? "docs" : manualCost ? "manual" : inv.unknown.length ? "missing" : "items";
       const gp = r2(inv.sales - (inv.sales <= 0 && !manualCost ? 0 : cost));
-      return { ...inv, src, splits, deal: d ? { id: d.id, title: d.title, owner: d.owner } : null, note: c ? c.note : "", cost: r2(cost), costSrc, gp, creditBy: c ? c.by : "", creditAt: c ? c.at : "" };
+      return { ...inv, src, splits, deal: d ? { id: d.id, title: d.title, owner: d.owner } : null, note: c ? c.note : "", cost: r2(cost), costSrc, gp, creditBy: c ? c.by : "", creditAt: c ? c.at : "",
+        costDocs: fromDocs ? fromDocs.docs : [], costDocsMissing: fromDocs ? fromDocs.missing : 0, otherCost: c && c.cost != null ? c.cost : null };
     });
     // Collected share of an invoice at a date.
     const frac = (inv, asOf) => {
@@ -365,7 +383,7 @@ module.exports = function makeSales(H) {
     const t0 = today();
     const rows = m.invs.filter(i => +i.date.slice(0, 4) === year).map(i => ({
       id: i.id, number: i.number, date: i.date, customer: i.customer, customerId: i.customerId, title: i.title, sales: i.sales, subtotal: i.subtotal, total: i.total, credits: i.credits,
-      cost: i.cost, itemCost: i.itemCost, costSrc: i.costSrc, unknown: i.unknown, gp: i.gp, gpPct: i.sales ? Math.round(i.gp / i.sales * 1000) / 10 : null,
+      cost: i.cost, itemCost: i.itemCost, costSrc: i.costSrc, unknown: i.unknown, gp: i.gp, costDocs: i.costDocs, costDocsMissing: i.costDocsMissing, otherCost: i.otherCost, gpPct: i.sales ? Math.round(i.gp / i.sales * 1000) / 10 : null,
       src: i.src, splits: i.splits.map(s => ({ ...s, name: nameOf(s.email, m.st.plans) })), deal: i.deal, account: (m.st.accts.get(i.customerId) || {}).email || "", salesperson: i.salesperson,
       note: i.note, by: i.creditBy, at: i.creditAt, collectedPct: Math.round(m.frac(i, t0) * 1000) / 10, balance: i.balance, overdue: i.overdue,
       locked: m.entries.some(e => e.inv.id === i.id && e.paidOut),
@@ -387,10 +405,31 @@ module.exports = function makeSales(H) {
     }
     let cost = "";
     if (b.cost !== "" && b.cost != null) { cost = r2(num(b.cost)); if (cost < 0) fail(400, "The cost can't be negative."); if (cost > inv.subtotal * 20 + 1e6) fail(400, "That cost looks wrong. Check the figure."); }
+    // Supplier lines picked as the cost: purchase orders, bills or expenses, each line with the quantity used for this sale.
+    let costDocs = [];
+    if (Array.isArray(b.costDocs) && b.costDocs.length) {
+      if (b.costDocs.length > 30) fail(400, "Pick at most 30 supplier documents.");
+      const pmap = new Map((await books().purchaseDocs(co)).map(d => [d.id, d]));
+      costDocs = b.costDocs.map(cd => {
+        const d = pmap.get(clean(cd.id, 60));
+        if (!d) fail(400, "One of the supplier documents no longer exists or isn't posted. Pick the cost again.");
+        const lines = (Array.isArray(cd.lines) ? cd.lines : []).map(x => {
+          const l = d.lines.find(y => y.i === Math.round(num(x.i)));
+          if (!l) fail(400, `A line on ${d.number} no longer exists. Pick the cost again.`);
+          const qty = Math.round(num(x.qty) * 10000) / 10000;
+          if (!(qty > 0) || qty > l.qty + 1e-9) fail(400, `On ${d.number}, "${l.name}": use between 0 and ${l.qty}.`);
+          return { i: l.i, qty };
+        });
+        if (!lines.length) fail(400, `Pick at least one line on ${d.number}, or remove it.`);
+        if (new Set(lines.map(l => l.i)).size !== lines.length) fail(400, `A line on ${d.number} is picked twice.`);
+        return { id: d.id, lines };
+      });
+      if (new Set(costDocs.map(c => c.id)).size !== costDocs.length) fail(400, "A supplier document is picked twice.");
+    }
     const t = await table(T), now = new Date().toISOString();
-    await t.upsertEntity({ partitionKey: pk("credit", co), rowKey: invoiceId, splits: JSON.stringify(splits), cost, note: clean(b.note, 300), updatedBy: user.email, updatedAt: now }, "Replace");
+    await t.upsertEntity({ partitionKey: pk("credit", co), rowKey: invoiceId, splits: JSON.stringify(splits), cost, costDocs: JSON.stringify(costDocs), note: clean(b.note, 300), updatedBy: user.email, updatedAt: now }, "Replace");
     if (b.remember && splits.length === 1 && inv.customerId) await t.upsertEntity({ partitionKey: pk("acct", co), rowKey: inv.customerId, email: splits[0].email, customer: inv.customer, updatedBy: user.email, updatedAt: now }, "Replace");
-    if (user.aud) { user.aud.name = `Invoice ${inv.number}`; user.aud.changes = [house ? "house account" : splits.map(s => `${s.email} ${s.pct}%`).join(", "), cost === "" ? "cost automatic" : `cost AED ${cost}`].concat(b.remember && splits.length === 1 ? [`account manager for ${inv.customer}`] : []); }
+    if (user.aud) { user.aud.name = `Invoice ${inv.number}`; user.aud.changes = [house ? "house account" : splits.map(s => `${s.email} ${s.pct}%`).join(", "), costDocs.length ? `cost from ${costDocs.length} supplier document${costDocs.length > 1 ? "s" : ""}${cost !== "" ? ` + AED ${cost} other` : ""}` : cost === "" ? "cost automatic" : `cost AED ${cost}`].concat(b.remember && splits.length === 1 ? [`account manager for ${inv.customer}`] : []); }
     return (await credits(user, +inv.date.slice(0, 4))).invoices.find(i => i.id === invoiceId);
   }
   async function resetCredit(user, invoiceId) {
@@ -399,6 +438,53 @@ module.exports = function makeSales(H) {
     const inv = (await books().salesData(co)).find(i => i.id === invoiceId);
     if (user.aud) user.aud.name = `Invoice ${inv ? inv.number : invoiceId}`;
     return inv ? (await credits(user, +inv.date.slice(0, 4))).invoices.find(i => i.id === invoiceId) : null;
+  }
+
+  // ---------- cost sources: supplier POs, bills and expenses that could be this invoice's cost ----------
+  // Suggested when they share the invoice's deal, mention the customer, the invoice, quotation or customer PO number,
+  // or buy the same items that were sold. Lines already used for other invoices show where, with what is left.
+  async function costSources(user, invoiceId) {
+    needManager(user); const co = coOf(user);
+    const [inv0, pdocs, st] = await Promise.all([books().salesData(co).then(l => l), books().purchaseDocs(co), load(co)]);
+    const inv = inv0.find(i => i.id === invoiceId);
+    if (!inv) fail(404, "That invoice isn't issued, or doesn't exist.");
+    const invNo = new Map(inv0.map(i => [i.id, i.number]));
+    const used = new Map(); // docId|line → [{invoice, qty}]
+    st.credits.forEach((c, id) => { if (id === invoiceId) return; (c.costDocs || []).forEach(cd => (cd.lines || []).forEach(l => { const k = `${cd.id}|${l.i}`; if (!used.has(k)) used.set(k, []); used.get(k).push({ invoice: invNo.get(id) || id, qty: num(l.qty) }); })); });
+    const mine = st.credits.get(invoiceId);
+    const picked = new Map(((mine && mine.costDocs) || []).map(cd => [cd.id, new Map(cd.lines.map(l => [l.i, num(l.qty)]))]));
+    const soldQty = new Map(); inv.lines.forEach(l => { if (l.itemId) soldQty.set(l.itemId, (soldQty.get(l.itemId) || 0) + l.qty); });
+    const lc = x => String(x || "").toLowerCase();
+    const cust = lc(inv.customer).replace(/\b(llc|l\.l\.c|fze|fzco|fzc|co|company|est|establishment|trading|the)\b\.?/g, " ").replace(/\s+/g, " ").trim();
+    const numbers = [inv.number, ...inv.srcNos, inv.poRef].filter(x => x && x.length >= 3).map(lc);
+    const day = s2 => Date.parse(s2 + "T00:00:00Z") / 864e5;
+    const lo = day(inv.date) - 365, hi = day(inv.date) + 120;
+    const out = pdocs.filter(d => picked.has(d.id) || (day(d.date) >= lo && day(d.date) <= hi)).map(d => {
+      // A bill made from a purchase order inherits what the order says (customer, deliver-to, deal).
+      const po = d.fromId ? pdocs.find(x => x.id === d.fromId) : null;
+      const text = lc([d.title, d.ref, d.deliverTo, d.note, d.supplier, ...d.lines.map(l => l.name), ...(po ? [po.title, po.deliverTo, po.note, po.ref] : [])].join(" "));
+      const why = []; let score = 0;
+      if (inv.dealId && (d.dealId === inv.dealId || (po && po.dealId === inv.dealId))) { score += 100; why.push("same deal"); }
+      const nm = numbers.find(n => text.includes(n)); if (nm) { score += 60; why.push(`mentions ${nm.toUpperCase()}`); }
+      if (cust.length >= 4 && text.includes(cust)) { score += 50; why.push("mentions the customer"); }
+      const overlap = d.lines.filter(l => l.itemId && soldQty.has(l.itemId));
+      if (overlap.length) { score += 30 + Math.min(20, overlap.length * 5); why.push(`${overlap.length} item${overlap.length > 1 ? "s" : ""} sold on this invoice`); }
+      const gap = day(d.date) - day(inv.date); if (score && gap >= -90 && gap <= 30) score += 10;
+      if (d.type === "po" && d.billedAs.length) score -= 25; // the bill is the better source
+      if (po && score > 0) { score += 5; why.push(`billed from ${po.number}`); }
+      const lines = d.lines.map(l => {
+        const u = used.get(`${d.id}|${l.i}`) || [], usedQty = r2(u.reduce((a, x) => a + x.qty, 0)), left = Math.max(0, r2(l.qty - usedQty));
+        const pickedQty = picked.has(d.id) ? picked.get(d.id).get(l.i) || 0 : 0;
+        // Pre-select for a suggestion: lines for items sold here (up to the quantity sold), or every line still free when the match is on deal / numbers / customer.
+        let suggestQty = 0;
+        if (l.itemId && soldQty.has(l.itemId)) suggestQty = Math.min(left, soldQty.get(l.itemId));
+        else if (!overlap.length && score >= 50) suggestQty = left;
+        return { ...l, used: u, left, picked: pickedQty, suggestQty: r2(suggestQty) };
+      });
+      return { id: d.id, type: d.type, number: d.number, date: d.date, supplier: d.supplier, ref: d.ref, title: d.title, deliverTo: d.deliverTo, cost: d.cost, billedAs: d.billedAs,
+        fromPo: d.fromId ? (pdocs.find(x => x.id === d.fromId) || {}).number || "" : "", score, why, picked: picked.has(d.id), lines };
+    }).sort((a, b) => (b.picked - a.picked) || b.score - a.score || b.date.localeCompare(a.date)).slice(0, 400);
+    return { invoice: { id: inv.id, number: inv.number, date: inv.date, customer: inv.customer, sales: inv.sales, lines: inv.lines }, docs: out, otherCost: mine && mine.cost != null ? mine.cost : null };
   }
 
   // ---------- account managers (customer → salesperson) ----------
@@ -531,6 +617,7 @@ module.exports = function makeSales(H) {
       if (b && method === "PUT") return saveCredit(user, b, body);
       if (b && method === "DELETE") return resetCredit(user, b);
     }
+    if (a === "costsources" && b && method === "GET") return costSources(user, b);
     if (a === "accounts") {
       if (!b && method === "GET") return accounts(user);
       if (b && method === "PUT") return saveAccount(user, b, body);

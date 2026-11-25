@@ -1246,6 +1246,7 @@ module.exports = function makeBooks(H) {
       }
     });
     const dealOf = d => { for (let i = 0, x = d; x && i < 5; i++, x = x.fromId ? byId.get(x.fromId) : null) if (x.dealId) return x.dealId; return ""; };
+    const srcNos = d => { const out = []; for (let i = 0, x = d.fromId ? byId.get(d.fromId) : null; x && i < 5; i++, x = x.fromId ? byId.get(x.fromId) : null) out.push(x.number); return out.filter(Boolean); };
     const t0 = today();
     return rows.filter(e => e.type === "invoice" && e.status === "posted").map(e => {
       const d = headOut(e), body = unpackJson(e);
@@ -1263,7 +1264,21 @@ module.exports = function makeBooks(H) {
       const collected = r2(receipts.reduce((a, r) => a + r.amt, 0));
       return { id: d.id, number: d.number, date: d.date, dueDate: d.dueDate, customerId: d.contactId, customer: d.contactName, title: d.title, subtotal: d.subtotal, total: d.total,
         sales, collectible, receipts, collected, credits: credited.map(c => ({ ref: c.ref, date: c.date, subtotal: c.subtotal, cost: c.cost })), dealId: dealOf(d), salesperson: clean(body.salesperson, 100),
+        srcNos: srcNos(d), poRef: clean(body.poRef, 80), lines: (body.lines || []).map(l => ({ itemId: l.itemId || "", name: clean(l.name, 160), qty: num(l.qty) || 0 })),
         itemCost: r2(Math.max(0, cost - credited.reduce((a, c) => a + c.cost, 0))), unknown, balance: r2(Math.max(0, collectible - collected)), overdue: !!(d.dueDate && d.dueDate < t0 && collectible - collected > 0.004) };
+    });
+  }
+  // ---------- Targets & Commission: supplier purchase orders, bills and expenses that can be the cost of a sale ----------
+  // Cost per line = value before VAT, plus VAT that can't be recovered (it is a real cost). Bills and expenses must be posted.
+  async function purchaseDocs(co) {
+    const rows = await all(await table(T), dPK(co));
+    const billedAs = new Map();
+    rows.forEach(e => { if (e.type === "bill" && e.fromId && e.status !== "void") { if (!billedAs.has(e.fromId)) billedAs.set(e.fromId, []); billedAs.get(e.fromId).push({ id: e.rowKey, number: e.number }); } });
+    return rows.filter(e => (e.type === "po" && !["void", "cancelled", "declined"].includes(e.status)) || (["bill", "expense"].includes(e.type) && e.status === "posted")).map(e => {
+      const d = headOut(e), body = unpackJson(e);
+      const lines = (body.lines || []).map((l, i) => { const qty = num(l.qty) || 1, cost = r2(num(l.net) + (l.blocked ? num(l.vatAmt) : 0)); return { i, name: clean(l.name, 160), itemId: l.itemId || "", qty, cost, unit: Math.round(cost / qty * 10000) / 10000 }; }).filter(l => l.cost !== 0);
+      return { id: d.id, type: d.type, number: d.number, date: d.date, status: d.status, supplier: d.contactName || clean(body.payee || body.payeeName, 150), ref: d.ref, title: d.title,
+        deliverTo: clean(body.deliverTo, 300), note: clean(d.internalNote, 300), dealId: d.dealId || "", fromId: d.fromId || "", billedAs: billedAs.get(d.id) || [], cost: r2(lines.reduce((a, l) => a + l.cost, 0)), lines };
     });
   }
   // Company letterhead details for other modules' documents (HR payslips).
@@ -1273,5 +1288,5 @@ module.exports = function makeBooks(H) {
   async function docStatus(co, id) { const e = await getOrNull(await table(T), dPK(co), id); return e ? e.status : null; }
   // Petty cash: issued invoices, so cash sales logged in petty cash can be posted as payments against them.
   async function pcInvoices(co) { return decorate(await allDocs(co)).filter(d => d.type === "invoice" && d.status === "posted").map(d => ({ id: d.id, number: d.number, date: d.date, contactId: d.contactId, contactName: d.contactName, total: d.total, balance: d.balance })); }
-  return { route, alerts, TYPES, invoicesForAmc, orgProfile, challansFor, stockDocs, stockDoc, pcInfo, docStatus, pcInvoices, salesData };
+  return { route, alerts, TYPES, invoicesForAmc, orgProfile, challansFor, stockDocs, stockDoc, pcInfo, docStatus, pcInvoices, salesData, purchaseDocs };
 };

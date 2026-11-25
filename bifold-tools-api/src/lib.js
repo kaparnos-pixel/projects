@@ -592,12 +592,24 @@ const CHQ_STATUS = ["pending", "cleared", "bounced", "cancelled"];
 const PAYEE_TYPES = ["Supplier", "Vendor", "Customer"];
 const FORMS = ["Cheque", "Bank guarantee", "Cash / transfer"];
 
+// Security deposit acknowledgement letter: a security cheque handed to a customer against an advance payment.
+// When "ack" is on, the entry carries the letter details and gets a letter number (BFT-SCA-2026-001 / TH-SCA-2026-001)
+// from a per-company, per-year counter. The letter is drawn in the browser (bifold-tools/pdc/ack.js); the API keeps the
+// details, the number, the signatory settings and the customer's signed copy (blob container "pdc-files").
+const LETTER_PREFIX = { bifold: "BFT", techhub: "TH" };
+const DEFAULT_RETURN = "on completion of the project, or once the advance payment has been fully adjusted against our invoices, whichever is earlier";
+const PDC_FILE_MAX = 10 * 1048576;
+const signedFileOf = e => { try { const f = JSON.parse(e.signedFile || "null"); return f && f.id ? f : null; } catch { return null; } };
+
 function chqOut(e) {
   return {
     id: e.rowKey, co: rowCo(e), kind: e.kind || "pdc", form: e.form || "", company: e.company || "", payeeType: e.payeeType || "", payee: e.payee || "",
     chequeNo: e.chequeNo || "", bank: e.bank || "", amount: num(e.amount), poValue: num(e.poValue),
     chequeDate: e.chequeDate || "", clearanceDate: e.clearanceDate || "",
     status: e.status || "pending", reference: e.reference || "", notes: e.notes || "",
+    ack: !!e.ack, project: e.project || "", advanceAmount: num(e.advanceAmount), handedOverDate: e.handedOverDate || "",
+    contact: e.contact || "", contactTitle: e.contactTitle || "", customerAddress: e.customerAddress || "", returnWhen: e.returnWhen || "",
+    letterNo: e.letterNo || "", letterSignedAt: e.letterSignedAt || "", letterSignedBy: e.letterSignedBy || "", signedFile: signedFileOf(e),
     reminderSentAt: e.reminderSentAt || "", createdBy: e.createdBy, createdAt: e.createdAt,
     updatedBy: e.updatedBy, updatedAt: e.updatedAt, etag: e.etag,
   };
@@ -624,7 +636,20 @@ function chqIn(b) {
   if (!isDate(f.clearanceDate)) fail(400, pdc ? "Pick the clearance date." : "Pick the expiry / return date.");
   if (f.chequeDate && !isDate(f.chequeDate)) fail(400, "The issue date is not valid.");
   if (!CHQ_STATUS.includes(f.status)) fail(400, "Choose a valid status.");
-  return f;
+  // Acknowledgement letter details: only for a security deposit given as a cheque.
+  f.ack = kind === "deposit" && f.form === "Cheque" && (b.ack === true || b.ack === "true" || b.ack === "1");
+  const L = {
+    project: clean(b.project, 200), advanceAmount: Math.max(0, Math.round(num(b.advanceAmount) * 100) / 100), handedOverDate: clean(b.handedOverDate, 10),
+    contact: clean(b.contact, 120), contactTitle: clean(b.contactTitle, 120), customerAddress: clean(b.customerAddress, 400), returnWhen: clean(b.returnWhen, 400),
+  };
+  if (f.ack) {
+    if (!L.project) fail(400, "Enter the project name for the acknowledgement letter.");
+    if (!(L.advanceAmount > 0) || L.advanceAmount > 1e11) fail(400, "Enter the advance payment received from the customer.");
+    if (L.handedOverDate && !isDate(L.handedOverDate)) fail(400, "The date handed to the customer is not valid.");
+    if (!L.handedOverDate) L.handedOverDate = new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+    if (L.returnWhen === DEFAULT_RETURN) L.returnWhen = "";
+  }
+  return Object.assign(f, L);
 }
 async function listCheques(user) {
   const rows = await all(await table(PDC), QPK);
@@ -636,6 +661,24 @@ async function findChequeNo(f, exceptId) {
   return (await all(await table(PDC), QPK)).map(chqOut).find(c => c.co === f.co && c.kind === f.kind && c.chequeNo.toLowerCase() === n && c.id !== exceptId && c.status !== "cancelled");
 }
 const dupMsg = (d, f) => `${KINDS[d.kind]} ${d.chequeNo} for ${f.company} is already logged (${d.payee}).`;
+// Next letter number for a company and year. The counter is one row per company and year, updated with its etag,
+// so two people saving at the same moment never get the same number.
+async function nextLetterNo(co) {
+  const t = await table(PDC);
+  const year = new Date(Date.now() + 4 * 3600e3).getUTCFullYear();
+  const rk = `${co}-${year}`;
+  for (let i = 0; i < 8; i++) {
+    const cur = await getOrNull(t, "letterseq", rk);
+    const n = (cur ? num(cur.last) : 0) + 1;
+    try {
+      if (cur) await t.updateEntity({ partitionKey: "letterseq", rowKey: rk, last: n }, "Replace", { etag: cur.etag });
+      else await t.createEntity({ partitionKey: "letterseq", rowKey: rk, last: n });
+      return `${LETTER_PREFIX[co] || "BFT"}-SCA-${year}-${String(n).padStart(3, "0")}`;
+    } catch (err) { if (err.statusCode !== 412 && err.statusCode !== 409) throw err; await new Promise(r => setTimeout(r, 40 + Math.random() * 120)); }
+  }
+  fail(409, "Couldn't give this letter a number because several were being saved at once. Save again.");
+}
+const LETTER_KEYS = ["letterNo", "letterSignedAt", "letterSignedBy", "signedFile"];
 async function createCheque(user, b) {
   const f = chqIn(b);
   f.co = writeCo(user); f.company = CO[f.co].name;
@@ -643,6 +686,7 @@ async function createCheque(user, b) {
   if (dup) fail(409, dupMsg(dup, f));
   const now = new Date().toISOString();
   const e = { partitionKey: QPK, rowKey: crypto.randomUUID(), ...f, reminderSentAt: "", createdBy: user.email, createdAt: now, updatedBy: user.email, updatedAt: now };
+  if (f.ack) e.letterNo = await nextLetterNo(f.co);
   await (await table(PDC)).createEntity(e);
   return chqOut(await (await table(PDC)).getEntity(QPK, e.rowKey));
 }
@@ -656,6 +700,9 @@ async function updateCheque(user, id, b) {
   if (dup) fail(409, dupMsg(dup, f));
   const reminderSentAt = cur.clearanceDate === f.clearanceDate ? (cur.reminderSentAt || "") : "";
   const next = { partitionKey: QPK, rowKey: id, ...f, reminderSentAt, createdBy: cur.createdBy, createdAt: cur.createdAt, updatedBy: user.email, updatedAt: new Date().toISOString() };
+  // A letter number, once given, stays with the entry even if the letter is switched off, so numbers are never reused.
+  for (const k of LETTER_KEYS) if (cur[k]) next[k] = cur[k];
+  if (f.ack && !next.letterNo) next.letterNo = await nextLetterNo(f.co);
   if (user.aud) user.aud.changes = audit().diff(cur, next);
   try { await t.updateEntity(next, "Replace", { etag: b.etag || cur.etag }); }
   catch (err) { if (err.statusCode === 412) fail(409, "Someone else changed this entry after you opened it. Reload to see their changes, then make yours again."); throw err; }
@@ -665,10 +712,97 @@ async function deleteCheque(user, id) {
   const t = await table(PDC);
   const cur = await getOrNull(t, QPK, id);
   if (!cur || !inCo(cur, user)) return;
-  if (user.aud) user.aud.name = [cur.type, cur.chequeNo || cur.ref, cur.party || cur.customerName, cur.amount ? "AED " + cur.amount : ""].filter(Boolean).join(" ");
+  if (user.aud) user.aud.name = [KINDS[cur.kind || "pdc"], cur.chequeNo, cur.payee, cur.amount ? "AED " + cur.amount : ""].filter(Boolean).join(" ");
   writeCo(user);
   if (!user.isManager && cur.createdBy !== user.email) fail(403, "Only the person who logged this entry or a manager can delete it. Mark it cancelled instead.");
   await t.deleteEntity(QPK, id);
+  const sf = signedFileOf(cur); if (sf) await (await pdcBlobs()).deleteBlob(sf.id).catch(() => {});
+}
+
+// ---- letter: signed copy, download log, signatory settings ----
+let pdcContainer = null;
+async function pdcBlobs() {
+  if (!pdcContainer) {
+    const cs = process.env.STORAGE_CONNECTION; if (!cs) fail(500, "Storage is not set up yet. Add the STORAGE_CONNECTION setting to the Static Web App.");
+    const c = BlobServiceClient.fromConnectionString(cs).getContainerClient("pdc-files");
+    await c.createIfNotExists();
+    pdcContainer = c;
+  }
+  return pdcContainer;
+}
+async function loadLetter(user, id) {
+  const t = await table(PDC);
+  const cur = await getOrNull(t, QPK, id);
+  if (!cur || !inCo(cur, user)) fail(404, "This entry no longer exists.");
+  if (!cur.letterNo) fail(400, "This entry has no acknowledgement letter.");
+  if (user.aud) user.aud.name = `${cur.letterNo}, ${cur.payee}`;
+  return { t, cur };
+}
+// Signed copy received: the date the customer's signed copy came back, and optionally a scan of it.
+async function markSigned(user, id, b) {
+  writeCo(user);
+  const { t, cur } = await loadLetter(user, id);
+  const date = clean(b.date, 10) || new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+  if (!isDate(date)) fail(400, "The date the signed copy came back is not valid.");
+  let file = null;
+  if (b.file && b.file.data) {
+    const name = clean(b.file.name, 200).replace(/[\\/\u0000-\u001f]/g, "_") || "signed copy";
+    const type = clean(b.file.type, 120);
+    if (!/^(application\/pdf|image\/(png|jpeg|webp))$/.test(type)) fail(400, "Attach the signed copy as a PDF or a photo (JPG or PNG).");
+    const buf = Buffer.from(String(b.file.data), "base64");
+    if (!buf.length) fail(400, `${name} is empty.`);
+    if (buf.length > PDC_FILE_MAX) fail(413, `${name} is larger than 10 MB.`);
+    file = { id: crypto.randomUUID(), name, type, size: buf.length, by: user.email, at: new Date().toISOString() };
+    await (await pdcBlobs()).getBlockBlobClient(file.id).uploadData(buf, { blobHTTPHeaders: { blobContentType: type }, metadata: { entry: id, co: rowCo(cur) } });
+  }
+  const old = signedFileOf(cur);
+  const patch = { partitionKey: QPK, rowKey: id, letterSignedAt: date, letterSignedBy: user.email, updatedBy: user.email, updatedAt: new Date().toISOString() };
+  if (file) patch.signedFile = JSON.stringify(file);
+  if (user.aud) user.aud.changes = [`signed copy received ${date}` + (file ? `, scan ${file.name}` : "")];
+  try { await t.updateEntity(patch, "Merge", { etag: cur.etag }); }
+  catch (err) { if (file) await (await pdcBlobs()).deleteBlob(file.id).catch(() => {}); if (err.statusCode === 412) fail(409, "This entry changed while you were saving. Try again."); throw err; }
+  if (file && old) await (await pdcBlobs()).deleteBlob(old.id).catch(() => {});
+  return chqOut(await t.getEntity(QPK, id));
+}
+async function unmarkSigned(user, id) {
+  writeCo(user);
+  const { t, cur } = await loadLetter(user, id);
+  if (!user.isManager && cur.createdBy !== user.email) fail(403, "Only the person who logged this entry or a manager can undo the signed copy.");
+  const old = signedFileOf(cur);
+  await t.updateEntity({ partitionKey: QPK, rowKey: id, letterSignedAt: "", letterSignedBy: "", signedFile: "", updatedBy: user.email, updatedAt: new Date().toISOString() }, "Merge", { etag: cur.etag })
+    .catch(err => { if (err.statusCode === 412) fail(409, "This entry changed while you were saving. Try again."); throw err; });
+  if (old) await (await pdcBlobs()).deleteBlob(old.id).catch(() => {});
+  return chqOut(await t.getEntity(QPK, id));
+}
+async function getSignedFile(user, id, download) {
+  const { cur } = await loadLetter(user, id);
+  const f = signedFileOf(cur);
+  if (!f) fail(404, "No signed copy is attached.");
+  let buf;
+  try { buf = await (await pdcBlobs()).getBlockBlobClient(f.id).downloadToBuffer(); } catch (err) { if (err.statusCode === 404) fail(404, "That file is no longer available."); throw err; }
+  return { __binary: buf, headers: { "Content-Type": download ? "application/octet-stream" : f.type, "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(f.name)}`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } };
+}
+// The browser draws the letter; this only notes in the activity log that it was downloaded or previewed.
+async function letterEvent(user, id, b) {
+  await loadLetter(user, id);
+  const what = ["word", "pdf", "preview"].includes(b.format) ? b.format : "pdf";
+  if (user.aud) user.aud.changes = [what === "preview" ? "previewed PDF" : `downloaded ${what === "word" ? "Word" : "PDF"}`];
+}
+// Letter settings per company: who signs the letter for the company. Managers change them.
+async function getLetterSettings(user) {
+  const t = await table(PDC);
+  const cos = user.co === "all" ? Object.keys(CO) : [user.co];
+  const byCo = {};
+  for (const co of cos) { const e = await getOrNull(t, "settings", co); byCo[co] = { signatory: (e && e.signatory) || "", title: (e && e.title) || "" }; }
+  return { byCo, canEdit: !!user.isManager && user.co !== "all", defaultReturn: DEFAULT_RETURN };
+}
+async function setLetterSettings(user, b) {
+  const co = writeCo(user);
+  if (!user.isManager) fail(403, "Only a manager can change who signs the letters.");
+  const row = { partitionKey: "settings", rowKey: co, signatory: clean(b.signatory, 120), title: clean(b.title, 120), updatedBy: user.email, updatedAt: new Date().toISOString() };
+  if (user.aud) user.aud.changes = [`signatory: ${row.signatory || "(blank)"}, ${row.title || "(blank)"}`];
+  await (await table(PDC)).upsertEntity(row, "Replace");
+  return getLetterSettings(user);
 }
 
 // ---------- AMC Tracker (src/amc.js) ----------
@@ -903,10 +1037,20 @@ async function route(method, seg, user, body) {
     if (id && !sub && method === "DELETE") return deleteDeal(user, id);
   }
   if (a === "cheques") {
+    if (id === "settings") {
+      if (method === "GET") return getLetterSettings(user);
+      if (method === "PUT") return setLetterSettings(user, body);
+    }
     if (!id && method === "GET") return listCheques(user);
     if (!id && method === "POST") return createCheque(user, body);
-    if (id && method === "PUT") return updateCheque(user, id, body);
-    if (id && method === "DELETE") return deleteCheque(user, id);
+    if (id && sub === "signed") {
+      if (method === "POST") return markSigned(user, id, body);
+      if (method === "DELETE") return unmarkSigned(user, id);
+      if (method === "GET") return getSignedFile(user, id, seg[3] === "download");
+    }
+    if (id && sub === "letter" && method === "POST") return letterEvent(user, id, body);
+    if (id && !sub && method === "PUT") return updateCheque(user, id, body);
+    if (id && !sub && method === "DELETE") return deleteCheque(user, id);
   }
   fail(404, "Unknown request.");
 }
@@ -924,7 +1068,7 @@ function shouldRecord(method, seg, status, user, body) {
   if (a === "mk" && (b === "audience" || b === "render.js")) return false;
   if (a === "mk" && b === "social" && c === "callback") return true; // connecting a social account is a change made by a page load
   if (a === "me") return !!(user && user.aud && user.aud.signin);
-  const fileGet = method === "GET" && ((a === "pnl" && c === "files" && seg[3]) || (a === "deals" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c) || (a === "books" && b === "docs" && seg[3] === "files" && seg[4]));
+  const fileGet = method === "GET" && ((a === "cheques" && c === "signed") || (a === "pnl" && c === "files" && seg[3]) || (a === "deals" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c) || (a === "books" && b === "docs" && seg[3] === "files" && seg[4]));
   // Photos and signatures shown in the report editor are not logged one by one; downloads are.
   if (a === "pcr" && b === "files" && method === "GET") return seg[3] === "download" || status === 403;
   // Refused reads are logged for people who have some access (trying beyond it); people with none are logged at sign-in.

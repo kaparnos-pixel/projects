@@ -11,7 +11,7 @@ const crypto = require("crypto");
 
 const SKIP_KEYS = new Set(["partitionKey", "rowKey", "etag", "timestamp", "odata.etag", "updatedAt", "updatedBy", "createdAt", "createdBy", "dataChunks", "acl", "files", "contacts",
   "reminderSentAt", "linkExpires", "signedAt", "alertsSent", "lastAlertAt", "proposalStatus", "proposalAt", "proposalStale", "proposalSource", "sentAt", "stageAt", "closedAt", "directCost", "netPct", "co", "company", "gl", "tax", "allocs", "counters", "fromId", "toId", "ctData"]);
-const LABELS = { contactName: "contact", poNo: "PO no.", poValue: "PO value", netProfit: "net profit", customerName: "customer", customerId: null, scheduledDate: "date",
+const LABELS = { ack: "acknowledgement letter", advanceAmount: "advance payment", handedOverDate: "date handed over", returnWhen: "return condition", customerAddress: "customer address", letterNo: "letter no.", signedFile: null, contactName: "contact", poNo: "PO no.", poValue: "PO value", netProfit: "net profit", customerName: "customer", customerId: null, scheduledDate: "date",
   engineers: "engineer", trn: "TRN", amount: "amount", chequeNo: "cheque no.", clearanceDate: "clearance date", value: "value", status: "status", stage: "stage", title: "title", poRef: "PO ref", projectTitle: "project", completionDate: "completion date", preparedBy: "prepared by", docNo: "doc no." };
 
 module.exports = function makeAudit(H) {
@@ -74,8 +74,17 @@ module.exports = function makeAudit(H) {
       if (method === "DELETE") return ["Sales Pipeline", "Deleted deal", name || b, ""];
     }
     if (a === "cheques") {
-      const lbl = x => [x.type, x.chequeNo || x.ref, x.party || x.customerName].filter(Boolean).join(" ");
-      if (method === "POST") return ["PDC & Guarantees", "Logged entry", lbl(out), out.amount ? "AED " + short(out.amount) : ""];
+      const KN = { pdc: "PDC cheque", deposit: "Security deposit", apg: "Advance payment guarantee" };
+      const lbl = x => [KN[x.kind] || "", x.chequeNo, x.payee].filter(Boolean).join(" ");
+      const A = "PDC & Guarantees";
+      if (b === "settings") return [A, "Changed letter signatory", "", ch];
+      if (c === "letter") return [A, (body.format === "preview" ? "Previewed" : "Downloaded") + " acknowledgement letter", name || b, ch];
+      if (c === "signed") {
+        if (method === "POST") return [A, "Signed copy received", name || b, ch];
+        if (method === "DELETE") return [A, "Undid signed copy received", name || b, ""];
+        if (method === "GET") return [A, d === "download" ? "Downloaded signed copy" : "Opened signed copy", name || b, ""];
+      }
+      if (method === "POST") return [A, out.letterNo ? "Logged entry and created letter" : "Logged entry", lbl(out), [out.amount ? "AED " + short(out.amount) : "", out.letterNo].filter(Boolean).join(", ")];
       if (method === "PUT") return ["PDC & Guarantees", "Edited entry", lbl(out) || name, ch];
       if (method === "DELETE") return ["PDC & Guarantees", "Deleted entry", name || b, ""];
     }

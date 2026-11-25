@@ -684,7 +684,7 @@
     try { await loadSoc(); } catch (e) { $("sList").innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
     drawSocHead(); drawSocList();
     if (sub === "connected") { toast(`Connected: ${decodeURIComponent(arg || "")}.`); history.replaceState(null, "", "#social"); openSocSettings(); }
-    if (sub === "error") { toast(decodeURIComponent(arg || "The connection didn't work."), true); history.replaceState(null, "", "#social"); openSocSettings(); }
+    if (sub === "error") { socConnErr = decodeURIComponent(arg || "The connection didn't work."); history.replaceState(null, "", "#social"); openSocSettings(); }
     if (sub === "pick") { history.replaceState(null, "", "#social"); openSocSettings(); }
     if (sub === "settings") { history.replaceState(null, "", "#social"); openSocSettings(); }
   }
@@ -731,10 +731,13 @@
   };
 
   // settings and accounts
+  let socConnErr = "";
   function openSocSettings() {
     if (!SOC || !SOC.isManager) return;
     const S = SOC.settings, C = SOC.connected;
-    $("socAccts").innerHTML = Object.entries(SOC.apps).map(([k, a]) => {
+    const errBox = socConnErr ? `<div class="connerr"><b>The last connection didn't work.</b> ${esc(socConnErr)}</div>` : "";
+    socConnErr = "";
+    $("socAccts").innerHTML = errBox + Object.entries(SOC.apps).map(([k, a]) => {
       const conn = a.nets.filter(n => C[n]);
       const pk = SOC.picks[k];
       return `<div class="acct"><div class="an">${a.nets.map(netIcon).join("")}<div><b>${esc(a.label)}</b>

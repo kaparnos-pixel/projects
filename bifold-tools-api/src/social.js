@@ -34,7 +34,8 @@ const APPS = {
   google: { label: "Google Business", id: "GOOGLE_CLIENT_ID", secret: "GOOGLE_CLIENT_SECRET", nets: ["google"] },
 };
 const GV = () => process.env.META_GRAPH_VERSION || "v23.0";
-const LIV = () => process.env.LINKEDIN_VERSION || "202510";
+// LinkedIn retires each monthly API version after about a year, so default to the version from two months ago.
+const LIV = () => process.env.LINKEDIN_VERSION || (() => { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 2); return d.toISOString().slice(0, 7).replace("-", ""); })();
 const STATUSES = ["draft", "approval", "scheduled", "posting", "posted", "partial", "failed", "cancelled"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DUBAI = 4 * 3600e3; // UTC+4 all year
@@ -254,7 +255,10 @@ module.exports = function makeSocial({ table, getOrNull, publicUrl, log = consol
     if (app === "linkedin") {
       const tok = (await http("https://www.linkedin.com/oauth/v2/accessToken", { method: "POST", form: { grant_type: "authorization_code", code, redirect_uri: ru, client_id: id, client_secret: secret } })).data;
       const H = liHeaders(tok.access_token);
-      const acls = (await http("https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED", { headers: H })).data.elements || [];
+      // Super admins and content admins can both post for a page.
+      const all = (await http("https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&state=APPROVED&count=100", { headers: H })).data.elements || [];
+      const acls = all.filter(a => ["ADMINISTRATOR", "CONTENT_ADMINISTRATOR", "DIRECT_SPONSORED_CONTENT_POSTER"].includes(a.role));
+      const seenOrg = new Set(); for (let i = acls.length - 1; i >= 0; i--) { const o = acls[i].organization || acls[i].organizationTarget; if (seenOrg.has(o)) acls.splice(i, 1); else seenOrg.add(o); }
       const list = [];
       for (const a of acls.slice(0, 20)) {
         const urn = a.organization || a.organizationTarget; const oid = String(urn || "").split(":").pop();

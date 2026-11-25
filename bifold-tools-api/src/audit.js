@@ -224,6 +224,13 @@ module.exports = function makeAudit(H) {
         if (method === "GET") return [A, "Opened " + lbl, out.number || c, ""];
       }
     }
+    if (a === "sales") {
+      const A = "Targets & Commission";
+      if (b === "plans") return [A, c === undefined ? "Changed plans" : d === "copy" || c === "copy" ? "Copied last year's plans" : method === "DELETE" ? "Deleted target plan" : "Saved target plan", name, ch];
+      if (b === "credits") return [A, method === "DELETE" ? "Reset invoice credit to automatic" : "Credited invoice", name, ch];
+      if (b === "accounts") return [A, method === "DELETE" ? "Removed account manager" : "Set account manager", name, ch];
+      if (b === "statements") return [A, { approve: "Approved commission statement", reopen: "Reopened commission statement", paid: "Marked commission paid" }[e] || "Changed commission statement", name, ch];
+    }
     if (a === "hr") {
       const A = "HR & Payroll";
       if (b === "settings") return [A, "Changed payroll settings", "", ch];

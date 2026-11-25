@@ -140,6 +140,7 @@
     agents: I('<rect x="4.5" y="8" width="15" height="11" rx="3"/><path d="M12 4.5V8M9.5 12.5v1M14.5 12.5v1M9.5 16h5M2.5 12.5v2M21.5 12.5v2"/><circle cx="12" cy="3.5" r="1"/>'),
     home: I('<path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>'),
     pipeline: I('<path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/>'),
+    target: I('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>'),
     pnl: I('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M8 18h2M12 18h4"/>'),
     pdc: I('<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h6M6 14h4M15.5 13.5l1.5 1.5 3-3"/>'),
     amc: I('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>'),
@@ -166,7 +167,9 @@
   // Navigation by business function. "need" lists the sections that open an item.
   const NAV = [
     { group: null, items: [{ href: "/", label: "Home", icon: "home", need: [] }, { href: "/agents/", label: "Agent Inbox", icon: "agents", need: [] }] },
-    { group: "Sales", items: [{ href: "/pipeline/", label: "Sales Pipeline", icon: "pipeline", need: ["pipeline"] }, { href: "/pnl/", label: "PnL Calculator", icon: "pnl", need: ["pnl"] }] },
+    { group: "Sales", items: [{ href: "/pipeline/", label: "Sales Pipeline", icon: "pipeline", need: ["pipeline"] },
+      { href: "/sales/", label: "Targets & Commission", icon: "target", need: ["pipeline"], subs: [["#/performance", "Performance", ["pipeline"]], ["#/statements", "Commission statements", ["pipeline"]], ["#/plans", "Targets & plans", ["pipeline"]], ["#/credits", "Invoice credits", ["manager"]], ["#/accounts", "Account managers", ["manager"]]] },
+      { href: "/pnl/", label: "PnL Calculator", icon: "pnl", need: ["pnl"] }] },
     { group: "Finance", items: [{ href: "/books/", label: "Books & VAT", icon: "books", need: BK.any, subs: [["#/dashboard", "Dashboard", BK.ledger],
         [null, "Sales", BK.any], ["#/customers", "Customers", BK.sales], ["#/quotes", "Quotations", BK.any.filter(k => k !== "bk_purch")], ["#/invoices", "Invoices", BK.sales], ["#/challans", "Delivery challans", BK.sales], ["#/receipts", "Payments received", BK.sales], ["#/creditnotes", "Credit notes", BK.sales],
         [null, "Purchases", BK.purch], ["#/vendors", "Suppliers", BK.purch], ["#/pos", "Purchase orders", BK.purch], ["#/bills", "Bills", BK.purch], ["#/payments", "Payments made", BK.purch], ["#/expenses", "Expenses", BK.purch], ["#/vendorcredits", "Vendor credits", BK.purch],
@@ -369,7 +372,7 @@
       brandPage(m);
       build(m);
       if (!m.isManager) document.querySelectorAll("[data-manager]").forEach(el => { el.hidden = true; });
-      const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/suppliers/": ["suppliers", "pdc"], "/amc/": ["amc", "visits"], "/campaigns/": ["campaigns"], "/completion/": ["completion"], "/books/": BK.any, "/hr/": ["hr"], "/pettycash/": ["pettycash", "books"], "/access/": ["manager"], "/activity/": ["manager"] };
+      const LINK = { "/pnl/": ["pnl"], "/pipeline/": ["pipeline"], "/sales/": ["pipeline"], "/pdc/": ["pdc"], "/customers/": ["customers"], "/suppliers/": ["suppliers", "pdc"], "/amc/": ["amc", "visits"], "/campaigns/": ["campaigns"], "/completion/": ["completion"], "/books/": BK.any, "/hr/": ["hr"], "/pettycash/": ["pettycash", "books"], "/access/": ["manager"], "/activity/": ["manager"] };
       document.querySelectorAll("body > :not(.bx-side) a[href]").forEach(a => { const k = LINK[a.getAttribute("href")]; if (k && !allowed(m, k)) a.hidden = true; });
       if (m.noAccess) block(m, "You don't have access yet");
       else if (pageNeeds.length && !allowed(m, pageNeeds)) block(m, "You don't have access to this tool");

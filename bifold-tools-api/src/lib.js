@@ -838,7 +838,11 @@ const pc = () => pcMod || (pcMod = require("./pettycash")({ table, getOrNull, al
 
 // ---------- HR & Payroll (src/hr.js) ----------
 let hrMod;
-const hr = () => hrMod || (hrMod = require("./hr")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, diff: (a, b) => audit().diff(a, b), books }));
+const hr = () => hrMod || (hrMod = require("./hr")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, diff: (a, b) => audit().diff(a, b), books, commissionFor: (co, ym) => sales().forPayroll(co, ym) }));
+// Targets & Commission (sales.js): targets, invoice credit, commission statements. Reads Books invoices, pipeline deals and payroll runs.
+let salesMod;
+const dealsFor = async co => (await all(await table(DEALS), DPK, DEAL_COLS)).filter(e => rowCo(e) === co).map(e => ({ ...dealOut(e), co: rowCo(e) }));
+const sales = () => salesMod || (salesMod = require("./sales")({ table, getOrNull, all, fail, clean, num, CO, emailOk, coForEmail, books, hr, dealsFor }));
 
 // ---------- Agent Inbox (src/agents.js; the agents themselves run daily from .github/scripts/agents-run.cjs) ----------
 let agentsMod;
@@ -890,6 +894,7 @@ async function alerts(user) {
   }).catch(() => {}));
   if (["books", "bk_sales", "bk_purch", "bk_reports"].some(has)) jobs.push(books().alerts(user).then(l => out.push(...l)).catch(() => {}));
   if (has("hr")) jobs.push(hr().alerts(user).then(l => out.push(...l)).catch(() => {}));
+  if (user.isManager) jobs.push(sales().alerts(user).then(l => out.push(...l)).catch(() => {}));
   if (has("pettycash") || has("books")) jobs.push(pc().alerts(user).then(l => out.push(...l)).catch(() => {}));
   if (has("inventory")) jobs.push(inv().alerts(user).then(l => out.push(...l)).catch(() => {}));
   jobs.push(agents().alerts(user).then(l => out.push(...l)).catch(() => {}));
@@ -990,6 +995,7 @@ async function route(method, seg, user, body) {
   if (a === "suppliers") return sup().route(method, seg.slice(1), user, body);
   if (a === "books") return books().route(method, seg.slice(1), user, body);
   if (a === "hr") return hr().route(method, seg.slice(1), user, body);
+  if (a === "sales") return sales().route(method, seg.slice(1), user, body);
   if (a === "inv") return inv().route(method, seg.slice(1), user, body);
   if (a === "pc") return pc().route(method, seg.slice(1), user, body);
   if (a === "agents") return agents().route(method, seg.slice(1), user, body);
@@ -1063,6 +1069,7 @@ function shouldRecord(method, seg, status, user, body) {
   if (a === "audit") return false;
   if (a === "books" && method === "GET" && b === "bootstrap") return status === 403;
   if (a === "hr" && method === "GET") return status === 403;
+  if (a === "sales" && method === "GET") return status === 403;
   if (a === "inv" && method === "GET") return status === 403;
   if (a === "pc" && method === "GET") return status === 403 || (b === "entries" && seg[3] === "files" && seg[4] === "download" && status < 400);
   if (a === "mk" && (b === "audience" || b === "render.js")) return false;

@@ -1224,6 +1224,48 @@ module.exports = function makeBooks(H) {
     }
     fail(404, "Unknown request.");
   }
+  // ---------- Targets & Commission: every issued invoice with what the sales engine needs ----------
+  // Sales = value before VAT less credit notes raised against the invoice. Collectible = total with VAT less those credit notes.
+  // Collections = payments received applied to it, plus credits applied from other invoices' credit notes, each with its date.
+  // Cost = item purchase prices (service items without a price count as own labour, cost 0); other lines are listed as unknown.
+  // A credit note's item lines (goods returned) take their cost back off; lines without an item are price adjustments.
+  async function salesData(co) {
+    const rows = await all(await table(T), dPK(co));
+    const heads = rows.map(headOut), byId = new Map(heads.map(d => [d.id, d]));
+    const rowById = new Map(rows.map(e => [e.rowKey, e]));
+    const items = new Map((await listItems(co)).map(i => [i.id, i]));
+    const itemCost = lines => (lines || []).reduce((a, l) => { const it = l.itemId ? items.get(l.itemId) : null; return a + (it && num(it.purchasePrice) > 0 ? (num(l.qty) || 0) * num(it.purchasePrice) : 0); }, 0);
+    const coll = new Map(), cns = new Map();
+    const push = (m, k, v) => { if (!m.has(k)) m.set(k, []); m.get(k).push(v); };
+    heads.forEach(d => {
+      if (d.status !== "posted") return;
+      if (d.type === "receipt") d.allocs.forEach(a => push(coll, a.id, { date: d.date, amt: r2(num(a.amt)), ref: d.number }));
+      if (d.type === "creditnote") {
+        if (d.invoiceRef) push(cns, d.invoiceRef, { date: d.date, subtotal: d.subtotal, total: d.total, ref: d.number, cost: r2(itemCost((unpackJson(rowById.get(d.id)) || {}).lines)) });
+        d.allocs.forEach(a => { if (a.id !== d.invoiceRef) push(coll, a.id, { date: d.date, amt: r2(num(a.amt)), ref: d.number }); });
+      }
+    });
+    const dealOf = d => { for (let i = 0, x = d; x && i < 5; i++, x = x.fromId ? byId.get(x.fromId) : null) if (x.dealId) return x.dealId; return ""; };
+    const t0 = today();
+    return rows.filter(e => e.type === "invoice" && e.status === "posted").map(e => {
+      const d = headOut(e), body = unpackJson(e);
+      const credited = cns.get(d.id) || [];
+      const sales = r2(d.subtotal - credited.reduce((a, c) => a + c.subtotal, 0));
+      const collectible = r2(Math.max(0, d.total - credited.reduce((a, c) => a + c.total, 0)));
+      const receipts = (coll.get(d.id) || []).sort((a, b) => a.date.localeCompare(b.date));
+      let cost = 0; const unknown = [];
+      (body.lines || []).forEach(l => {
+        const it = l.itemId ? items.get(l.itemId) : null, q = num(l.qty) || 0;
+        if (it && num(it.purchasePrice) > 0) cost += q * num(it.purchasePrice);
+        else if (it && it.kind === "service") cost += 0;
+        else if (num(l.net) !== 0) unknown.push({ name: clean(l.name, 120), net: r2(num(l.net)) });
+      });
+      const collected = r2(receipts.reduce((a, r) => a + r.amt, 0));
+      return { id: d.id, number: d.number, date: d.date, dueDate: d.dueDate, customerId: d.contactId, customer: d.contactName, title: d.title, subtotal: d.subtotal, total: d.total,
+        sales, collectible, receipts, collected, credits: credited.map(c => ({ ref: c.ref, date: c.date, subtotal: c.subtotal, cost: c.cost })), dealId: dealOf(d), salesperson: clean(body.salesperson, 100),
+        itemCost: r2(Math.max(0, cost - credited.reduce((a, c) => a + c.cost, 0))), unknown, balance: r2(Math.max(0, collectible - collected)), overdue: !!(d.dueDate && d.dueDate < t0 && collectible - collected > 0.004) };
+    });
+  }
   // Company letterhead details for other modules' documents (HR payslips).
   async function orgProfile(co) { const s = await loadSettings(co); return { legalName: s.legalName, tradeName: s.tradeName, address: s.address, emirate: s.emirate, phone: s.phone, email: s.email, website: s.website, licenceNo: s.licenceNo, trn: s.vatRegistered ? s.trn : "" }; }
   // Petty cash: the accounts and VAT settings it needs (read by anyone with petty cash access, without Books access).
@@ -1231,5 +1273,5 @@ module.exports = function makeBooks(H) {
   async function docStatus(co, id) { const e = await getOrNull(await table(T), dPK(co), id); return e ? e.status : null; }
   // Petty cash: issued invoices, so cash sales logged in petty cash can be posted as payments against them.
   async function pcInvoices(co) { return decorate(await allDocs(co)).filter(d => d.type === "invoice" && d.status === "posted").map(d => ({ id: d.id, number: d.number, date: d.date, contactId: d.contactId, contactName: d.contactName, total: d.total, balance: d.balance })); }
-  return { route, alerts, TYPES, invoicesForAmc, orgProfile, challansFor, stockDocs, stockDoc, pcInfo, docStatus, pcInvoices };
+  return { route, alerts, TYPES, invoicesForAmc, orgProfile, challansFor, stockDocs, stockDoc, pcInfo, docStatus, pcInvoices, salesData };
 };

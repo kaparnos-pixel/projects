@@ -73,6 +73,7 @@ module.exports = function makeAccess(H) {
     }
     if (a === "pnl") return "pnl";
     if (a === "deals") return "pipeline";
+    if (a === "sales") return "pipeline"; // sales.js shows salespeople only their own figures; managers do the rest
     if (a === "cheques") return "pdc";
     if (a === "mk") return "campaigns";
     if (a === "pcr") return "completion";

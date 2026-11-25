@@ -24,7 +24,7 @@ const DOCS = { passportExpiry: "Passport", visaExpiry: "Residence visa", eidExpi
 const GCC = /^(uae|united arab emirates|emirati|saudi arabia|saudi|kuwait|kuwaiti|bahrain|bahraini|qatar|qatari|oman|omani)$/i;
 
 module.exports = function makeHr(H) {
-  const { table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, diff, books } = H;
+  const { table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, diff, books, commissionFor } = H;
   const T = "hrpayroll";
   const r2 = x => Math.round((Number(x) + Number.EPSILON) * 100) / 100;
   const j = (s, d) => { try { const v = JSON.parse(s || ""); return v == null ? d : v; } catch { return d; } };
@@ -225,7 +225,11 @@ module.exports = function makeHr(H) {
   async function createRun(user, b) {
     const co = coOf(user); const ym = clean(b.month, 7); if (!/^\d{4}-\d{2}$/.test(ym)) fail(400, "Choose the month.");
     const t = await table(T); if (await getOrNull(t, rPK(co), ym)) fail(409, `A payroll run for ${ym} already exists.`);
-    const { lines, warnings } = await buildRun(co, ym, []);
+    // Commission approved in Targets & Commission for this payroll month goes straight onto each salesperson's line.
+    const comm = commissionFor ? await commissionFor(co, ym).catch(() => ({})) : {};
+    const emps = await listEmployees(co);
+    const preset = emps.filter(e => e.email && comm[e.email.toLowerCase()]).map(e => ({ empId: e.id, commission: comm[e.email.toLowerCase()], note: "Commission from Targets & Commission" }));
+    const { lines, warnings } = await buildRun(co, ym, preset);
     if (!lines.length) fail(400, "No employees were employed in that month. Add employees first.");
     const now = new Date().toISOString();
     await t.createEntity({ partitionKey: rPK(co), rowKey: ym, status: "draft", total: r2(lines.reduce((s, l) => s + l.net, 0)), count: lines.length, ...packJson({ lines, warnings }), createdBy: user.email, createdAt: now, updatedBy: user.email, updatedAt: now });
@@ -285,6 +289,21 @@ module.exports = function makeHr(H) {
     if (user.aud) user.aud.changes = [act];
     return runOut(await t.getEntity(rPK(co), ym));
   }
+  // Targets & Commission: the status of a payroll month, and setting one person's commission on a draft run.
+  async function runStatus(co, ym) { const e = await getOrNull(await table(T), rPK(co), ym); return e ? { status: e.status, payDate: e.payDate || "" } : null; }
+  async function setCommission(co, ym, email, amount) {
+    const e = await getOrNull(await table(T), rPK(co), ym);
+    if (!e) return { note: "" }; // picked up when the run is created
+    if (e.status !== "draft") return { blocked: e.status };
+    const emp = (await listEmployees(co)).find(x => (x.email || "").toLowerCase() === email);
+    if (!emp) return { note: `${email} isn't an employee in HR & Payroll with that email, so the commission wasn't added to the ${ym} payroll. Add it there by hand.` };
+    const prev = runOut(e).lines.map(l => ({ empId: l.empId, overtime: l.overtime, bonus: l.bonus, commission: l.empId === emp.id ? r2(amount) : l.commission, otherAdd: l.otherAdd, advance: l.advance, otherDed: l.otherDed, note: l.note, unpaidManual: l.unpaidManual, unpaidDays: l.unpaidDays }));
+    if (!prev.some(l => l.empId === emp.id)) prev.push({ empId: emp.id, commission: r2(amount) });
+    const { lines, warnings } = await buildRun(co, ym, prev);
+    if (!lines.some(l => l.empId === emp.id)) return { note: `${emp.name} isn't on the ${ym} payroll (not employed that month). Pay the commission another way.` };
+    await (await table(T)).updateEntity({ partitionKey: rPK(co), rowKey: ym, total: r2(lines.reduce((s2, l) => s2 + l.net, 0)), count: lines.length, ...packJson({ lines, warnings }), updatedAt: new Date().toISOString() }, "Merge", { etag: e.etag });
+    return { note: "" };
+  }
   async function deleteRun(user, ym) {
     const co = coOf(user); const e = await loadRun(co, ym);
     if (e.status !== "draft") fail(400, "Only a draft payroll can be deleted.");
@@ -328,5 +347,5 @@ module.exports = function makeHr(H) {
     }
     fail(404, "Unknown request.");
   }
-  return { route, alerts };
+  return { route, alerts, runStatus, setCommission };
 };

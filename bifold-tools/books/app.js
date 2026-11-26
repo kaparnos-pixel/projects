@@ -516,6 +516,22 @@ async function afterSave(r, queue, type) { if (queue.length) await uploadFiles(r
 function saveBlob(blob, name) { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); }
 BK.saveBlob = saveBlob;
 
+/* ---------- editing an issued invoice (named people only) ---------- */
+function reviseBanner(d) {
+  const warn = [];
+  if (d.sentAt) warn.push(`It was sent to the customer on ${fd(d.sentAt)}: send them the corrected copy after saving.`);
+  if ((d.paid || 0) > 0.004) warn.push(`AED ${aed(d.paid)} is already paid, so the total can't go below that.`);
+  if (D.perms.inventory) warn.push("Stock already issued against this invoice doesn't change: adjust it in Inventory if quantities change.");
+  return `<div class="note warn" style="margin-bottom:14px"><b>Editing an issued tax invoice</b>The number stays ${esc(d.number)}. The ledger, VAT return figures, customer balance and sales commission follow the change, and the current version is kept in the invoice's history with your reason. Under UAE VAT the normal correction is a tax credit note; use this for mistakes caught before the customer relies on the invoice.${warn.length ? "<br>" + warn.map(esc).join("<br>") : ""}</div>`;
+}
+function revisionsHtml(d) {
+  const rows = d.revisions.slice().reverse().map(r => `<details class="rev"><summary><b>Edit ${r.no}</b> · ${fd(r.at)} by ${esc(String(r.by).split("@")[0])} · <span class="muted">${esc(r.reason)}</span><span class="mono" style="margin-left:auto">${aed(r.prev.total)} → ${aed(r.now.total)}</span></summary>
+    <div class="hint" style="margin:6px 0">Before this edit: ${esc(r.prev.contactName)}${r.prev.contactTrn ? ` (TRN ${esc(r.prev.contactTrn)})` : ""}, dated ${fd(r.prev.date)}, due ${fd(r.prev.dueDate)}${r.prev.sentAt ? `, sent ${fd(r.prev.sentAt)}` : ""}.</div>
+    <table><thead><tr><th>Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Taxable</th><th style="text-align:right">VAT</th></tr></thead><tbody>${r.prev.lines.map(l => `<tr><td>${esc(l.name)}</td><td style="text-align:right">${l.qty}</td><td style="text-align:right">${aed(l.rate)}${l.discPct ? ` less ${l.discPct}%` : ""}</td><td style="text-align:right">${aed(l.net)}</td><td style="text-align:right">${aed(l.vatAmt)}</td></tr>`).join("")}
+    <tr><td colspan="3"><b>Total ${aed(r.prev.total)} with VAT</b></td><td style="text-align:right">${aed(r.prev.subtotal)}</td><td style="text-align:right">${aed(r.prev.vatAmt)}</td></tr></tbody></table></details>`).join("");
+  return `<h4 style="margin:18px 0 6px">Changes after issue</h4><div class="revs">${rows}</div>`;
+}
+
 /* ---------- document view ---------- */
 async function docView(id) {
   nav(ROUTE_OF[(DOCS.get(id) || {}).type]);
@@ -536,6 +552,7 @@ async function docView(id) {
   if (tp === "quote" && d.dealId) A.push(["Open in Sales Pipeline", "pipe"]);
   else if (tp === "quote" && P.pipeline && d.status !== "cancelled") A.push(["Add to Sales Pipeline", "addpipe"]);
   if (canEdit) A.push(["Edit", "edit"]);
+  if (tp === "invoice" && posted && P.editIssued) A.push(["Edit invoice", "revise"]);
   A.push(["Upload files", "upload"]);
   if (tp === "invoice" && d.amcId && P.amc) A.push(["Unlink from AMC", "amcunlink"]);
   if (tp === "quote" && d.format === "proposal") A.push(["Preview proposal", "propview", true], ["Download proposal (Word)", "propdl"]);
@@ -585,7 +602,8 @@ async function docView(id) {
     if (d.applied && d.applied.length) body += `<h4 style="margin:18px 0 6px">Applied to</h4><table><thead><tr><th>Document</th><th>Date</th><th style="text-align:right">Document total</th><th style="text-align:right">Applied</th></tr></thead><tbody>${d.applied.map(a => `<tr><td><a href="#/doc/${a.id}">${esc(a.number)}</a></td><td>${fd(a.date)}</td><td style="text-align:right">${aed(a.total)}</td><td style="text-align:right">${aed(a.amt)}</td></tr>`).join("")}</tbody></table>`;
   }
   if (["creditnote", "vendorcredit"].includes(tp) && d.applied && d.applied.length) body += `<h4 style="margin:18px 0 6px">Applied to</h4><table><tbody>${d.applied.map(a => `<tr><td><a href="#/doc/${a.id}">${esc(a.number)}</a></td><td>${fd(a.date)}</td><td style="text-align:right">${aed(a.amt)}</td></tr>`).join("")}</tbody></table>`;
-  if (["invoice", "creditnote"].includes(tp) && posted && vatOn()) body += `<div class="hint" style="margin-top:14px">An issued ${docTitle(d).toLowerCase()} can't be edited under UAE VAT rules. You can still upload files and keep internal notes. To change amounts, issue a credit note (or void and reissue).</div>`;
+  if (["invoice", "creditnote"].includes(tp) && posted && vatOn()) body += `<div class="hint" style="margin-top:14px">${tp === "invoice" && P.editIssued ? `You can edit this issued invoice (Books settings name you as an invoice editor); the number stays and each change and its reason are kept below. The usual way to correct an issued tax invoice is a credit note.` : `An issued ${docTitle(d).toLowerCase()} can't be edited under UAE VAT rules. You can still upload files and keep internal notes. To change amounts, issue a credit note (or void and reissue).`}</div>`;
+  if (tp === "invoice" && (d.revisions || []).length) body += revisionsHtml(d);
   if (tp === "receipt" && posted && d.balance > 0.004 && vatOn()) body += `<div class="note warn" style="margin-top:14px"><b>Advance payment: VAT may be due now</b>AED ${aed(d.balance)} isn't applied to an invoice. If it is an advance for a taxable supply, the date of supply is the date it was received: issue a tax invoice for it within 14 days and report the VAT in this period. A fully refundable security deposit is different and isn't taxed on receipt.</div>`;
   if (["bill", "expense"].includes(tp) && posted && vatOn() && d.contactId && BK.domesticInput(d) && !supplierVerified(d.contactId)) body += `<div class="note warn" style="margin-top:14px"><b>Supplier not verified yet</b>From 1 Oct 2026 input VAT may be denied unless the supplier and the supply were verified before the VAT is claimed (FTA Decision No. 13 of 2026). <a href="#/contact/vendor/${esc(d.contactId)}">Record the verification</a>.</div>`;
   const glRows = d.gl || [];
@@ -626,6 +644,7 @@ async function docView(id) {
     apply: async () => { await applyDialog(d); return "stay"; },
     challan: () => { sessionStorage.setItem("bk-draft", JSON.stringify(challanFrom(d))); go("#/new/dc?draft=1"); return "nav"; },
     edit: () => { go("#/edit/" + id); return "nav"; },
+    revise: () => { go("#/edit/" + id + "?revise=1"); return "nav"; },
     amcopen: () => { location.href = "/amc/#amc=" + encodeURIComponent(d.amcId); return "stay"; },
     amclink: async () => { const r = await amcDialog(d); return r ? undefined : "stay"; },
     amcunlink: async () => { if (!await ask("Stop tracking in the AMC Tracker?", `${label(d)} will no longer show on AMC ${d.amcRef}.`, { okText: "Unlink" })) return "stay"; await api("PUT", `docs/${id}/amc`, { amcId: "" }); },
@@ -847,6 +866,10 @@ async function editor(type, id) {
   if (!NAME[type]) return go("#/dashboard");
   if (!canW(type)) { toast("You don't have access to create or change this in Books.", true); return go(id ? "#/doc/" + id : "#/dashboard"); }
   if (!d) d = { type, _fresh: true, contactId: p.contact || "", date: today(), lines: [] };
+  if (d.type === "invoice" && d.status === "posted") {
+    if (!p.revise || !D.perms.editIssued) { toast("An issued tax invoice can't be edited. Issue a credit note instead.", true); return go("#/doc/" + d.id); }
+    d._revise = true;
+  }
   if (type === "dc") return dcEditor(d);
   if (LINE_TYPES.has(type)) return lineEditor(d);
   if (type === "receipt" || type === "payment") return payEditor(d, p.apply);
@@ -888,8 +911,8 @@ function lineEditor(d) {
   const saveBtns = pipeChk + ((t === "quote" || t === "po") && d.status === "converted" ? `<span class="hint" style="margin:0 auto 0 0">Already ${t === "quote" ? "invoiced" : "billed"}: changes here don't change the ${t === "quote" ? "invoice" : "bill"}.</span><button type="button" class="primary" data-s="converted">Save changes</button>`
     : t === "quote" || t === "po" ? `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="sent">Save as sent</button>`
     : draftable && (isNew || d.status === "draft") ? `<button type="button" data-s="draft">Save as draft</button><button type="button" class="primary" data-s="posted">${t === "bill" ? "Save and post" : "Save and issue"}</button>` : `<button type="button" class="primary" data-s="posted">Save</button>`);
-  page(title, tag, `<a class="btn" href="${d.id ? "#/doc/" + d.id : "#/" + ROUTE_OF[t]}">Cancel</a>`,
-    `<form class="ed${t === "quote" && fmt0 === "proposal" ? " prop" : ""}" id="ed" novalidate>
+  page(d._revise ? `Edit issued invoice ${d.number}` : title, tag, `<a class="btn" href="${d.id ? "#/doc/" + d.id : "#/" + ROUTE_OF[t]}">Cancel</a>`,
+    `${d._revise ? reviseBanner(d) : ""}<form class="ed${t === "quote" && fmt0 === "proposal" ? " prop" : ""}" id="ed" novalidate>
       ${t === "quote" ? `<div class="fmtbar"><span class="lbl" style="margin:0">Send as</span><div class="seg" id="fmtSeg"><button type="button" data-f="quote" aria-pressed="${fmt0 !== "proposal"}">Quotation</button><button type="button" data-f="proposal" aria-pressed="${fmt0 === "proposal"}">Proposal</button></div><span class="hint" style="margin:0" id="fmtHint">${fmt0 === "proposal" ? "A detailed proposal: summary, requirements, solution diagram, product descriptions, timeline, terms." : "A one-page quotation PDF with the lines and terms."}</span></div>` : ""}
       <section class="panel"><div class="row wide">
         <label><span class="lbl">${t === "expense" ? "Supplier (optional)" : side === "sales" ? "Customer *" : "Supplier *"}</span>${contactPicker(kind, d.contactId, t === "expense")}</label>
@@ -962,7 +985,11 @@ function lineEditor(d) {
       ...(t === "quote" ? { format: $("ed").classList.contains("prop") ? "proposal" : "quote", proposal: $("ed").classList.contains("prop") ? BKPROP.value() : d.proposal } : {}), etag: d.etag, fromId: d.fromId, placeOfSupply: d.placeOfSupply, poRef: d.poRef };
     const vend = VEN.get(payload.contactId); if (t === "bill" && vend && !payload.dueDate) payload.creditDays = vend.creditDays;
     if (b.dataset.s === "posted" && t === "invoice" && payload.supplyDate && daysBetween(payload.supplyDate, payload.date) > 14 && !await ask("Issued more than 14 days after the supply", `The date of supply is ${fd(payload.supplyDate)}. A tax invoice must be issued within 14 days of the date of supply (Art. 67 of the VAT Decree-Law), and the VAT is due for the period of the supply date. Issue it anyway?`, { okText: "Continue" })) return;
-    if (b.dataset.s === "posted" && ["invoice", "creditnote"].includes(t) && !await ask(`Issue this ${docTitle({ type: t }).toLowerCase()}?`, "It gets the next number in the sequence and can't be changed afterwards.", { okText: "Issue" })) return;
+    if (d._revise) {
+      const why = await ask(`Save changes to ${d.number}?`, `The invoice keeps number ${d.number}; the accounts and VAT are updated and this version is kept in its history.${d.sentAt ? ` It was sent to the customer on ${fd(d.sentAt)}: send them the corrected invoice.` : ""} Why is it being changed?`, { input: true, okText: "Save changes", placeholder: "e.g. Wrong unit price on line 2; customer TRN corrected" });
+      if (!why || !String(why).trim()) return;
+      payload.revise = true; payload.reviseReason = String(why).trim(); payload.status = "posted";
+    } else if (b.dataset.s === "posted" && ["invoice", "creditnote"].includes(t) && !await ask(`Issue this ${docTitle({ type: t }).toLowerCase()}?`, "It gets the next number in the sequence and can't be changed afterwards.", { okText: "Issue" })) return;
     busy(b, true);
     try { const r = d.id ? await api("PUT", "docs/" + d.id, payload) : await api("POST", "docs", payload); await afterSave(r, queue, t);
       let msg = `${NAME[t]} ${r.number || "draft"} saved.`;
@@ -1213,6 +1240,9 @@ function settingsView() {
       <section class="panel"><h2>Lock date</h2>
         <div class="fields"><label><span class="lbl">Books locked up to and including</span><input type="date" name="lockDate" value="${esc(s.lockDate)}" ${P.manager ? "" : "disabled"}></label></div>
         <p class="hint" style="margin:0">Set this to the last day of a VAT period once its return is filed. Nothing on or before it can be created, edited or voided. ${P.manager ? "" : "Only a manager can change it."}</p></section>
+      <section class="panel"><h2>Editing issued invoices</h2>
+        <p class="hint" style="margin:0">Issued tax invoices are normally corrected with a credit note. The people ticked here also get <b>Edit invoice</b> on issued invoices: the number stays, a reason is required, every earlier version is kept on the invoice, and the activity log records it. Not possible in a locked period, after a credit note against the invoice, or below what has been paid. ${P.manager ? "" : "Only a manager can change this list."}</p>
+        <div id="ieList" class="ielist"><span class="hint">${(s.invoiceEditors || []).length ? esc(s.invoiceEditors.join(", ")) : "No one yet."}</span></div></section>
       <section class="panel"><h2>Readiness check</h2><div class="check">
         ${chk(!s.vatRegistered || /^\d{15}$/.test(s.trn), "Company TRN recorded for tax invoices")}
         ${chk(!!s.address && !!s.legalName, "Legal name and address recorded")}
@@ -1225,8 +1255,16 @@ function settingsView() {
         ${chk(false, "E-invoicing (businesses under AED 50M revenue): appoint an FTA Accredited Service Provider by 31 Mar 2027; e-invoices become mandatory from 1 Jul 2027. Every invoice here already carries the data an ASP needs (TRNs, addresses, line VAT, sequential numbers).", true)}
       </div></section>
       <div class="err" id="err"></div><div class="edfoot"><button type="submit" class="primary" id="save">Save settings</button></div></form>`, "settings");
+  // Managers tick who may edit issued invoices, from the people with Books sales access.
+  if (P.manager) fetch("/api/access", { cache: "no-store" }).then(r => r.ok ? r.json() : Promise.reject()).then(a => {
+    const ppl = (a.users || []).filter(u => u.isManager || (u.sections || []).some(k => k === "books" || k === "bk_sales"));
+    const cur = new Set(s.invoiceEditors || []);
+    (s.invoiceEditors || []).forEach(e2 => { if (!ppl.some(u => u.email === e2)) ppl.push({ email: e2 }); });
+    $("ieList").innerHTML = ppl.length ? ppl.map(u => `<label class="chk"><input type="checkbox" name="ie" value="${esc(u.email)}"${cur.has(u.email) ? " checked" : ""}> ${esc(u.email)}${u.isManager ? ` <span class="muted">(manager)</span>` : ""}</label>`).join("") : `<span class="hint">No one has Books sales access yet.</span>`;
+  }).catch(() => {});
   $("sf").onsubmit = async e => {
     e.preventDefault(); const f = e.target; const v = Object.fromEntries(new FormData(f)); v.vatRegistered = f.vatRegistered.checked; v.prefixes = {}; f.querySelectorAll("[data-px]").forEach(i => v.prefixes[i.dataset.px] = i.value); if (!P.manager) v.lockDate = s.lockDate; v.etag = s.etag;
+    delete v.ie; v.invoiceEditors = f.querySelector("input[name=ie]") ? [...f.querySelectorAll("input[name=ie]:checked")].map(x => x.value) : (s.invoiceEditors || []);
     const b = $("save"); busy(b, true); $("err").textContent = "";
     try { await api("PUT", "settings", v); await load(); toast("Settings saved."); settingsView(); } catch (err) { $("err").textContent = err.message; busy(b, false); }
   };

@@ -16,7 +16,10 @@
 // Compliance rules enforced here (checked against the VAT Decree-Law, Executive Regulation Arts. 59/60 as amended by
 // Cabinet Decisions 100 of 2025 and 149 of 2026, Cabinet Decision 91 of 2023, FTA Decision 13 of 2026):
 //   * Tax invoices and tax credit notes get a gapless sequential number when they are issued, never before.
-//   * Issued tax invoices and credit notes can't be edited or deleted; they are corrected by a credit note or voided
+//   * Issued tax invoices and credit notes can't be edited or deleted; they are corrected by a credit note or voided.
+//     Exception: people a manager names in settings ("invoiceEditors") can edit an issued tax invoice with a reason. It keeps
+//     its number, the ledger and VAT are re-posted, and every earlier version is kept on the invoice (revisions). Not allowed
+//     in a locked (filed) period, once a credit note corrects it, or below what has been paid on it.
 //     (the number is kept and the void is logged). Nothing posted is ever deleted (5 years VAT, 7 years corporate tax).
 //   * Nothing dated on or before the lock date (the last filed VAT period) can be created, changed or voided.
 //   * VAT is worked out line by line at 5%, in AED, and tagged to the VAT 201 boxes (1a-1g by emirate, 3, 4, 5, 6, 9, 10).
@@ -169,7 +172,7 @@ module.exports = function makeBooks(H) {
       email: e && e.email || "", website: e && e.website != null ? e.website : d.website || "", licenceNo: e && e.licenceNo || "",
       bankName: e && e.bankName || "", bankAccountName: e && e.bankAccountName || "", iban: e && e.iban || "", swift: e && e.swift || "", bankAccountNo: e && e.bankAccountNo || "",
       fyStartMonth: Math.min(12, Math.max(1, num(e && e.fyStartMonth) || 1)), vatPeriod: e && e.vatPeriod || "quarterly", vatStagger: e && e.vatStagger || "jan",
-      lockDate: e && e.lockDate || "", cashVatThreshold: num(e && e.cashVatThreshold),
+      lockDate: e && e.lockDate || "", cashVatThreshold: num(e && e.cashVatThreshold), invoiceEditors: j(e && e.invoiceEditors, []),
       dueDays: e && e.dueDays != null ? num(e.dueDays) : 30, quoteValidDays: e && e.quoteValidDays != null ? num(e.quoteValidDays) : 30,
       invoiceTerms: e && e.invoiceTerms || "Payment is due by the due date shown. Please quote the invoice number with your payment.",
       quoteTerms: e && e.quoteTerms || "Prices are in AED and exclude VAT unless shown. Delivery subject to stock availability at the time of order.",
@@ -210,6 +213,13 @@ module.exports = function makeBooks(H) {
       f.lockDate = lock;
       if (user.aud) user.aud.lock = lock || "removed";
     } else f.lockDate = prev.lockDate;
+    // Who may edit issued tax invoices is a manager decision too.
+    const eds = Array.isArray(b.invoiceEditors) ? [...new Set(b.invoiceEditors.map(x => clean(x, 150).toLowerCase()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)))].slice(0, 20) : prev.invoiceEditors;
+    if (JSON.stringify(eds.slice().sort()) !== JSON.stringify(prev.invoiceEditors.slice().sort())) {
+      if (!user.isManager) fail(403, "Only a manager can choose who edits issued invoices.");
+      if (user.aud) user.aud.editors = eds.length ? eds.join(", ") : "no one";
+    }
+    f.invoiceEditors = JSON.stringify(eds);
     const e = { partitionKey: sPK(co), rowKey: "org", ...f, counters: JSON.stringify(prev.counters), ctData: JSON.stringify(prev.ct), updatedBy: user.email, updatedAt: new Date().toISOString() };
     if (user.aud) user.aud.changes = diff(cur || {}, e);
     try {
@@ -735,7 +745,18 @@ module.exports = function makeBooks(H) {
     const tp = TYPES[cur.type];
     needWrite(user, cur.type);
     if (cur.status === "void") fail(400, "This document is void and can't be changed.");
-    if (tp.taxDoc && cur.status === "posted") fail(400, `An issued ${tp.label.toLowerCase()} can't be changed. Issue a credit note for the difference, or void it and issue a new one.`);
+    // Editing an issued tax invoice: only for the people named in settings, with a reason.
+    const revising = cur.type === "invoice" && cur.status === "posted" && b.revise === true;
+    let reviseReason = "";
+    if (revising) {
+      if (!(ctx.settings.invoiceEditors || []).includes(user.email)) fail(403, "Only the people a manager names in Books settings can edit an issued tax invoice. Issue a credit note instead.");
+      reviseReason = clean(b.reviseReason, 300);
+      if (reviseReason.length < 4) fail(400, "Say why the issued invoice is being changed. It's kept with the invoice's history.");
+      const cn = ctx.docs.filter(x => x.type === "creditnote" && x.invoiceRef === id && x.status !== "void");
+      if (cn.length) fail(400, `Credit note ${cn.map(x => x.number || "draft").join(", ")} already corrects this invoice, so it can't be edited. Make further corrections with a credit note.`);
+      b.status = "posted";
+    }
+    if (tp.taxDoc && cur.status === "posted" && !revising) fail(400, `An issued ${tp.label.toLowerCase()} can't be changed. Issue a credit note for the difference, or void it and issue a new one.`);
     if (cur.type === "creditnote" || cur.type === "vendorcredit") { if (cur.status === "posted") fail(400, "An issued credit can't be changed. Use Apply credit, or void it."); }
     const { f, body } = await docIn(user, b, cur, ctx);
     let status = cur.status;
@@ -756,9 +777,22 @@ module.exports = function makeBooks(H) {
     if (status === "posted") postInto(f, body, ctx.settings); else { f.gl = "[]"; f.tax = "[]"; }
     f.number = cur.number || (tp.taxDoc && status !== "posted" ? "" : await nextNumber(ctx.co, cur.type));
     if (status === "posted" && cur.status !== "posted") { body.issuedAt = new Date().toISOString(); body.issuedBy = user.email; } else { body.issuedAt = old.issuedAt; body.issuedBy = old.issuedBy; }
+    if (revising) {
+      const fp = (h, bd) => JSON.stringify([h.contactId, h.date, h.dueDate, h.ref, h.title, h.emirate, r2(num(h.subtotal)), r2(num(h.total)), bd.supplyDate || "", bd.notes || "", bd.terms || "", bd.attention || "", bd.salesperson || "", bd.placeOfSupply || "", bd.drDeclaration || false,
+        (bd.lines || []).map(l => [l.itemId || "", l.name, l.desc || "", num(l.qty), num(l.rate), num(l.discPct), l.vat, l.account, l.unit || ""])]);
+      if (fp(cur, old) === fp(f, body)) fail(400, "Nothing was changed, so there is nothing to save.");
+    }
+    // The versions before each edit of an issued invoice, newest last.
+    body.revisions = Array.isArray(old.revisions) ? old.revisions : [];
+    if (revising) {
+      body.revisions = body.revisions.concat({ no: body.revisions.length + 1, at: new Date().toISOString(), by: user.email, reason: reviseReason,
+        prev: { date: cur.date, dueDate: cur.dueDate, contactName: cur.contactName, contactTrn: cur.contactTrn || "", subtotal: num(cur.subtotal), vatAmt: num(cur.vatAmt), total: num(cur.total), sentAt: cur.sentAt || "",
+          lines: (old.lines || []).map(l => ({ name: l.name, qty: num(l.qty), rate: num(l.rate), discPct: num(l.discPct), vat: l.vat, net: num(l.net), vatAmt: num(l.vatAmt) })) },
+        now: { subtotal: f.subtotal, vatAmt: f.vatAmt, total: f.total } }).slice(-30);
+    }
     const next = { partitionKey: dPK(ctx.co), rowKey: id, ...f, files: cur.files || "[]", internalNote: cur.internalNote || "", internalBy: cur.internalBy || "", internalAt: cur.internalAt || "", dealId: cur.dealId || "", amcId: cur.amcId || "", amcRef: cur.amcRef || "", fromId: cur.fromId || "", toId: cur.toId || "", sentAt: cur.sentAt || (status === "sent" ? new Date().toISOString() : ""), voidReason: "", createdBy: cur.createdBy, createdAt: cur.createdAt,
       updatedBy: user.email, updatedAt: new Date().toISOString(), ...packJson(body) };
-    if (user.aud) { user.aud.name = `${tp.label} ${f.number || "draft"}`; user.aud.changes = diff(cur, next); if (status === "posted" && cur.status !== "posted") user.aud.issued = true; if (tp.dc && status !== cur.status) user.aud.dcStatus = status + (status === "delivered" && body.receivedBy ? ", received by " + body.receivedBy : ""); }
+    if (user.aud) { user.aud.name = `${tp.label} ${f.number || "draft"}`; user.aud.changes = diff(cur, next); if (status === "posted" && cur.status !== "posted") user.aud.issued = true; if (revising) user.aud.revised = reviseReason; if (tp.dc && status !== cur.status) user.aud.dcStatus = status + (status === "delivered" && body.receivedBy ? ", received by " + body.receivedBy : ""); }
     try { await t.updateEntity(next, "Replace", { etag: b.etag || cur.etag }); }
     catch (err) { if (err.statusCode === 412) fail(409, "Someone else changed this document after you opened it. Reload it and make your change again."); throw err; }
     if (cur.type === "quote" && cur.dealId) await syncDeal(user, next, status !== cur.status ? `marked ${status}` : `revised to AED ${num(next.subtotal).toLocaleString("en-US", { minimumFractionDigits: 2 })} before VAT`);
@@ -1135,7 +1169,7 @@ module.exports = function makeBooks(H) {
     const s = { ...settings }; delete s.counters;
     return {
       company: { key: co, name: CO[co].name }, settings: s, accounts: accts, items, docs: list, customers, vendors, vver,
-      perms: { ...P, acct, pipeline: canPipeline(user), amc: canAmc(user), inventory: !!(user.isManager || (user.sections || []).includes("inventory")) }, ai: AI.ready(), vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
+      perms: { ...P, acct, pipeline: canPipeline(user), amc: canAmc(user), inventory: !!(user.isManager || (user.sections || []).includes("inventory")), editIssued: P.sales && (settings.invoiceEditors || []).includes(user.email) }, ai: AI.ready(), vat: VAT, types: Object.fromEntries(Object.entries(TYPES).map(([k, v]) => [k, { label: v.label, side: v.side || "", prefix: settings.prefixes[k] }])),
       acctTypes: ACCT_TYPES, sys: SYS, fileKinds: FILE_KINDS, emirates: EMIRATES, today: today(), me: user.email,
     };
   }

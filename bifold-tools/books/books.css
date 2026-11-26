@@ -227,3 +227,9 @@ table.mvl textarea{min-height:44px;font-size:12px;font-family:var(--f-num)}
 .snpick button{font-family:var(--f-num);font-size:11px;padding:2px 7px;border-radius:6px;background:var(--surface)}
 .snpick button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 table.mvl select[data-k="loc"]{min-width:170px}
+/* issued-invoice edit history and editor list */
+.revs{display:grid;gap:6px}
+details.rev{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+details.rev summary{cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+details.rev table{margin-top:6px;font-size:12px}
+.ielist{display:grid;gap:6px;margin-top:8px}

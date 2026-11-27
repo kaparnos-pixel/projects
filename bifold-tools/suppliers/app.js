@@ -6,7 +6,7 @@ const KINDS=["Supplier","Vendor","Distributor","Manufacturer","Subcontractor","S
 const ST={active:"Active",preferred:"Preferred",onhold:"On hold",blocked:"Blocked"};
 const CAT0=["Networking","Wireless","Firewall & Security","Servers & Storage","Computers & Laptops","Printers & Copiers","CCTV & Surveillance","Access Control","Telephony & PBX","Structured Cabling","Fiber Optics","Racks & Enclosures","UPS & Power","Software & Licensing","Microsoft 365 & Cloud","AV & Displays","Fire Alarm","Consumables & Toner","Accessories & Peripherals","Logistics & Freight","Subcontract labour","Civil & Electrical works"];
 const BR0=["Cisco","Meraki","Aruba","HPE","Dell","Lenovo","HP","Fortinet","Sophos","Palo Alto","Juniper","Ubiquiti","MikroTik","TP-Link","Ruckus","Hikvision","Dahua","Axis","Hanwha","Milestone","ZKTeco","Yeastar","Grandstream","Yealink","Avaya","Panasonic","Commscope","Panduit","Legrand","Schneider APC","Eaton","Vertiv","Microsoft","VMware","Veeam","Synology","QNAP","Samsung","LG","Epson","Canon","Logitech","Poly","Kaspersky","ESET","Bitdefender"];
-let ME=null,LIST=[],cur=null,VIEW="dir",BY="brands",CAN=false;
+let ME=null,LIST=[],cur=null,VIEW="dir",BY="brands",CAN=false,PARTNERS=[];
 
 function toast(m,e){const t=document.createElement("div");t.className="toast"+(e?" err":"");t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),e?6000:2600)}
 async function api(method,path,body){
@@ -100,6 +100,8 @@ function show(id){
   const s=LIST.find(x=>x.id===id);if(!s)return;cur=s;
   history.replaceState(null,"","#s="+encodeURIComponent(id));
   $("vKind").textContent=s.kind+(s.emirate?" · "+s.emirate:"");$("vName").textContent=s.name;
+  const prt=PARTNERS.filter(p=>p.supplierId===s.id||p.vendor.toLowerCase()===s.name.toLowerCase());
+  $("vLogo").innerHTML=window.VLogo?VLogo.html(prt[0]||{vendor:s.name,domain:s.website},52):"";if(window.VLogo)VLogo.wire($("vLogo"));
   $("vBadges").innerHTML=[stc(s.status),stars(s.rating)].filter(Boolean).join(" ");
   const kv=[["Office phone",s.phone&&`<a href="tel:${esc(tel(s.phone))}">${esc(s.phone)}</a>`],["Email",s.email&&`<a href="mailto:${esc(s.email)}">${esc(s.email)}</a>`],["Website",s.website&&`<a href="${esc(site(s.website))}" target="_blank" rel="noopener">${esc(s.website)}</a>`],
     ["Address",esc([s.address,s.emirate,s.country].filter(Boolean).join(", "))],["TRN",s.trn&&`<span class="mono">${esc(s.trn)}</span>`],["Trade licence",esc(s.licenceNo)],
@@ -108,6 +110,7 @@ function show(id){
     <div class="vsec"><h5>Supplies</h5>${s.brands.length||s.categories.length?`<div class="chips">${s.brands.map(b=>`<span class="chip2">${esc(b)}</span>`).join("")}${s.categories.map(c=>`<span class="chip2 cat">${esc(c)}</span>`).join("")}</div>`:""}${s.supplies?`<p class="pre" style="margin-top:8px">${esc(s.supplies)}</p>`:""}${!s.brands.length&&!s.categories.length&&!s.supplies?`<span class="hint">Nothing listed yet.</span>`:""}</div>
     <div class="vsec"><h5>Contacts (${s.contacts.length})</h5>${s.contacts.map(c=>`<div class="ccard"><div class="top"><span><b>${esc(c.name)}</b> ${c.primary?'<span class="pr">Main contact</span>':""}</span></div>${c.role||c.handles?`<div class="role">${esc([c.role,c.handles&&"Handles: "+c.handles].filter(Boolean).join(" · "))}</div>`:""}
       <div class="acts">${c.mobile?`<a href="tel:${esc(tel(c.mobile))}">${IC.phone}${esc(c.mobile)}</a>`:""}${c.mobile&&wa(c.mobile)?`<a href="${esc(wa(c.mobile))}" target="_blank" rel="noopener">${IC.wa}WhatsApp</a>`:""}${c.phone?`<a href="tel:${esc(tel(c.phone))}">${IC.phone}${esc(c.phone)}</a>`:""}${c.email?`<a href="mailto:${esc(c.email)}">${IC.mail}${esc(c.email)}</a>`:""}<button type="button" data-copy="${esc(c.id)}">${IC.copy}Copy</button></div>${c.notes?`<div class="nt">${esc(c.notes)}</div>`:""}</div>`).join("")||`<span class="hint">No contacts yet.${CAN?" Use Edit to add the people you deal with.":""}</span>`}</div>
+    ${prt.length?`<div class="vsec"><h5>Vendor partnerships</h5>${prt.map(p=>`<div class="ccard"><div class="top"><span><b>${esc(p.program||p.vendor)}</b> ${p.tier?`<span class="pr">${esc(p.tier)}</span>`:""}</span><a href="/partners/#p=${encodeURIComponent(p.id)}">Open</a></div><div class="role">${esc([{active:"Active",renewal:"In renewal",applied:"Applied",lapsed:"Lapsed",dropped:"Dropped"}[p.status],p.partnerNo&&"ID "+p.partnerNo,p.renewalDate&&"renews "+day(p.renewalDate)].filter(Boolean).join(" · "))}</div></div>`).join("")}</div>`:""}
     ${kv.length?`<div class="vsec"><h5>Company</h5><dl class="kv">${kv.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></div>`:""}
     ${s.notes?`<div class="vsec"><h5>Notes</h5><p class="pre">${esc(s.notes)}</p></div>`:""}
     <p class="hint" style="margin:0">Added by ${esc(s.createdBy)} on ${esc(day(s.createdAt))}${s.updatedAt!==s.createdAt?` · last changed by ${esc(s.updatedBy)} on ${esc(day(s.updatedAt))}`:""}</p>`;
@@ -289,6 +292,7 @@ async function start(m){
   if(m.co==="all")CAN=false;
   document.querySelectorAll("[data-edit]").forEach(el=>el.hidden=!CAN);
   try{LIST=await api("GET","suppliers")}catch(e){$("empty").textContent=e.message;return}
+  if(m.co!=="all"&&(m.isManager||(m.sections||[]).some(k=>k==="partners"||k==="suppliers")))api("GET","partners").then(b=>{PARTNERS=b.partners||[];if(window.VLogo)VLogo.setClientId(b.brandfetch);if($("view").open&&cur)show(cur.id)}).catch(()=>{});
   const p=new URLSearchParams(location.search);if(p.get("q"))$("q").value=p.get("q");hashView();
   refresh();
   const h=location.hash.match(/^#s=(.+)$/);if(h)show(decodeURIComponent(h[1]));

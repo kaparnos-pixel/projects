@@ -185,6 +185,20 @@ module.exports = function makeAudit(H) {
       if (method === "PUT") return [A, "Edited supplier", out.name || name, ch];
       if (method === "DELETE") return [A, "Deleted supplier", name || b, ""];
     }
+    if (a === "partners") {
+      const A = "Vendor Partners";
+      if (b === "certs") {
+        if (d === "file") return [A, method === "DELETE" ? "Removed certificate file" : method === "GET" ? (seg[4] === "download" ? "Downloaded certificate file" : "Opened certificate file") : "Uploaded certificate file", name, ch];
+        if (method === "POST") return [A, "Added certification", name || [out.person, out.name].filter(Boolean).join(": "), [out.vendor, out.expiry && "expires " + out.expiry].filter(Boolean).join(", ")];
+        if (method === "PUT") return [A, "Edited certification", name, ch];
+        if (method === "DELETE") return [A, "Deleted certification", name || c, ""];
+      }
+      if (c === "files") return [A, method === "POST" ? "Uploaded partner document" : method === "DELETE" ? "Removed partner document" : seg[4] === "download" ? "Downloaded partner document" : "Opened partner document", name, ch];
+      if (c === "logo") return [A, d === "refresh" ? "Refreshed vendor logo" : method === "DELETE" ? "Removed uploaded logo" : "Uploaded vendor logo", name, ""];
+      if (method === "POST") return [A, "Added partnership", name || out.vendor, [out.tier, out.renewalDate && "renews " + out.renewalDate].filter(Boolean).join(", ")];
+      if (method === "PUT") return [A, "Edited partnership", name || out.vendor, ch];
+      if (method === "DELETE") return [A, "Deleted partnership", name || b, ""];
+    }
     if (a === "books") {
       const A = "Books";
       const LBL = { dc: "delivery challan", proposal: "proposal", quote: "quotation", invoice: "tax invoice", creditnote: "tax credit note", receipt: "payment received", po: "purchase order", bill: "bill", vendorcredit: "vendor credit", payment: "payment made", expense: "expense", journal: "manual journal", transfer: "transfer" };
@@ -275,7 +289,7 @@ module.exports = function makeAudit(H) {
       if (b === "users" && method === "PUT") return ["Team access", "Changed access", c, (out.sections || []).join(", ") || "No sections"];
       if (b === "users" && method === "DELETE") return ["Team access", "Removed access", c, ""];
     }
-    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", books: "Books", hr: "HR & Payroll", inv: "Inventory", pc: "Petty cash", access: "Team access", alerts: "Alerts" };
+    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", partners: "Vendor Partners", books: "Books", hr: "HR & Payroll", inv: "Inventory", pc: "Petty cash", access: "Team access", alerts: "Alerts" };
     if (method === "GET") return [AREA[a] || "Other", b ? "Opened a record" : "Opened the list", b || "", ""];
     return [AREA[a] || "Other", method + " /" + seg.join("/"), "", ""];
   }

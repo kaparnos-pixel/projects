@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/assets/bifold.css">
 <link rel="stylesheet" href="suppliers.css">
 <script src="/assets/access.js" data-section="suppliers|pdc"></script>
+<script src="/assets/vendorlogo.js"></script>
 </head>
 <body>
 <div class="brandbar"><div class="in">
@@ -82,7 +83,7 @@
 <dialog id="view" class="side">
   <div class="vin">
     <div class="vhd">
-      <div><div class="vk" id="vKind"></div><h3 id="vName"></h3><div id="vBadges"></div></div>
+      <div style="display:flex;gap:14px;align-items:center;min-width:0"><span id="vLogo"></span><div><div class="vk" id="vKind"></div><h3 id="vName"></h3><div id="vBadges"></div></div></div>
       <button type="button" class="x" id="vX" aria-label="Close">×</button>
     </div>
     <div class="vbody" id="vBody"></div>

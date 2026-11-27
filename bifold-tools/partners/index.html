@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Vendor Partners · Bifold Tools</title>
+<link rel="icon" href="/assets/bifold_logo.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/assets/bifold.css">
+<link rel="stylesheet" href="partners.css">
+<script src="/assets/access.js" data-section="partners|suppliers"></script>
+<script src="/assets/vendorlogo.js"></script>
+</head>
+<body>
+<div class="brandbar"><div class="in">
+  <a class="logo" href="/" aria-label="Bifold Tools home"><img src="/assets/bifold_logo.png" alt="Bifold Technologies L.L.C"></a>
+  <nav><a href="/">All tools</a><a href="/suppliers/">Suppliers &amp; Vendors</a><span id="who"></span><a href="/.auth/logout">Sign out</a></nav>
+</div></div>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1><span class="tag">Bifold Tools</span>Vendor Partners</h1>
+      <p class="sub">Every vendor partner programme we hold: tier, renewal date, what it takes to keep the tier, certified staff, rebates and MDF, and the partner documents. Reminders go out 90, 30 and 7 days before each renewal, certificate expiry and claim deadline.</p>
+    </div>
+    <div class="acts">
+      <button type="button" id="expBtn">Export to Excel</button>
+      <button type="button" id="addCertBtn" data-edit>+ Certification</button>
+      <button class="primary" type="button" id="addBtn" data-edit>+ New partnership</button>
+    </div>
+  </header>
+
+  <section class="kpis" aria-label="Totals">
+    <div class="kpi"><div class="k">Active partnerships</div><div class="v" id="kAct">–</div><div class="s" id="kActS"></div></div>
+    <div class="kpi"><div class="k">Renewals in 90 days</div><div class="v" id="kRen">–</div><div class="s" id="kRenS"></div></div>
+    <div class="kpi"><div class="k">Certs expiring in 90 days</div><div class="v" id="kCert">–</div><div class="s" id="kCertS"></div></div>
+    <div class="kpi"><div class="k">Unclaimed rebates &amp; MDF</div><div class="v" id="kBen">–</div><div class="s" id="kBenS"></div></div>
+  </section>
+
+  <div class="tools">
+    <div class="seg" role="tablist" aria-label="View" id="viewSeg">
+      <button type="button" data-view="grid" aria-pressed="true">Partnerships</button>
+      <button type="button" data-view="certs" aria-pressed="false">Certifications</button>
+      <button type="button" data-view="claims" aria-pressed="false">Rebates &amp; MDF</button>
+      <button type="button" data-view="cal" aria-pressed="false">Renewal calendar</button>
+    </div>
+    <input id="q" type="search" placeholder="Search vendor, programme, partner ID, person or cert code" aria-label="Search">
+    <select id="fSt" aria-label="Status"><option value="">Any status</option><option value="active">Active</option><option value="renewal">In renewal</option><option value="applied">Applied</option><option value="lapsed">Lapsed</option><option value="dropped">Dropped</option></select>
+    <select id="fHealth" aria-label="Health"><option value="">Any health</option><option value="green">On track</option><option value="amber">Needs attention</option><option value="red">At risk or lapsed</option></select>
+    <span class="cnt" id="cnt"></span>
+  </div>
+
+  <div id="vGrid"><div class="grid" id="grid"></div><div class="panel empty" id="gEmpty" hidden></div></div>
+
+  <div id="vCerts" class="panel listpanel" hidden><div class="tblwrap">
+    <table class="list">
+      <thead><tr><th>Person</th><th>Certification</th><th>Vendor / partnership</th><th>Obtained</th><th>Expires</th><th>Certificate</th></tr></thead>
+      <tbody id="crows"></tbody>
+    </table>
+    <div class="empty" id="cEmpty" hidden></div>
+  </div></div>
+
+  <div id="vClaims" class="panel listpanel" hidden><div class="tblwrap">
+    <table class="list">
+      <thead><tr><th>Vendor</th><th>Claim</th><th>Type</th><th class="r">Amount</th><th>Deadline</th><th>Status</th></tr></thead>
+      <tbody id="brows"></tbody>
+    </table>
+    <div class="empty" id="bEmpty" hidden></div>
+  </div></div>
+
+  <div id="vCal" hidden><div class="cal" id="cal"></div></div>
+</div>
+
+<!-- partnership card -->
+<dialog id="view" class="side">
+  <div class="vin">
+    <div class="vhd">
+      <div class="vtitle"><span id="vLogo"></span><div><div class="vk" id="vKind"></div><h3 id="vName"></h3><div id="vBadges"></div></div></div>
+      <button type="button" class="x" id="vX" aria-label="Close">×</button>
+    </div>
+    <div class="vbody" id="vBody"></div>
+    <div class="vft">
+      <button type="button" class="danger" id="vDel" hidden>Delete</button>
+      <span class="sp"></span>
+      <button type="button" id="vCert" data-edit>+ Certification</button>
+      <button type="button" class="primary" id="vEdit" data-edit>Edit</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- add / edit partnership -->
+<dialog id="dlg">
+  <form id="form" novalidate>
+    <div class="dhead"><h3 id="dTitle">New partnership</h3><button type="button" class="x" id="dX" aria-label="Close">×</button></div>
+    <div class="sec">Vendor</div>
+    <div class="vendrow">
+      <span id="fLogo"></span>
+      <div class="vendf">
+        <div class="fields">
+          <label><span class="lbl">Vendor *</span><input id="f_vendor" required maxlength="120" autocomplete="off" list="vendList" placeholder="e.g. Cisco"></label>
+          <label><span class="lbl">Vendor website (for the logo)</span><input id="f_domain" maxlength="200" placeholder="cisco.com"></label>
+        </div>
+        <p class="hint" id="logoHint" style="margin:0"></p>
+      </div>
+    </div>
+    <label id="supWrap"><span class="lbl">Supplier record (optional)</span><select id="f_supplierId"><option value="">Not linked</option></select></label>
+
+    <div class="sec">Programme</div>
+    <div class="fields">
+      <label><span class="lbl">Programme name</span><input id="f_program" maxlength="150" list="progList" placeholder="e.g. Cisco Partner Program"></label>
+      <label><span class="lbl">Partner ID / MPN</span><input id="f_partnerNo" maxlength="80"></label>
+    </div>
+    <div class="fields three">
+      <label><span class="lbl">Tier / level</span><input id="f_tier" maxlength="60" list="tierList" placeholder="e.g. Select"></label>
+      <label><span class="lbl">Status</span><select id="f_status"><option value="active">Active</option><option value="renewal">In renewal</option><option value="applied">Applied</option><option value="lapsed">Lapsed</option><option value="dropped">Dropped</option></select></label>
+      <label><span class="lbl">Partner portal link</span><input id="f_portal" maxlength="300" placeholder="https://"></label>
+    </div>
+    <label><span class="lbl">Specialisations / competencies (comma separated)</span><input id="f_specs" maxlength="1500" placeholder="e.g. Enterprise Networking, Security"></label>
+
+    <div class="sec">Term and commercials</div>
+    <div class="fields three">
+      <label><span class="lbl">Start date</span><input id="f_startDate" type="date"></label>
+      <label><span class="lbl">Renewal / expiry date</span><input id="f_renewalDate" type="date"></label>
+      <label><span class="lbl">Annual fee</span><span class="money"><select id="f_currency" aria-label="Currency"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select><input id="f_fee" type="number" min="0" step="0.01" inputmode="decimal"></span></label>
+    </div>
+    <div class="fields three">
+      <label><span class="lbl">Discount level</span><input id="f_discount" maxlength="80" placeholder="e.g. 32% off list"></label>
+      <label class="chk"><input type="checkbox" id="f_autoRenew"> Renews automatically</label>
+      <label class="chk"><input type="checkbox" id="f_dealReg"> Deal registration available</label>
+    </div>
+
+    <div class="sec">To keep the tier <button type="button" class="mini" id="addReq">+ Add requirement</button></div>
+    <p class="hint" style="margin:0">Certified staff counts fill in by themselves from the certifications linked to this partnership.</p>
+    <div id="reqs"></div>
+
+    <div class="sec">Vendor contacts <button type="button" class="mini" id="addCon">+ Add contact</button></div>
+    <div id="cons"></div>
+
+    <div class="sec">Rebates and MDF <button type="button" class="mini" id="addBen">+ Add claim</button></div>
+    <div id="bens"></div>
+
+    <div class="sec">Notes</div>
+    <label><span class="lbl">Notes</span><textarea id="f_notes" rows="3" maxlength="4000" placeholder="Renewal steps, who to contact at the distributor, targets agreed this year ..."></textarea></label>
+    <p class="hint" id="meta" style="margin:0"></p>
+    <div class="err" id="err"></div>
+    <div class="foot"><button type="button" id="cancel">Cancel</button><button class="primary" type="submit" id="saveBtn">Save</button></div>
+  </form>
+</dialog>
+
+<!-- add / edit certification -->
+<dialog id="cdlg">
+  <form id="cform" novalidate>
+    <div class="dhead"><h3 id="cTitle">New certification</h3><button type="button" class="x" id="cX" aria-label="Close">×</button></div>
+    <div class="fields">
+      <label><span class="lbl">Staff member *</span><input id="c_person" maxlength="100" list="peopleList" required></label>
+      <label><span class="lbl">Their email</span><input id="c_email" type="email" maxlength="150" placeholder="also gets the expiry reminder"></label>
+    </div>
+    <label><span class="lbl">Partnership *</span><select id="c_partnerRef"></select></label>
+    <label id="cVendWrap" hidden><span class="lbl">Vendor *</span><input id="c_vendor" maxlength="120" list="vendList"></label>
+    <div class="fields">
+      <label><span class="lbl">Certification *</span><input id="c_name" maxlength="200" list="certList" placeholder="e.g. CCNA, Fortinet NSE 4"></label>
+      <label><span class="lbl">Code / ID</span><input id="c_code" maxlength="60" placeholder="e.g. CSCO12345678"></label>
+    </div>
+    <div class="fields">
+      <label><span class="lbl">Date obtained</span><input id="c_obtained" type="date"></label>
+      <label><span class="lbl">Expiry date</span><input id="c_expiry" type="date"></label>
+    </div>
+    <label><span class="lbl">Certificate file (PDF or image, optional)</span><input id="c_file" type="file" accept=".pdf,image/*"></label>
+    <p class="hint" id="cFileNow" style="margin:0"></p>
+    <label><span class="lbl">Notes</span><input id="c_notes" maxlength="1000"></label>
+    <div class="err" id="cErr"></div>
+    <div class="foot"><button type="button" class="danger" id="cDel" hidden>Delete</button><span style="flex:1"></span><button type="button" id="cCancel">Cancel</button><button class="primary" type="submit" id="cSave">Save</button></div>
+  </form>
+</dialog>
+
+<input type="file" id="docFile" hidden accept=".pdf,.doc,.docx,.xls,.xlsx,image/*">
+<input type="file" id="logoFile" hidden accept="image/png,image/jpeg,image/webp,image/gif">
+
+<datalist id="vendList"></datalist>
+<datalist id="progList"><option>Cisco Partner Program</option><option>Microsoft AI Cloud Partner Program</option><option>HPE Partner Ready</option><option>HPE Aruba Networking Partner</option><option>Dell Technologies Partner Program</option><option>Lenovo 360</option><option>Fortinet Engage</option><option>Sophos Partner Program</option><option>Palo Alto NextWave</option><option>Hikvision Partner Program</option><option>Ubiquiti Partner</option><option>Veeam Accredited Service Partner</option><option>VMware by Broadcom Advantage</option><option>Yeastar Partner Program</option></datalist>
+<datalist id="tierList"><option>Registered</option><option>Authorised</option><option>Select</option><option>Silver</option><option>Gold</option><option>Platinum</option><option>Premier</option><option>Advanced</option><option>Expert</option><option>Solutions Partner</option><option>Business Partner</option><option>Gold Partner</option></datalist>
+<datalist id="certList"></datalist>
+<datalist id="peopleList"></datalist>
+
+<script src="app.js"></script>
+</body>
+</html>

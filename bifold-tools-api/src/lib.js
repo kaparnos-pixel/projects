@@ -822,6 +822,10 @@ const pcr = () => pcrMod || (pcrMod = require("./pcr")({ books: () => books(), t
 let supMod;
 const sup = () => supMod || (supMod = require("./suppliers")({ table, getOrNull, all, fail, clean, num, CO, rowCo, inCo, writeCo, diff: (a, b) => audit().diff(a, b) }));
 
+// ---------- Vendor Partners (src/partners.js) ----------
+let partnersMod;
+const partners = () => partnersMod || (partnersMod = require("./partners")({ table, getOrNull, all, fail, clean, num, isDate, CO, rowCo, inCo, writeCo, diff: (a, b) => audit().diff(a, b) }));
+
 // ---------- Books: accounting, VAT and quotations (src/books.js) ----------
 let booksMod;
 const books = () => booksMod || (booksMod = require("./books")({ table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CO, rowCo, listCustomers, createCustomer, sup, diff: (a, b) => audit().diff(a, b),
@@ -897,6 +901,7 @@ async function alerts(user) {
   if (user.isManager) jobs.push(sales().alerts(user).then(l => out.push(...l)).catch(() => {}));
   if (has("pettycash") || has("books")) jobs.push(pc().alerts(user).then(l => out.push(...l)).catch(() => {}));
   if (has("inventory")) jobs.push(inv().alerts(user).then(l => out.push(...l)).catch(() => {}));
+  if (has("partners") && user.co !== "all") jobs.push(partners().alerts(user).then(l => out.push(...l)).catch(() => {}));
   jobs.push(agents().alerts(user).then(l => out.push(...l)).catch(() => {}));
   if (user.isManager) jobs.push(mk().approvals(user).then(l => out.push(...l)).catch(() => {}));
   await Promise.all(jobs);
@@ -993,6 +998,7 @@ async function route(method, seg, user, body) {
   if (a === "mk") return mk().route(method, seg.slice(1), user, body);
   if (a === "pcr") return pcr().route(method, seg.slice(1), user, body);
   if (a === "suppliers") return sup().route(method, seg.slice(1), user, body);
+  if (a === "partners") return partners().route(method, seg.slice(1), user, body);
   if (a === "books") return books().route(method, seg.slice(1), user, body);
   if (a === "hr") return hr().route(method, seg.slice(1), user, body);
   if (a === "sales") return sales().route(method, seg.slice(1), user, body);
@@ -1071,11 +1077,12 @@ function shouldRecord(method, seg, status, user, body) {
   if (a === "hr" && method === "GET") return status === 403;
   if (a === "sales" && method === "GET") return status === 403;
   if (a === "inv" && method === "GET") return status === 403;
+  if (a === "partners" && method === "GET" && b === "logo") return false;
   if (a === "pc" && method === "GET") return status === 403 || (b === "entries" && seg[3] === "files" && seg[4] === "download" && status < 400);
   if (a === "mk" && (b === "audience" || b === "render.js")) return false;
   if (a === "mk" && b === "social" && c === "callback") return true; // connecting a social account is a change made by a page load
   if (a === "me") return !!(user && user.aud && user.aud.signin);
-  const fileGet = method === "GET" && ((a === "cheques" && c === "signed") || (a === "pnl" && c === "files" && seg[3]) || (a === "deals" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c) || (a === "books" && b === "docs" && seg[3] === "files" && seg[4]));
+  const fileGet = method === "GET" && ((a === "cheques" && c === "signed") || (a === "pnl" && c === "files" && seg[3]) || (a === "deals" && c === "files" && seg[3]) || (a === "amc" && b === "files" && c) || (a === "books" && b === "docs" && seg[3] === "files" && seg[4]) || (a === "partners" && ((c === "files" && seg[3]) || (b === "certs" && seg[3] === "file"))));
   // Photos and signatures shown in the report editor are not logged one by one; downloads are.
   if (a === "pcr" && b === "files" && method === "GET") return seg[3] === "download" || status === 403;
   // Refused reads are logged for people who have some access (trying beyond it); people with none are logged at sign-in.

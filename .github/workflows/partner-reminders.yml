@@ -1,0 +1,37 @@
+name: Vendor partner reminders
+
+on:
+  schedule:
+    - cron: "52 3 * * *" # 07:52 Dubai time, every day
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only list what would be sent"
+        type: boolean
+        default: false
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install storage client
+        run: npm ci --omit=dev --prefix bifold-tools-api
+      - name: Send reminders
+        env:
+          NODE_PATH: bifold-tools-api/node_modules
+          STORAGE_CONNECTION: ${{ secrets.STORAGE_CONNECTION || secrets.BUSINESSTOOLSSTORE }}
+          GRAPH_TENANT_ID: ${{ secrets.GRAPH_TENANT_ID }}
+          GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
+          GRAPH_CLIENT_SECRET: ${{ secrets.GRAPH_CLIENT_SECRET }}
+          MAIL_SENDER: ${{ secrets.MAIL_SENDER }}
+          TECHHUB_MAIL_SENDER: ${{ secrets.TECHHUB_MAIL_SENDER }}
+          TECHHUB_REMINDER_CC: ${{ vars.TECHHUB_REMINDER_CC }}
+          TECHHUB_TOOLS_URL: ${{ vars.TECHHUB_TOOLS_URL }}
+          AMC_REMINDER_CC: ranjan@bifoldtech.com
+          TOOLS_URL: ${{ vars.TOOLS_URL || 'https://yellow-dune-0607b0710.4.azurestaticapps.net' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: node .github/scripts/partner-reminders.cjs

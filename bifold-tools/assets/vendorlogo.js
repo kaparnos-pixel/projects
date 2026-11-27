@@ -22,7 +22,7 @@ window.VLogo = (function () {
     "google": "google.com", "google cloud": "cloud.google.com", "aws": "aws.amazon.com", "amazon web services": "aws.amazon.com", "oracle": "oracle.com", "ibm": "ibm.com",
     "nutanix": "nutanix.com", "netapp": "netapp.com", "check point": "checkpoint.com", "checkpoint": "checkpoint.com", "trend micro": "trendmicro.com", "crowdstrike": "crowdstrike.com",
     "zoom": "zoom.us", "adobe": "adobe.com", "autodesk": "autodesk.com", "acronis": "acronis.com", "f5": "f5.com", "extreme networks": "extremenetworks.com", "cambium": "cambiumnetworks.com",
-    "huawei": "huawei.com", "zebra": "zebra.com", "honeywell": "honeywell.com", "bosch": "boschsecurity.com", "siemon": "siemon.com", "belden": "belden.com", "draytek": "draytek.com",
+    "huawei": "huawei.com", "h3c": "h3c.com", "sangfor": "sangfor.com", "sangfor technologies": "sangfor.com", "zebra": "zebra.com", "honeywell": "honeywell.com", "bosch": "boschsecurity.com", "siemon": "siemon.com", "belden": "belden.com", "draytek": "draytek.com",
     "sonicwall": "sonicwall.com", "watchguard": "watchguard.com", "barracuda": "barracuda.com", "seagate": "seagate.com", "western digital": "westerndigital.com", "kingston": "kingston.com",
     "asus": "asus.com", "acer": "acer.com", "apple": "apple.com", "brother": "brother.com", "xerox": "xerox.com", "ricoh": "ricoh.com", "kyocera": "kyoceradocumentsolutions.com",
   };

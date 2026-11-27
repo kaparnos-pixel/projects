@@ -12,7 +12,7 @@ const SECTIONS = [
   { key: "pipeline", name: "Sales Pipeline", hint: "Deals from lead to PO" },
   { key: "pdc", name: "PDC & Guarantees Log", hint: "Post-dated cheques, deposits and guarantees" },
   { key: "customers", name: "Customers", hint: "Open the customer list and edit customer details" },
-  { key: "suppliers", name: "Suppliers & Vendors", hint: "Supplier and vendor directory: who supplies what, and their contacts" },
+  { key: "suppliers", name: "Suppliers", hint: "Supplier and vendor directory: who supplies what, and their contacts" },
   { key: "partners", name: "Vendor Partners", hint: "Vendor partner programmes, tiers and renewals, staff certifications, rebates and MDF claims" },
   { key: "amc", name: "AMC proposals & contracts", hint: "Create AMC proposals, award contracts, see contract values" },
   { key: "visits", name: "Maintenance visits & reports", hint: "Schedule and complete visits, upload photos, send visit reports" },

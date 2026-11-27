@@ -818,7 +818,7 @@ const mk = () => mkMod || (mkMod = require("./mk")({ table, getOrNull, packJson,
 let pcrMod;
 const pcr = () => pcrMod || (pcrMod = require("./pcr")({ books: () => books(), table, getOrNull, all, packJson, unpackJson, fail, clean, num, isDate, CUST, CPK, CO, rowCo, inCo, writeCo, mailReadyFor, diff: (a, b) => audit().diff(a, b), record: x => audit().record(x) }));
 
-// ---------- Suppliers & Vendors (src/suppliers.js) ----------
+// ---------- Suppliers (src/suppliers.js) ----------
 let supMod;
 const sup = () => supMod || (supMod = require("./suppliers")({ table, getOrNull, all, fail, clean, num, CO, rowCo, inCo, writeCo, diff: (a, b) => audit().diff(a, b) }));
 

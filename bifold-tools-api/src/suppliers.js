@@ -1,4 +1,4 @@
-// Suppliers & Vendors: one directory per company of who supplies what (categories, brands, products) and who to call there.
+// Suppliers: one directory per company of who supplies what (categories, brands, products) and who to call there.
 // Each supplier holds any number of contact persons (sales, accounts, technical, logistics ...).
 //
 // Storage (Table Storage "suppliers", PartitionKey "supplier", RowKey = uuid):

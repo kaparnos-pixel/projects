@@ -179,7 +179,7 @@ module.exports = function makeAudit(H) {
       }
     }
     if (a === "suppliers") {
-      const A = "Suppliers & Vendors";
+      const A = "Suppliers";
       if (b === "import") return [A, "Imported suppliers", "", `${out.added || 0} added, ${out.updated || 0} updated, ${out.contactsAdded || 0} contacts added, ${(out.skipped || []).length + (out.invalid || []).length} skipped`];
       if (method === "POST") return [A, "Added supplier", out.name, [out.kind, (out.contacts || []).length + " contact" + ((out.contacts || []).length === 1 ? "" : "s")].join(", ")];
       if (method === "PUT") return [A, "Edited supplier", out.name || name, ch];
@@ -289,7 +289,7 @@ module.exports = function makeAudit(H) {
       if (b === "users" && method === "PUT") return ["Team access", "Changed access", c, (out.sections || []).join(", ") || "No sections"];
       if (b === "users" && method === "DELETE") return ["Team access", "Removed access", c, ""];
     }
-    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers & Vendors", partners: "Vendor Partners", books: "Books", hr: "HR & Payroll", inv: "Inventory", pc: "Petty cash", access: "Team access", alerts: "Alerts" };
+    const AREA = { customers: "Customers", pnl: "PnL Calculator", deals: "Sales Pipeline", cheques: "PDC & Guarantees", amc: "AMC Tracker", mk: "Email Campaigns", pcr: "Completion Reports", suppliers: "Suppliers", partners: "Vendor Partners", books: "Books", hr: "HR & Payroll", inv: "Inventory", pc: "Petty cash", access: "Team access", alerts: "Alerts" };
     if (method === "GET") return [AREA[a] || "Other", b ? "Opened a record" : "Opened the list", b || "", ""];
     return [AREA[a] || "Other", method + " /" + seg.join("/"), "", ""];
   }

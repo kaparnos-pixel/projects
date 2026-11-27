@@ -1,4 +1,4 @@
-// Vendor logos, shared by Vendor Partners and Suppliers & Vendors.
+// Vendor logos, shared by Vendor Partners and Suppliers.
 // VLogo.html(item, size) gives a logo tile; VLogo.wire(root) loads it. Each tile tries, in order:
 //   1. a logo someone uploaded by hand (served by our API),
 //   2. the Brandfetch Logo API, loaded straight into an <img> by the browser as Brandfetch's terms require

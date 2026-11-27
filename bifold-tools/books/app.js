@@ -95,7 +95,7 @@ async function quickContact(kind) {
     <div class="fields"><label><span class="lbl">Emirate / city</span><input name="emirate" list="emQ" maxlength="50"></label>${kind === "vendor" ? `<label><span class="lbl">Country</span><input name="country" value="UAE" maxlength="60"></label>` : `<label><span class="lbl">Phone</span><input name="phone" maxlength="50"></label>`}</div>
     <label><span class="lbl">Address</span><input name="address" maxlength="300"></label>
     <datalist id="emQ">${em}</datalist>
-    <p class="hint" style="margin:0">Saved to the shared ${kind === "customer" ? "Customers" : "Suppliers & Vendors"} list, so every tool sees it.</p>
+    <p class="hint" style="margin:0">Saved to the shared ${kind === "customer" ? "Customers" : "Suppliers"} list, so every tool sees it.</p>
     <div class="err"></div><div class="foot"><button type="button" data-x>Cancel</button><button class="primary" type="submit">Add</button></div></form>`, {
     onOpen: (d, done) => d.querySelector("form").onsubmit = async e => {
       e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); const btn = e.submitter; busy(btn, true);

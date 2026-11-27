@@ -333,7 +333,7 @@ const hashView=()=>{const v=location.hash.slice(1);if(["grid","certs","claims","
 addEventListener("hashchange",()=>{hashView();const h=location.hash.match(/^#p=(.+)$/);if(h&&ME)show(decodeURIComponent(h[1]))});
 ["q","fSt","fHealth"].forEach(id=>$(id).addEventListener(id==="q"?"input":"change",render));
 function refresh(){
-  $("vendList").innerHTML=[...new Set(["Cisco","Microsoft","HPE","HPE Aruba","Dell","Lenovo","HP","Fortinet","Sophos","Palo Alto Networks","Hikvision","Dahua","Ubiquiti","Yeastar","Grandstream","Yealink","Veeam","VMware","Synology","Schneider APC","Axis","Juniper","Adobe","Sangfor","H3C","Huawei","SonicWall","AVTECH","Red Hat","Antlabs"].concat(SUPS.map(s=>s.name),P.map(p=>p.vendor)))].map(x=>`<option>${esc(x)}</option>`).join("");
+  $("vendList").innerHTML=[...new Set(["Cisco","Microsoft","HPE","HPE Aruba","Dell","Lenovo","HP","Fortinet","Sophos","Palo Alto Networks","Hikvision","Dahua","Ubiquiti","Yeastar","Grandstream","Yealink","Veeam","VMware","Synology","Schneider APC","Axis","Juniper","Adobe","Sangfor","H3C","Huawei","SonicWall","AVTECH","Red Hat","Antlabs","Ruckus"].concat(SUPS.map(s=>s.name),P.map(p=>p.vendor)))].map(x=>`<option>${esc(x)}</option>`).join("");
   kpis();render();
 }
 async function start(m){

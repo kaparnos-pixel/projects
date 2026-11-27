@@ -14,7 +14,7 @@ window.VLogo = (function () {
     "hp": "hp.com", "hp inc": "hp.com", "aruba": "arubanetworks.com", "hpe aruba": "arubanetworks.com", "dell": "dell.com", "dell technologies": "dell.com", "lenovo": "lenovo.com",
     "fortinet": "fortinet.com", "sophos": "sophos.com", "palo alto": "paloaltonetworks.com", "palo alto networks": "paloaltonetworks.com", "juniper": "juniper.net",
     "ubiquiti": "ui.com", "mikrotik": "mikrotik.com", "tp-link": "tp-link.com", "ruckus": "ruckusnetworks.com", "hikvision": "hikvision.com", "dahua": "dahuasecurity.com",
-    "axis": "axis.com", "axis communications": "axis.com", "hanwha": "hanwhavision.com", "milestone": "milestonesys.com", "zkteco": "zkteco.com", "yeastar": "yeastar.com",
+    "axis": "axis.com", "axis communications": "axis.com", "hanwha": "hanwhavision.com", "hanwha vision": "hanwhavision.com", "hanwha techwin": "hanwhavision.com", "wisenet": "hanwhavision.com", "milestone": "milestonesys.com", "zkteco": "zkteco.com", "yeastar": "yeastar.com",
     "grandstream": "grandstream.com", "yealink": "yealink.com", "avaya": "avaya.com", "panasonic": "panasonic.com", "commscope": "commscope.com", "panduit": "panduit.com",
     "legrand": "legrand.com", "schneider": "se.com", "schneider electric": "se.com", "apc": "apc.com", "schneider apc": "apc.com", "eaton": "eaton.com", "vertiv": "vertiv.com",
     "vmware": "vmware.com", "broadcom": "broadcom.com", "veeam": "veeam.com", "synology": "synology.com", "qnap": "qnap.com", "samsung": "samsung.com", "lg": "lg.com",
